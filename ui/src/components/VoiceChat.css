@@ -1,0 +1,346 @@
+/* Voice Chat Component Styling */
+
+.voice-chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  gap: 1.5rem;
+}
+
+.voice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.voice-header h2 {
+  margin: 0;
+  color: var(--cyan);
+  font-size: 1.5rem;
+}
+
+.voice-status {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.status-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+
+.status-badge.ready {
+  background: rgba(0, 217, 255, 0.1);
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.status-badge.error {
+  background: rgba(255, 100, 100, 0.1);
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* Error Message */
+.voice-error {
+  padding: 0.75rem;
+  background: rgba(255, 100, 100, 0.1);
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  color: var(--red);
+  font-size: 0.9rem;
+}
+
+/* Controls */
+.voice-controls {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-record {
+  padding: 0.6rem 1.2rem;
+  background: var(--cyan);
+  color: var(--bg);
+  border: 1px solid var(--cyan);
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btn-record:hover:not(:disabled) {
+  background: rgba(0, 217, 255, 0.8);
+  transform: translateY(-1px);
+}
+
+.btn-record:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-record.recording {
+  background: var(--red);
+  border-color: var(--red);
+  animation: pulse 1s infinite;
+}
+
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.voice-select {
+  padding: 0.6rem 0.8rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+}
+
+.voice-select:hover:not(:disabled) {
+  border-color: var(--cyan);
+}
+
+.voice-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-clear {
+  padding: 0.6rem 1rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btn-clear:hover:not(:disabled) {
+  border-color: var(--cyan);
+  background: rgba(0, 217, 255, 0.05);
+}
+
+.btn-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Transcript Display */
+.voice-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.voice-transcript label {
+  color: var(--text);
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.voice-transcript textarea {
+  padding: 0.75rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.voice-transcript textarea:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+/* History Display */
+.voice-history {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow: hidden;
+}
+
+.voice-history h3 {
+  margin: 0;
+  color: var(--cyan);
+  font-size: 1rem;
+}
+
+.voice-history > div:last-child {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-right: 0.5rem;
+}
+
+.voice-history > div:last-child::-webkit-scrollbar {
+  width: 6px;
+}
+
+.voice-history > div:last-child::-webkit-scrollbar-track {
+  background: var(--surface2);
+  border-radius: 3px;
+}
+
+.voice-history > div:last-child::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.voice-history > div:last-child::-webkit-scrollbar-thumb:hover {
+  background: var(--border2);
+}
+
+.empty {
+  color: var(--text2);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+/* History Items */
+.history-item {
+  padding: 0.75rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.history-item.user {
+  background: rgba(0, 217, 255, 0.05);
+  border-color: var(--cyan);
+}
+
+.history-item.assistant {
+  background: rgba(100, 100, 100, 0.05);
+  border-color: var(--border);
+}
+
+.timestamp {
+  color: var(--text2);
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.history-item p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.btn-speak {
+  align-self: flex-start;
+  padding: 0.4rem 0.8rem;
+  background: rgba(0, 217, 255, 0.1);
+  border: 1px solid var(--cyan);
+  border-radius: 3px;
+  color: var(--cyan);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btn-speak:hover:not(:disabled) {
+  background: rgba(0, 217, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.btn-speak:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading State */
+.voice-loading {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  border-radius: 8px;
+  z-index: 100;
+}
+
+.voice-loading .spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.voice-loading p {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .voice-chat-container {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .voice-controls {
+    flex-direction: column;
+  }
+
+  .btn-record {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .voice-select {
+    flex: 1;
+  }
+}

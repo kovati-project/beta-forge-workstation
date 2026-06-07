@@ -1,0 +1,58 @@
+/* NVLink Topology Diagram */
+
+.nvlink-topology {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.nvlink-topology.skeleton {
+  min-height: 200px;
+}
+
+.nvlink-svg {
+  width: 100%;
+  height: auto;
+  max-width: 680px;
+}
+
+.gpu-box {
+  transition: all 0.3s ease;
+}
+
+.gpu-label {
+  font-family: var(--mono);
+}
+
+.gpu-vram {
+  font-family: var(--mono);
+}
+
+.gpu-util {
+  font-family: var(--mono);
+}
+
+.bridge-label {
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+.bridge-active {
+  animation: bridge-flow 1s linear infinite;
+}
+
+@keyframes bridge-flow {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 9;
+  }
+}
+
+.gpu-box:has(+ .bridge-active) {
+  animation: borderPulse 1s ease-in-out infinite;
+}

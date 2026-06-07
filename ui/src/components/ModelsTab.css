@@ -1,0 +1,106 @@
+.models-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pull-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pull-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.pull-input-group input {
+  flex: 1;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-size: 10px;
+  color: var(--text);
+}
+
+.pull-input-group input:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.error-message {
+  color: var(--red);
+  font-size: 9px;
+  padding: 4px 8px;
+  background-color: rgba(255, 0, 0, 0.1);
+  border-radius: 3px;
+}
+
+.models-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.models-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.models-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.models-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.models-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.models-table .model-name {
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.models-table .empty {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  background-color: var(--surface);
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 9px;
+  padding: 2px 6px;
+  transition: color 0.15s ease;
+}
+
+.action-btn:hover {
+  color: var(--red);
+}
+
+.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}

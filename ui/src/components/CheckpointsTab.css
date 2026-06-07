@@ -1,0 +1,127 @@
+.checkpoints-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkpoint-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkpoint-group {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--surface2);
+}
+
+.group-header {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.group-header:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.group-name {
+  flex: 1;
+  text-align: left;
+  color: var(--cyan);
+}
+
+.group-type {
+  color: var(--text3);
+  font-weight: 400;
+  font-size: 8px;
+  text-transform: capitalize;
+}
+
+.group-date {
+  color: var(--text3);
+  font-weight: 400;
+  font-size: 8px;
+}
+
+.group-files {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px;
+}
+
+.checkpoint-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin-bottom: 4px;
+  font-size: 9px;
+}
+
+.checkpoint-file:last-child {
+  margin-bottom: 0;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.file-name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.file-size {
+  color: var(--text3);
+  font-size: 8px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.view-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 4px 8px;
+  color: var(--text3);
+  font-size: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.view-btn:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.loading,
+.empty {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}

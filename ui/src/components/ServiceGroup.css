@@ -1,0 +1,64 @@
+/* Service Group */
+
+.service-group {
+  margin-bottom: 12px;
+}
+
+.service-group-header {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.service-group-header:hover {
+  background-color: var(--surface2);
+  border-color: var(--border2);
+}
+
+.group-arrow {
+  display: inline-block;
+  font-size: 9px;
+  min-width: 12px;
+}
+
+.group-name {
+  flex: 1;
+}
+
+.group-count {
+  font-size: 9px;
+  color: var(--text3);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.service-group-content {
+  padding: 8px 0;
+  border-radius: 4px;
+}
+
+.group-empty {
+  font-size: 10px;
+  color: var(--text3);
+  padding: 12px;
+  text-align: center;
+  background-color: var(--surface2);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  margin-top: 8px;
+}

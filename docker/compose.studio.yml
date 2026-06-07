@@ -1,0 +1,106 @@
+services:
+
+  # ── ComfyUI: node-graph image generation ───────────────────────────────────
+  # Primary image engine. GPU0 only. API-accessible for Open WebUI integration.
+  # Custom nodes persist in a named volume so container updates don't wipe them.
+  comfyui:
+    image: ghcr.io/ai-dock/comfyui:latest-cuda
+    container_name: comfyui
+    restart: unless-stopped
+    ports:
+      - "8188:8188"
+    volumes:
+      - /data/models/comfyui/checkpoints:/opt/ComfyUI/models/checkpoints
+      - /data/models/comfyui/loras:/opt/ComfyUI/models/loras
+      - /data/models/comfyui/vae:/opt/ComfyUI/models/vae
+      - /data/models/comfyui/controlnet:/opt/ComfyUI/models/controlnet
+      - /data/models/comfyui/embeddings:/opt/ComfyUI/models/embeddings
+      - /data/models/comfyui/upscale_models:/opt/ComfyUI/models/upscale_models
+      - /data/outputs/comfyui:/opt/ComfyUI/output
+      - comfyui-custom-nodes:/opt/ComfyUI/custom_nodes
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CLI_ARGS=--listen 0.0.0.0 --port 8188 --preview-method auto
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  # ── InvokeAI: professional studio UI ───────────────────────────────────────
+  # Alternative to ComfyUI for canvas/inpainting workflows.
+  # Gated behind "studio" profile — not started by default.
+  # Do NOT run simultaneously with ComfyUI on GPU0.
+  invokeai:
+    image: ghcr.io/invoke-ai/invokeai:latest
+    container_name: invokeai
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - /data/models/invokeai:/invokeai/models
+      - /data/outputs/invokeai:/invokeai/outputs
+      - invokeai-db:/invokeai/databases
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - INVOKEAI_ROOT=/invokeai
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    profiles:
+      - studio
+
+  # ── Real-ESRGAN: upscaling API ──────────────────────────────────────────────
+  # Gated behind "studio" profile. Image verification status:
+  #   pablogimenez/realesrgan-api:latest — unverified (no official image exists)
+  #
+  # Recommended alternative: use ComfyUI's built-in upscale_models support —
+  # no separate container needed. Download the model once:
+  #   wget -P /data/models/comfyui/upscale_models \
+  #     https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
+  # Then use an "Upscale Model Loader" → "Upscale Image (using Model)" node in any workflow.
+  #
+  # If a standalone HTTP API is required, build a custom wrapper:
+  #   FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
+  #   RUN pip install realesrgan flask
+  #   COPY realesrgan_server.py /app/
+  #   CMD ["python", "/app/realesrgan_server.py"]
+  realesrgan:
+    image: pablogimenez/realesrgan-api:latest
+    container_name: realesrgan
+    restart: unless-stopped
+    ports:
+      - "8189:8000"
+    volumes:
+      - /data/outputs/upscaled:/app/output
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    profiles:
+      - studio
+
+  # ── Rembg: background removal (CPU) ────────────────────────────────────────
+  rembg:
+    image: danielgatis/rembg:latest
+    container_name: rembg
+    restart: unless-stopped
+    ports:
+      - "8190:5000"
+    volumes:
+      - /data/outputs/rembg:/app/output
+
+volumes:
+  comfyui-custom-nodes:
+  invokeai-db:

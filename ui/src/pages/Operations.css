@@ -1,0 +1,14 @@
+/* Operations Page */
+
+.operations-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+@media (max-width: 768px) {
+  .operations-page {
+    padding-bottom: 1rem;
+  }
+}

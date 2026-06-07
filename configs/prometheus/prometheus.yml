@@ -1,0 +1,114 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: ai-workstation
+    host: threadripper
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+
+  - job_name: 'gpu-dcgm'
+    scrape_interval: 5s
+    scrape_timeout: 4s
+    static_configs:
+      - targets: ['dcgm-exporter:9400']
+        labels:
+          service: gpu
+          exporter: dcgm
+
+  - job_name: 'node-metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: node
+
+  - job_name: 'docker-containers'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: containers
+
+  - job_name: 'loadout-manager'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    metrics_path: /health
+    static_configs:
+      - targets: ['10.10.10.2:8800']
+        labels:
+          service: gpu-orchestrator
+
+  - job_name: 'ollama'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['10.10.10.2:11434']
+        labels:
+          service: ollama
+          type: inference
+
+  - job_name: 'vllm-pair-a'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['10.10.10.2:8000']
+        labels:
+          service: vllm
+          profile: pair-a
+          gpus: "0,3"
+
+  - job_name: 'vllm-pair-b'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['10.10.10.2:8001']
+        labels:
+          service: vllm
+          profile: pair-b
+          gpus: "1,2"
+
+  - job_name: 'vllm-4gpu'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['10.10.10.2:8002']
+        labels:
+          service: vllm
+          profile: 4gpu
+          gpus: "0,1,2,3"
+
+  - job_name: 'comfyui'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['10.10.10.2:8188']
+        labels:
+          service: comfyui
+          type: image-gen
+
+  - job_name: 'open-webui'
+    scrape_interval: 20s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['10.10.10.2:3000']
+        labels:
+          service: webui
+
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: prometheus

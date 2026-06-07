@@ -1,0 +1,68 @@
+services:
+
+  # ── Open WebUI: unified chat and inference UI ───────────────────────────────
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+      - /data/models/ollama:/root/.ollama
+    environment:
+      # Ollama backend (primary)
+      - OLLAMA_BASE_URL=http://10.10.10.2:11434
+
+      # vLLM backends (OpenAI-compatible)
+      - OPENAI_API_BASE_URLS=http://10.10.10.2:8000;http://10.10.10.2:8001;http://10.10.10.2:8002
+      - OPENAI_API_KEYS=EMPTY;EMPTY;EMPTY
+
+      # Image generation via ComfyUI
+      - ENABLE_IMAGE_GENERATION=true
+      - IMAGE_GENERATION_ENGINE=comfyui
+      - COMFYUI_BASE_URL=http://10.10.10.2:8188
+
+      # RAG
+      - RAG_EMBEDDING_MODEL=nomic-embed-text
+      - RAG_EMBEDDING_ENGINE=ollama
+      - CHUNK_SIZE=1000
+      - CHUNK_OVERLAP=100
+
+      # Web search via SearXNG
+      - ENABLE_WEB_SEARCH=true
+      - WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://10.10.10.2:8080/search?q=<query>&format=json
+
+      # Auth
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - ENABLE_SIGNUP=false
+      - DEFAULT_USER_ROLE=user
+
+      # Voice I/O pre-wiring (endpoints deployed in Phase 12)
+      - AUDIO_STT_ENGINE=openai
+      - AUDIO_STT_OPENAI_API_BASE_URL=http://10.10.10.2:9099/v1
+      - AUDIO_STT_OPENAI_API_KEY=EMPTY
+      - AUDIO_TTS_ENGINE=openai
+      - AUDIO_TTS_OPENAI_API_BASE_URL=http://10.10.10.2:5000/v1
+      - AUDIO_TTS_OPENAI_API_KEY=EMPTY
+
+      # Features
+      - ENABLE_CODE_EXECUTION=true
+      - ENABLE_COMMUNITY_SHARING=false
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── SearXNG: self-hosted web search ────────────────────────────────────────
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs/searxng:/etc/searxng
+
+volumes:
+  open-webui-data:

@@ -1,0 +1,85 @@
+.openai-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.endpoints-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.endpoints-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.endpoints-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.endpoints-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.endpoints-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.service-name {
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.url-cell {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  color: var(--text3);
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-cell {
+  padding: 8px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-btn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 6px;
+  transition: color 0.15s ease;
+}
+
+.copy-btn:hover {
+  color: var(--cyan);
+}
+
+.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}

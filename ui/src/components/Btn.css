@@ -1,0 +1,75 @@
+/* Button component */
+
+.btn {
+  font-family: var(--mono);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+  user-select: none;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Sizes */
+
+.btn-md {
+  padding: 5px 12px;
+  font-size: 10px;
+}
+
+.btn-sm {
+  padding: 2px 8px;
+  font-size: 9px;
+}
+
+/* Variants */
+
+.btn-cyan {
+  background-color: var(--cyan);
+  color: var(--bg);
+  border-color: var(--cyan);
+}
+
+.btn-cyan:hover:not(:disabled) {
+  background-color: #00b8d4;
+  border-color: #00b8d4;
+}
+
+.btn-gray {
+  background-color: transparent;
+  color: var(--text2);
+  border-color: var(--border2);
+}
+
+.btn-gray:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.btn-red {
+  background-color: var(--red);
+  color: white;
+  border-color: var(--red);
+}
+
+.btn-red:hover:not(:disabled) {
+  background-color: #f76d6d;
+  border-color: #f76d6d;
+}
+
+.btn-amber {
+  background-color: var(--amber);
+  color: var(--bg);
+  border-color: var(--amber);
+}
+
+.btn-amber:hover:not(:disabled) {
+  background-color: #f5a83a;
+  border-color: #f5a83a;
+}

@@ -1,0 +1,59 @@
+services:
+
+  # ── faster-whisper: STT with OpenAI-compatible API ────────────────────────
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cuda
+    container_name: whisper
+    restart: unless-stopped
+    ports:
+      - "9099:8000"
+    volumes:
+      - /data/models/whisper:/root/.cache/huggingface
+      - /data/audio:/audio:ro
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - WHISPER_MODEL=large-v3
+      - WHISPER_INFERENCE_DEVICE=cuda
+      - WHISPER_COMPUTE_TYPE=float16
+      - WHISPER_BEAM_SIZE=5
+      - WHISPER_LANGUAGE=en
+      - WHISPER_VAD_FILTER=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ── Piper TTS: fast local text-to-speech ─────────────────────────────────
+  piper:
+    image: ghcr.io/linuxserver/piper:latest
+    container_name: piper
+    restart: unless-stopped
+    ports:
+      - "5000:10200"
+    volumes:
+      - /data/models/piper:/config
+      - /data/audio:/audio
+    environment:
+      - PIPER_VOICE=en_US-lessac-high
+      - PIPER_LENGTH_SCALE=1.0
+      - PIPER_NOISE_SCALE=0.667
+      - PIPER_NOISE_W=0.8
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10200/api/voices"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  default:
+    name: ai-workstation

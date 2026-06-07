@@ -1,0 +1,60 @@
+/* Service Health Grid */
+
+.service-health-grid {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  flex: 3;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  min-height: 140px;
+}
+
+.service-grid-empty {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--text3);
+  padding: 20px;
+  text-align: center;
+}
+
+.service-tile {
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.service-tile:hover {
+  background-color: var(--surface3);
+  border-color: var(--border2);
+}
+
+.service-tile-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+}
+
+.service-tile-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-tile-port {
+  font-size: 9px;
+  color: var(--text3);
+  font-weight: 400;
+}

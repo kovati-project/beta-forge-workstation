@@ -1,0 +1,31 @@
+/* MetricRow component */
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.metric-row:last-child {
+  border-bottom: none;
+}
+
+.metric-label {
+  font-size: 10px;
+  color: var(--text2);
+  font-weight: 400;
+}
+
+.metric-value {
+  font-size: 10px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.metric-unit {
+  font-size: 9px;
+  color: var(--text3);
+  margin-left: 2px;
+}

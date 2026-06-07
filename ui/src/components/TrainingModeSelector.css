@@ -1,0 +1,80 @@
+.training-mode-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.mode-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.mode-card {
+  background-color: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.mode-card:hover {
+  border-color: var(--border2);
+  background-color: var(--surface2);
+}
+
+.mode-card.mode-text {
+  --accent: var(--amber);
+}
+
+.mode-card.mode-image {
+  --accent: var(--purple);
+}
+
+.mode-card:active {
+  border-color: var(--accent);
+  background-color: rgba(255, 179, 71, 0.04);
+}
+
+.mode-icon {
+  font-size: 32px;
+  color: var(--text2);
+  line-height: 1;
+}
+
+.mode-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mode-subtitle {
+  font-size: 10px;
+  color: var(--text3);
+  line-height: 1.4;
+}
+
+.mode-gpu-tag {
+  margin-top: 8px;
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .mode-cards {
+    grid-template-columns: 1fr;
+  }
+}

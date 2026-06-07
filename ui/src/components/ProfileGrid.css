@@ -1,0 +1,68 @@
+/* Profile Grid */
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.profile-grid-error {
+  background-color: var(--surface);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.error-message {
+  font-size: 10px;
+  color: var(--red);
+  text-align: center;
+}
+
+.profile-grid-empty {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text3);
+}
+
+.profile-card.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: default;
+}
+
+.skeleton-bar {
+  height: 12px;
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  border-radius: 3px;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Responsive grid on smaller screens */
+@media (max-width: 1280px) {
+  .profile-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+}

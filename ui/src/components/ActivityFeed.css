@@ -1,0 +1,47 @@
+/* Activity Feed */
+
+.activity-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activity-empty {
+  font-size: 10px;
+  color: var(--text3);
+  padding: 20px;
+  text-align: center;
+}
+
+.activity-error {
+  font-size: 10px;
+  color: var(--red);
+  padding: 8px;
+  text-align: center;
+}
+
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 9px;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-timestamp {
+  color: var(--text3);
+  min-width: 35px;
+  text-align: right;
+  font-weight: 400;
+}
+
+.activity-detail {
+  color: var(--text2);
+  flex: 1;
+  word-break: break-word;
+}

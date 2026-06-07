@@ -1,0 +1,14 @@
+/* Admin Page */
+
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+@media (max-width: 768px) {
+  .admin-page {
+    padding-bottom: 1rem;
+  }
+}

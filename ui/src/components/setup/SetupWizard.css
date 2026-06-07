@@ -1,0 +1,465 @@
+/* Setup Wizard Main Layout */
+
+.setup-wizard-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.setup-wizard-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.setup-step {
+  width: 100%;
+  max-width: 700px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.setup-step h2 {
+  margin: 0 0 1.5rem 0;
+  color: var(--cyan);
+  font-size: 1.5rem;
+}
+
+.step-description {
+  color: var(--text2);
+  margin: 0 0 2rem 0;
+  line-height: 1.6;
+}
+
+.step-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  justify-content: flex-end;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-small {
+  padding: 0.6rem 1.2rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: bold;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.btn-primary {
+  background: var(--cyan);
+  color: var(--bg);
+  border-color: var(--cyan);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: rgba(0, 217, 255, 0.8);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--cyan);
+  border-color: var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--surface2);
+  border-color: var(--cyan);
+}
+
+.btn-small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  background: var(--surface2);
+}
+
+.btn-large {
+  padding: 0.8rem 1.6rem;
+  font-size: 1rem;
+}
+
+/* Form Elements */
+
+.network-form {
+  margin: 2rem 0;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"] {
+  width: 100%;
+  padding: 0.6rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="number"]:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  margin: 1.5rem 0;
+  color: var(--text);
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 1.2rem;
+  height: 1.2rem;
+  accent-color: var(--cyan);
+}
+
+/* Secrets Display */
+
+.secrets-list {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 1.5rem 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.secret-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.secret-item:last-child {
+  border-bottom: none;
+}
+
+.secret-key {
+  color: var(--cyan);
+  font-weight: bold;
+  flex: 0 0 40%;
+}
+
+.secret-item code {
+  color: var(--text2);
+  padding: 0.3rem 0.6rem;
+  background: var(--surface3);
+  border-radius: 2px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.secret-item code.revealed {
+  color: var(--amber);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Network Summary */
+
+.network-summary {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1.5rem;
+  margin: 2rem 0;
+}
+
+.config-item {
+  margin-bottom: 1.5rem;
+}
+
+.config-item:last-child {
+  margin-bottom: 0;
+}
+
+.config-item h4 {
+  margin: 0 0 0.5rem 0;
+  color: var(--cyan);
+  font-size: 0.9rem;
+}
+
+.config-item code {
+  display: block;
+  background: var(--surface3);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+
+/* Progress Bar */
+
+.progress-bar {
+  width: 100%;
+  height: 24px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--cyan));
+  transition: width 0.3s;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: bold;
+  z-index: 10;
+}
+
+/* Logs Display */
+
+.logs-display {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+  max-height: 250px;
+  overflow-y: auto;
+  margin: 1.5rem 0;
+  font-size: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.log-line {
+  color: var(--text2);
+  margin-bottom: 0.3rem;
+  line-height: 1.5;
+}
+
+.log-line:first-child {
+  color: var(--text);
+}
+
+/* Checks List */
+
+.checks-list {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+.check-item {
+  padding: 0.5rem 0;
+  color: var(--text2);
+}
+
+.check-item.passed {
+  color: var(--cyan);
+}
+
+.validation-summary {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.validation-summary p {
+  margin: 0 0 1rem 0;
+  font-weight: bold;
+  color: var(--cyan);
+}
+
+.progress-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s;
+}
+
+.dot.passed {
+  background: var(--cyan);
+}
+
+/* Profiles Grid */
+
+.profiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.profile-card {
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.profile-card:hover {
+  border-color: var(--cyan);
+  transform: translateY(-2px);
+}
+
+.profile-card.selected {
+  border-color: var(--cyan);
+  background: rgba(0, 217, 255, 0.05);
+}
+
+.profile-card.recommended {
+  border-color: var(--cyan);
+}
+
+.profile-card h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--cyan);
+  font-size: 1rem;
+}
+
+.profile-card p {
+  margin: 0;
+  color: var(--text2);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--cyan);
+  color: var(--bg);
+  padding: 0.3rem 0.6rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Handoff / Completion */
+
+.setup-step.handoff {
+  text-align: center;
+}
+
+.completion-banner {
+  margin: -2.5rem -2.5rem 2rem -2.5rem;
+  padding: 2rem;
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.1), rgba(0, 217, 255, 0.05));
+  border-bottom: 2px solid var(--cyan);
+}
+
+.completion-banner h1 {
+  margin: 0;
+  color: var(--cyan);
+  font-size: 2rem;
+}
+
+.handoff-content {
+  text-align: left;
+}
+
+.handoff-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--surface2);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.handoff-section h3 {
+  margin: 0 0 0.75rem 0;
+  color: var(--cyan);
+}
+
+.handoff-section p {
+  margin: 0.3rem 0;
+  color: var(--text);
+}
+
+.handoff-section .detail {
+  color: var(--text2);
+  font-size: 0.9rem;
+}
+
+.service-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.service-links a {
+  display: inline-block;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--cyan);
+  text-decoration: none;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.service-links a:hover {
+  border-color: var(--cyan);
+  background: rgba(0, 217, 255, 0.05);
+}

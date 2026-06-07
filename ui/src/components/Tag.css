@@ -1,0 +1,47 @@
+/* Tag component */
+
+.tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 3px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.tag-cyan {
+  background-color: var(--cyan-dim);
+  color: var(--cyan);
+  border: 1px solid rgba(0, 217, 255, 0.25);
+}
+
+.tag-green {
+  background-color: var(--green-dim);
+  color: var(--green);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+
+.tag-amber {
+  background-color: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid rgba(255, 179, 71, 0.25);
+}
+
+.tag-red {
+  background-color: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.tag-purple {
+  background-color: var(--purple-dim);
+  color: var(--purple);
+  border: 1px solid rgba(192, 132, 252, 0.25);
+}
+
+.tag-gray {
+  background-color: rgba(107, 114, 152, 0.12);
+  color: var(--text3);
+  border: 1px solid rgba(107, 114, 152, 0.25);
+}

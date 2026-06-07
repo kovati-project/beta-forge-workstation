@@ -1,0 +1,104 @@
+.gpu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gpu-section.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.gpu-chart {
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chart-title {
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.status-badge {
+  font-size: 8px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-badge.active {
+  background-color: rgba(0, 217, 255, 0.2);
+  color: var(--cyan);
+}
+
+.status-badge.idle {
+  background-color: rgba(0, 255, 100, 0.2);
+  color: var(--green);
+}
+
+.vram-canvas {
+  width: 100%;
+  height: 80px;
+  background-color: var(--surface);
+  border-radius: 2px;
+  display: block;
+}
+
+.gauges-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.gauge-item {
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gauge-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+@media (max-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}

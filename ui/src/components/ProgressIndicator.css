@@ -1,0 +1,78 @@
+.progress-indicator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 0 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text3);
+}
+
+.step-name {
+  font-weight: 500;
+  color: var(--text3);
+}
+
+/* Completed step */
+.progress-completed .step-number {
+  background-color: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+
+.progress-completed .step-name {
+  color: var(--green);
+}
+
+/* Current step */
+.progress-current .step-number {
+  background-color: var(--cyan);
+  border-color: var(--cyan);
+  color: white;
+}
+
+.progress-current .step-name {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+/* Connector line */
+.step-connector {
+  position: absolute;
+  left: 26px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background-color: var(--border);
+  transform: translateY(-50%);
+}
+
+.progress-completed + .progress-step .step-connector,
+.progress-current + .progress-step .step-connector {
+  background-color: var(--green);
+}
+
+.progress-current + .progress-step .step-connector {
+  background-color: var(--cyan);
+}

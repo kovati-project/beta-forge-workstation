@@ -1,0 +1,156 @@
+.stack-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stack-section.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}
+
+.stack-section.appliance {
+  padding: 16px;
+  background-color: var(--surface2);
+  border-radius: 4px;
+  color: var(--text3);
+  font-size: 9px;
+  text-align: center;
+}
+
+.error-banner {
+  background-color: rgba(255, 51, 51, 0.1);
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  padding: 8px;
+  color: var(--red);
+  font-size: 9px;
+}
+
+.update-all-btn {
+  background-color: rgba(0, 255, 100, 0.1);
+  border: 1px solid var(--green);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 9px;
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.update-all-btn:hover:not(:disabled) {
+  background-color: rgba(0, 255, 100, 0.2);
+}
+
+.update-all-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.update-progress {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.update-progress pre {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  color: var(--text2);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.stack-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.stack-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.stack-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  font-size: 8px;
+}
+
+.stack-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.stack-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.stack-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.service-name {
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.image-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  color: var(--text3);
+}
+
+.digest {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  color: var(--text3);
+  cursor: help;
+}
+
+.actions {
+  text-align: center;
+}
+
+.rollback-btn {
+  background-color: rgba(255, 179, 71, 0.1);
+  border: 1px solid var(--amber);
+  border-radius: 2px;
+  padding: 4px 6px;
+  font-size: 7px;
+  color: var(--amber);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.rollback-btn:hover {
+  background-color: rgba(255, 179, 71, 0.2);
+}
+
+.empty {
+  text-align: center;
+  color: var(--text3);
+  padding: 16px !important;
+}

@@ -1,0 +1,135 @@
+.external-access-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.caddy-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 9px;
+  color: var(--text2);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.routes-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.routes-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.routes-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.routes-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.routes-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.service-name {
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.path {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  color: var(--text3);
+}
+
+.exposed-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.exposed-badge.yes {
+  background-color: rgba(0, 255, 0, 0.15);
+  color: var(--green);
+}
+
+.exposed-badge.no {
+  background-color: rgba(128, 128, 128, 0.15);
+  color: var(--text3);
+}
+
+.toggle-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toggle-btn:hover:not(:disabled) {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.toggle-btn.exposed {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.routes-table .empty {
+  text-align: center;
+  padding: 12px;
+  background-color: var(--surface);
+}
+
+.warning-banner {
+  background-color: rgba(255, 193, 7, 0.15);
+  border: 1px solid var(--amber);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-size: 9px;
+  color: var(--amber);
+  font-weight: 500;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 12px;
+  font-size: 9px;
+}

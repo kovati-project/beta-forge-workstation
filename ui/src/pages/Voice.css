@@ -1,0 +1,15 @@
+/* Voice Page */
+
+.voice-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 1.5rem;
+  background: var(--bg);
+}
+
+@media (max-width: 768px) {
+  .voice-page {
+    padding: 1rem;
+  }
+}

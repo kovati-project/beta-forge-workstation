@@ -1,0 +1,211 @@
+.live-training-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.training-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.training-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.training-epoch {
+  font-size: 10px;
+  color: var(--text3);
+  font-family: var(--mono);
+}
+
+.training-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text3);
+  min-width: 80px;
+}
+
+.progress-bar-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.progress-text {
+  font-size: 9px;
+  color: var(--text3);
+  font-family: var(--mono);
+  min-width: 60px;
+  text-align: right;
+}
+
+.gpu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text3);
+  letter-spacing: 0.3px;
+}
+
+.gpu-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gpu-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gpu-label {
+  font-size: 9px;
+  color: var(--text3);
+  min-width: 35px;
+}
+
+.gpu-bar-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.gpu-value {
+  font-size: 9px;
+  color: var(--text2);
+  font-family: var(--mono);
+  min-width: 65px;
+  text-align: right;
+}
+
+.metrics-section {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.metrics-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 9px;
+}
+
+.metric-label {
+  color: var(--text3);
+  font-weight: 600;
+}
+
+.metric-value {
+  color: var(--text);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+.logs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.logs-header {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text3);
+  letter-spacing: 0.3px;
+}
+
+.live-training-logs {
+  background-color: #070b1c;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.log-line {
+  color: var(--text2);
+  margin: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-line:contains("[INFO]") {
+  color: var(--cyan);
+}
+
+.log-line:contains("[WARN]") {
+  color: var(--amber);
+}
+
+.log-line:contains("[ERROR]") {
+  color: var(--red);
+}
+
+.training-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.export-error {
+  background-color: rgba(248, 113, 113, 0.1);
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 9px;
+  color: var(--red);
+  text-align: center;
+}
+
+/* Responsive */
+
+@media (max-width: 1280px) {
+  .metrics-row {
+    font-size: 8px;
+    gap: 8px;
+  }
+
+  .gpu-bars {
+    gap: 4px;
+  }
+
+  .gpu-bar-item {
+    gap: 6px;
+  }
+}

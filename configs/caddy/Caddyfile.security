@@ -1,0 +1,153 @@
+# Caddyfile with Authentik SSO forward auth
+# Deployed to /data/caddy/Caddyfile
+# Serves all AI workstation services with centralized authentication
+
+(authentik_forward_auth) {
+	# Forward auth to Authentik
+	forward_auth authentik:9000 {
+		uri /outpost.goauthentik.io/auth/caddy
+		copy_headers X-Authentik-Username X-Authentik-Groups X-Authentik-Email
+		trusted_proxies private_ranges
+		# Send original URI so Authentik can redirect post-auth
+		header_up X-Authentik-Redirect-Uri {http.request.uri}
+	}
+}
+
+# AI Workstation service discovery
+ai.local {
+	tls internal
+
+	# ────── Root UI ──────────────────────────────────────────────────
+	handle / {
+		# Redirect to Open WebUI
+		redir https://ai.local/webui
+	}
+
+	# ────── Open WebUI (Inference Frontend) ──────────────────────────
+	handle /webui/* {
+		import authentik_forward_auth
+		uri strip_prefix /webui
+		reverse_proxy 10.10.10.2:3000
+	}
+
+	# ────── Loadout Manager (GPU Orchestrator) ──────────────────────
+	handle /loadout/* {
+		import authentik_forward_auth
+		uri strip_prefix /loadout
+		reverse_proxy 10.10.10.2:8800 {
+			header_uri -Upgrade
+		}
+	}
+
+	# ────── Grafana (Monitoring & Alerting) ────────────────────────
+	handle /grafana/* {
+		import authentik_forward_auth
+		uri strip_prefix /grafana
+		reverse_proxy 10.10.10.2:3001 {
+			header_up X-Script-Name /grafana
+		}
+	}
+
+	# ────── Prometheus (Metrics Database) ──────────────────────────
+	handle /prometheus/* {
+		import authentik_forward_auth
+		uri strip_prefix /prometheus
+		reverse_proxy 10.10.10.2:9091
+	}
+
+	# ────── n8n (Workflow Automation) ──────────────────────────────
+	handle /n8n/* {
+		import authentik_forward_auth
+		uri strip_prefix /n8n
+		reverse_proxy 10.10.10.2:5678 {
+			header_uri -Upgrade
+		}
+	}
+
+	# ────── Label Studio (Dataset Annotation) ──────────────────────
+	handle /label-studio/* {
+		import authentik_forward_auth
+		uri strip_prefix /label-studio
+		reverse_proxy 10.10.10.2:8081
+	}
+
+	# ────── JupyterLab (Code & Analysis) ───────────────────────────
+	handle /jupyter/* {
+		import authentik_forward_auth
+		uri strip_prefix /jupyter
+		reverse_proxy 10.10.10.2:8888 {
+			header_uri -Upgrade
+			# WebSocket support for Jupyter
+			transport http {
+				dial_timeout 10s
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	# ────── OpenHands (Autonomous Agent) ───────────────────────────
+	handle /openhands/* {
+		import authentik_forward_auth
+		uri strip_prefix /openhands
+		reverse_proxy 10.10.10.2:3003
+	}
+
+	# ────── Langfuse (LLM Observability) ───────────────────────────
+	handle /langfuse/* {
+		import authentik_forward_auth
+		uri strip_prefix /langfuse
+		reverse_proxy 10.10.10.2:3002
+	}
+
+	# ────── Dify (No-Code AI Application) ──────────────────────────
+	handle /dify/* {
+		import authentik_forward_auth
+		uri strip_prefix /dify
+		reverse_proxy 10.10.10.2:3010 {
+			header_uri -Upgrade
+		}
+	}
+
+	# ────── MinIO Console (S3 Storage UI) ──────────────────────────
+	handle /minio/* {
+		import authentik_forward_auth
+		uri strip_prefix /minio
+		reverse_proxy 10.10.10.2:9001
+	}
+
+	# ────── unauthenticated: Authentik admin setup ─────────────────
+	# Allow initial setup without auth
+	handle /if/* {
+		reverse_proxy authentik:9000
+	}
+
+	# Authentik outpost endpoints (internal, no auth)
+	handle /outpost.goauthentik.io/* {
+		reverse_proxy authentik:9000
+	}
+
+	# Health checks (no auth)
+	handle /.health {
+		respond "OK" 200
+	}
+
+	# ────── Fallback ──────────────────────────────────────────────────
+	handle {
+		abort 404
+	}
+
+	# ────── Logging ────────────────────────────────────────────────────
+	log {
+		format json
+		output file /var/log/caddy/access.log {
+			roll_size 100mb
+			roll_keep 5
+		}
+	}
+}
+
+# HTTP redirect to HTTPS
+:80 {
+	redir https://{host}{uri} permanent
+}

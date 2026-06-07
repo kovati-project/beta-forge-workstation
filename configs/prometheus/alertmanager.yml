@@ -1,0 +1,65 @@
+# AlertManager configuration for AI Workstation
+# Receives firing alerts from Prometheus and routes them to receivers.
+# Reload after editing: POST http://localhost:9093/-/reload
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: ''
+  smtp_from: ''
+
+# Inhibition rules: suppress lower-severity alerts when a higher-severity one fires
+inhibit_rules:
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: [alertname, component]
+
+route:
+  # Default receiver for unmatched alerts
+  receiver: log-only
+  group_by: [alertname, component]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    # Critical GPU/hardware alerts → high-priority receiver
+    - matchers:
+        - severity = critical
+        - component = gpu
+      receiver: critical-gpu
+      repeat_interval: 1h
+
+    # Any critical alert → critical receiver
+    - matchers:
+        - severity = critical
+      receiver: critical-all
+      repeat_interval: 2h
+
+    # Training alerts → training receiver
+    - matchers:
+        - component = training
+      receiver: training
+      repeat_interval: 30m
+
+receivers:
+  # Fallback: no notification, just logs in AlertManager
+  - name: log-only
+
+  # Critical GPU faults (ECC errors, NVLink failures)
+  - name: critical-gpu
+
+  # All other critical alerts
+  - name: critical-all
+
+  # Training-specific alerts
+  - name: training
+
+# To add webhook/email/Slack receivers, add them here and configure secrets in .env.
+# Example Slack receiver:
+# - name: slack-alerts
+#   slack_configs:
+#     - api_url: ${SLACK_WEBHOOK_URL}
+#       channel: '#ai-workstation-alerts'
+#       title: 'AI Workstation Alert: {{ .GroupLabels.alertname }}'

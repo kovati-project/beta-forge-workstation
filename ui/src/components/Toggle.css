@@ -1,0 +1,46 @@
+/* Toggle component */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.toggle input {
+  display: none;
+}
+
+.toggle-track {
+  width: 28px;
+  height: 14px;
+  background-color: var(--border);
+  border-radius: 7px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.15s ease;
+}
+
+.toggle-thumb {
+  width: 10px;
+  height: 10px;
+  background-color: var(--text2);
+  border-radius: 50%;
+  position: absolute;
+  left: 2px;
+  transition: left 0.15s ease, background-color 0.15s ease;
+}
+
+.toggle-checked .toggle-track {
+  background-color: var(--cyan);
+}
+
+.toggle-checked .toggle-thumb {
+  left: 16px;
+  background-color: white;
+}
+
+.toggle-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

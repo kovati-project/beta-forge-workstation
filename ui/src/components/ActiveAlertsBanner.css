@@ -1,0 +1,45 @@
+.active-alerts-banner {
+  background-color: rgba(255, 179, 71, 0.08);
+  border: 1px solid rgba(255, 179, 71, 0.3);
+  border-radius: 4px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.banner-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--amber);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.banner-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.alert-item {
+  font-size: 9px;
+  color: var(--amber);
+  line-height: 1.4;
+}
+
+.view-history-btn {
+  background: none;
+  border: none;
+  color: var(--amber);
+  cursor: pointer;
+  font-size: 9px;
+  text-decoration: underline;
+  transition: color 0.15s ease;
+  align-self: flex-start;
+}
+
+.view-history-btn:hover {
+  color: var(--text);
+}

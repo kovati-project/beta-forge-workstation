@@ -1,0 +1,42 @@
+{
+  "models": [
+    {
+      "title": "Qwen2.5-Coder 32B (NVLink-A)",
+      "provider": "openai",
+      "model": "current-model",
+      "apiBase": "http://10.10.10.2:8000/v1/",
+      "apiKey": "EMPTY"
+    },
+    {
+      "title": "Llama 3.3 70B (4-GPU)",
+      "provider": "openai",
+      "model": "large-model",
+      "apiBase": "http://10.10.10.2:8002/v1/",
+      "apiKey": "EMPTY"
+    },
+    {
+      "title": "Mistral 7B (fast)",
+      "provider": "ollama",
+      "model": "mistral:7b",
+      "apiBase": "http://10.10.10.2:11434"
+    }
+  ],
+  "tabAutocompleteModel": {
+    "title": "Qwen2.5-Coder 14B",
+    "provider": "ollama",
+    "model": "qwen2.5-coder:14b",
+    "apiBase": "http://10.10.10.2:11434"
+  },
+  "contextProviders": [
+    {"name": "code"},
+    {"name": "docs"},
+    {"name": "diff"},
+    {"name": "terminal"},
+    {"name": "problems"}
+  ],
+  "slashCommands": [
+    {"name": "edit", "description": "Edit selected code"},
+    {"name": "comment", "description": "Add comments"},
+    {"name": "tests", "description": "Write tests"}
+  ]
+}

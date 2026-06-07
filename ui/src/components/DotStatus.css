@@ -1,0 +1,34 @@
+/* DotStatus component */
+
+.dot-status {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.dot-green {
+  background-color: var(--green);
+}
+
+.dot-amber {
+  background-color: var(--amber);
+}
+
+.dot-red {
+  background-color: var(--red);
+}
+
+.dot-gray {
+  background-color: var(--text3);
+}
+
+.dot-cyan {
+  background-color: var(--cyan);
+}
+
+.dot-purple {
+  background-color: var(--purple);
+}

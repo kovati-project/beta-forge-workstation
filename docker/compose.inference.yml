@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+
+  # ── Ollama ────────────────────────────────────────────────────────────────────
+  # Lightweight model management. Hot-swap capable. Good for 7B–14B chat models.
+  # Uses GPU0 by default; loadout manager overrides CUDA_VISIBLE_DEVICES at runtime.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - /data/models/ollama:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+  # ── vLLM: NVLink Pair A [GPU0, GPU3] ─────────────────────────────────────────
+  # High-throughput serving for 32B–40B models.
+  # CUDA_VISIBLE_DEVICES=0,3 maps to the confirmed NVLink bridge.
+  # --model path is a symlink — update /data/models/vllm/current before starting.
+  vllm-pair-a:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-pair-a
+    restart: unless-stopped
+    ipc: host
+    ports:
+      - "8000:8000"
+    volumes:
+      - /data/models/vllm:/models
+      - /data/models/hf-cache:/root/.cache/huggingface
+      - ./configs/nccl/nccl.conf:/etc/nccl.conf:ro
+    environment:
+      - CUDA_VISIBLE_DEVICES=0,3
+      - NCCL_P2P_LEVEL=NVL
+      - NCCL_SHM_DISABLE=0
+      - HF_HOME=/root/.cache/huggingface
+    command: >
+      --model /models/current
+      --tensor-parallel-size 2
+      --max-model-len 16384
+      --gpu-memory-utilization 0.92
+      --max-num-seqs 64
+      --enable-chunked-prefill
+      --host 0.0.0.0
+      --port 8000
+      --served-model-name current-model
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0', '3']
+              capabilities: [gpu]
+
+  # ── vLLM: NVLink Pair B [GPU1, GPU2] ─────────────────────────────────────────
+  # Second independent inference slot. Same config as pair A, different GPUs/port.
+  # Not started by default — use profile "pair-b" or the loadout manager.
+  vllm-pair-b:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-pair-b
+    restart: unless-stopped
+    ipc: host
+    ports:
+      - "8001:8000"
+    volumes:
+      - /data/models/vllm:/models
+      - /data/models/hf-cache:/root/.cache/huggingface
+      - ./configs/nccl/nccl.conf:/etc/nccl.conf:ro
+    environment:
+      - CUDA_VISIBLE_DEVICES=1,2
+      - NCCL_P2P_LEVEL=NVL
+      - NCCL_SHM_DISABLE=0
+      - HF_HOME=/root/.cache/huggingface
+    command: >
+      --model /models/current-b
+      --tensor-parallel-size 2
+      --max-model-len 16384
+      --gpu-memory-utilization 0.92
+      --max-num-seqs 64
+      --enable-chunked-prefill
+      --host 0.0.0.0
+      --port 8000
+      --served-model-name current-model-b
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1', '2']
+              capabilities: [gpu]
+    profiles:
+      - pair-b
+
+  # ── vLLM: Full 4-GPU [GPU0, GPU1, GPU2, GPU3] ────────────────────────────────
+  # For 70B+ models. Requires all GPUs free — mutually exclusive with pair A/B.
+  # fp8 quantization allows longer context on 96GB total VRAM.
+  vllm-4gpu:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-4gpu
+    restart: unless-stopped
+    ipc: host
+    ports:
+      - "8002:8000"
+    volumes:
+      - /data/models/vllm:/models
+      - /data/models/hf-cache:/root/.cache/huggingface
+      - ./configs/nccl/nccl.conf:/etc/nccl.conf:ro
+    environment:
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+      - NCCL_P2P_LEVEL=NVL
+      - NCCL_SHM_DISABLE=0
+      - HF_HOME=/root/.cache/huggingface
+    command: >
+      --model /models/large
+      --tensor-parallel-size 4
+      --max-model-len 16384
+      --gpu-memory-utilization 0.90
+      --quantization fp8
+      --max-num-seqs 32
+      --enable-chunked-prefill
+      --host 0.0.0.0
+      --port 8000
+      --served-model-name large-model
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0', '1', '2', '3']
+              capabilities: [gpu]
+    profiles:
+      - large

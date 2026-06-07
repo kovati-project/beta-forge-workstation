@@ -1,0 +1,243 @@
+.auth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background-color: var(--surface2);
+  border-radius: 4px;
+}
+
+.auth-section.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}
+
+.auth-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-status .label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.auth-status .status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  color: var(--text2);
+}
+
+.open-link {
+  color: var(--cyan);
+  text-decoration: none;
+  margin-left: 8px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.open-link:hover {
+  text-decoration: underline;
+  color: var(--text);
+}
+
+.forward-auth {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 9px;
+}
+
+.forward-auth .label {
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.forward-auth .services {
+  color: var(--text2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+}
+
+.users-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.users-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.users-header .header-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.add-user-btn {
+  background-color: rgba(0, 255, 100, 0.1);
+  border: 1px solid var(--green);
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: 8px;
+  color: var(--green);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.add-user-btn:hover {
+  background-color: rgba(0, 255, 100, 0.2);
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.users-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.users-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  font-size: 8px;
+}
+
+.users-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  font-size: 9px;
+}
+
+.users-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.users-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.username {
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.email {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  color: var(--text3);
+}
+
+.last-login {
+  font-size: 8px;
+  color: var(--text3);
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 7px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  background-color: rgba(0, 217, 255, 0.1);
+  color: var(--cyan);
+}
+
+.role-badge.admin {
+  background-color: rgba(255, 179, 71, 0.1);
+  color: var(--amber);
+}
+
+.actions {
+  text-align: right;
+}
+
+.action-menu {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.action-item {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 2px 6px;
+  font-size: 7px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.action-item:hover {
+  border-color: var(--text2);
+  color: var(--text);
+}
+
+.action-item.promote {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.action-item.promote:hover {
+  background-color: rgba(0, 255, 100, 0.1);
+}
+
+.action-item.demote {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.action-item.demote:hover {
+  background-color: rgba(255, 179, 71, 0.1);
+}
+
+.action-item.delete {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.action-item.delete:hover {
+  background-color: rgba(255, 51, 51, 0.1);
+}
+
+.empty {
+  text-align: center;
+  color: var(--text3);
+  padding: 12px !important;
+}

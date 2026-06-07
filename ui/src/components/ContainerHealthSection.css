@@ -1,0 +1,73 @@
+.container-health-section {
+  overflow-x: auto;
+}
+
+.containers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.containers-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.containers-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  font-size: 8px;
+}
+
+.containers-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.containers-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.containers-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.containers-table tr.alert {
+  background-color: rgba(255, 51, 51, 0.08);
+}
+
+.containers-table tr.alert:hover {
+  background-color: rgba(255, 51, 51, 0.12);
+}
+
+.service-name {
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.oom-alert {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text3);
+  padding: 16px !important;
+}
+
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: var(--text3);
+  font-size: 10px;
+}

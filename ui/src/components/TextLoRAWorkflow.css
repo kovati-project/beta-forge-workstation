@@ -1,0 +1,26 @@
+.text-lora-workflow {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.workflow-content {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 24px;
+}
+
+.workflow-back-btn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 10px;
+  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+.workflow-back-btn:hover {
+  color: var(--text);
+}

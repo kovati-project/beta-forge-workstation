@@ -1,0 +1,231 @@
+# Prometheus alerting rules for AI Workstation
+# Monitors GPU, system, and service health
+
+groups:
+  - name: gpu_alerts
+    interval: 30s
+    rules:
+      # GPU Temperature Alert
+      - alert: GPUHighTemperature
+        expr: DCGM_FI_DEV_GPU_TEMP > 83
+        for: 2m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} high temperature"
+          description: "GPU {{ $labels.gpu }} temperature {{ $value }}°C exceeds 83°C threshold for 2 minutes"
+
+      # GPU Critical Temperature
+      - alert: GPUCriticalTemperature
+        expr: DCGM_FI_DEV_GPU_TEMP > 90
+        for: 1m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} CRITICAL temperature"
+          description: "GPU {{ $labels.gpu }} temperature {{ $value }}°C — throttling or shutdown imminent"
+
+      # VRAM Critical (< 1GB free)
+      - alert: GPUVRAMCritical
+        expr: DCGM_FI_DEV_FB_FREE < 1024
+        for: 1m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} VRAM nearly full"
+          description: "GPU {{ $labels.gpu }} has only {{ $value | humanize }}MB free VRAM"
+
+      # VRAM Warning (< 2GB free)
+      - alert: GPUVRAMWarning
+        expr: DCGM_FI_DEV_FB_FREE < 2048
+        for: 2m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} VRAM low"
+          description: "GPU {{ $labels.gpu }} has {{ $value | humanize }}MB free VRAM — consider stopping tasks"
+
+      # GPU Power Draw Warning (> 220W = TDP for A5500)
+      - alert: GPUHighPowerDraw
+        expr: DCGM_FI_DEV_POWER_USAGE > 220
+        for: 5m
+        labels:
+          severity: warning
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} sustained high power draw"
+          description: "GPU {{ $labels.gpu }} power draw {{ $value }}W exceeds TDP for 5 minutes"
+
+      # GPU ECC Double-Bit Errors (hardware fault)
+      - alert: GPUECCDoublebitError
+        expr: DCGM_FI_DEV_ECC_DBE_VOL_TOTAL > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU {{ $labels.gpu }} ECC double-bit error detected"
+          description: "GPU {{ $labels.gpu }} has {{ $value }} double-bit ECC errors — HARDWARE FAULT. Stop workloads immediately."
+
+      # NVLink Errors
+      - alert: NVLinkErrors
+        expr: DCGM_FI_DEV_NVLINK_CRC_FLIT_ERR_COUNT_TOTAL > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "NVLink errors on GPU {{ $labels.gpu }}"
+          description: "NVLink CRC/FLIT errors detected — interconnect degradation"
+
+  - name: system_alerts
+    interval: 30s
+    rules:
+      # CPU Temperature Alert
+      - alert: CPUHighTemperature
+        expr: node_hwmon_temp_celsius{chip=~".*coretemp.*"} > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "CPU temperature high"
+          description: "CPU core {{ $labels.core }} temperature {{ $value }}°C exceeds 85°C for 5 minutes"
+
+      # System Load Alert (> num_cpu_cores for 5 min)
+      - alert: SystemHighLoad
+        expr: node_load5 > 32
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "System load very high"
+          description: "5-minute load average {{ $value }} exceeds CPU count (32 cores)"
+
+      # Available Memory Low (< 10% free)
+      - alert: SystemMemoryLow
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "System memory low"
+          description: "Available memory {{ $value | humanizePercentage }} — consider stopping tasks"
+
+      # Root Filesystem Critical (> 90% full)
+      - alert: FilesystemCritical
+        expr: |
+          ((node_filesystem_size_bytes{fstype=~"ext4|xfs",mountpoint!="/"} - node_filesystem_free_bytes)
+           / node_filesystem_size_bytes) > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Filesystem {{ $labels.device }} nearly full"
+          description: "Filesystem {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} full"
+
+      # Network Interface Down
+      - alert: NetworkInterfaceDown
+        expr: node_network_up{device=~"eth0|eno1"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: network
+        annotations:
+          summary: "Network interface {{ $labels.device }} down"
+          description: "Interface {{ $labels.device }} is not operational"
+
+  - name: service_alerts
+    interval: 30s
+    rules:
+      # Service Down (cannot scrape)
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: service
+        annotations:
+          summary: "Service {{ $labels.job }} unavailable"
+          description: "Service {{ $labels.job }} ({{ $labels.instance }}) is not responding to scrape"
+
+      # Prometheus Storage Warning (> 80% used)
+      - alert: PrometheusStorageHigh
+        expr: (node_filesystem_size_bytes{mountpoint="/prometheus"} - node_filesystem_free_bytes{mountpoint="/prometheus"}) / node_filesystem_size_bytes{mountpoint="/prometheus"} > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: prometheus
+        annotations:
+          summary: "Prometheus storage usage high"
+          description: "Prometheus storage is {{ $value | humanizePercentage }} full"
+
+      # High Scrape Failure Rate
+      - alert: HighScrapeFail
+        expr: |
+          rate(prometheus_sd_failed_configs[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: prometheus
+        annotations:
+          summary: "Prometheus scrape failures"
+          description: "Prometheus failing to scrape targets at rate {{ $value | humanizePercentage }} per second"
+
+  - name: inference_alerts
+    interval: 30s
+    rules:
+      # vLLM High Latency
+      - alert: vLLMHighLatency
+        expr: histogram_quantile(0.95, vllm_request_duration_seconds) > 30
+        for: 5m
+        labels:
+          severity: warning
+          component: inference
+        annotations:
+          summary: "vLLM p95 latency high"
+          description: "vLLM p95 request latency {{ $value }}s on {{ $labels.instance }}"
+
+      # Ollama Queue Buildup
+      - alert: OllamaQueueBuildup
+        expr: ollama_queue_size > 20
+        for: 3m
+        labels:
+          severity: warning
+          component: inference
+        annotations:
+          summary: "Ollama queue backed up"
+          description: "Ollama queue has {{ $value }} pending requests"
+
+  - name: training_alerts
+    interval: 30s
+    rules:
+      # Training Checkpoint Save Failure
+      - alert: TrainingCheckpointError
+        expr: increase(training_checkpoint_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: training
+        annotations:
+          summary: "Training checkpoint save failed"
+          description: "Training process unable to save checkpoints ({{ $value }} failures in 5m)"
+
+      # GPU Pressure During Training
+      - alert: GPUPressure
+        expr: |
+          (DCGM_FI_DEV_GPU_UTIL > 95) and (rate(DCGM_FI_DEV_PCIE_RX_THROUGHPUT[1m]) > 0)
+        for: 10m
+        labels:
+          severity: info
+          component: training
+        annotations:
+          summary: "GPU sustained high utilization"
+          description: "GPU {{ $labels.gpu }} sustained > 95% utilization for 10+ min (normal for training)"

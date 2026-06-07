@@ -1,0 +1,141 @@
+.mcp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mcp-header {
+  font-size: 9px;
+  color: var(--text3);
+  padding: 0 4px;
+}
+
+.mcp-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcp-card {
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.card-name {
+  color: var(--cyan);
+}
+
+.card-port {
+  color: var(--text3);
+  font-size: 8px;
+}
+
+.card-connection {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  color: var(--text3);
+  word-break: break-all;
+  white-space: pre-wrap;
+  max-height: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-role {
+  font-size: 8px;
+  color: var(--text2);
+}
+
+.test-result {
+  font-size: 8px;
+  padding: 4px 6px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.test-result.success {
+  background-color: rgba(0, 255, 0, 0.1);
+  color: var(--green);
+}
+
+.test-result.error {
+  background-color: rgba(255, 0, 0, 0.1);
+  color: var(--red);
+}
+
+.card-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.action-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: 8px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.toggle-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toggle-btn:hover:not(:disabled) {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.toggle-btn.active {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 12px;
+  font-size: 9px;
+}

@@ -1,0 +1,120 @@
+services:
+
+  # ── Kohya_ss: image LoRA and Dreambooth ───────────────────────────────────
+  kohya:
+    image: ghcr.io/bmaltais/kohya-ss:latest
+    container_name: kohya
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    volumes:
+      - /data/datasets/images:/dataset
+      - /data/models/comfyui/loras:/output/loras
+      - /data/checkpoints/kohya:/output/checkpoints
+      - /data/models/comfyui/checkpoints:/models/checkpoints
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1,2
+      - KOHYA_LOG_LEVEL=INFO
+    command: >
+      --listen 0.0.0.0
+      --server_port 7860
+      --headless
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1', '2']
+              capabilities: [gpu]
+
+  # ── Axolotl: text model fine-tuning ───────────────────────────────────────
+  axolotl:
+    image: winglian/axolotl:main-latest
+    container_name: axolotl
+    restart: no
+    volumes:
+      - /data/datasets/text:/workspace/datasets
+      - /data/checkpoints/axolotl:/workspace/outputs
+      - /data/models/vllm:/workspace/models
+      - ./configs/axolotl:/workspace/configs
+    ipc: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0,1,2,3
+      - NCCL_P2P_LEVEL=NVL
+      - NCCL_SHM_DISABLE=0
+      - WANDB_DISABLED=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0', '1', '2', '3']
+              capabilities: [gpu]
+    profiles:
+      - training
+
+  # ── Unsloth: fast LoRA (1-2 GPU) ─────────────────────────────────────────
+  unsloth:
+    image: unslothai/unsloth:latest
+    container_name: unsloth
+    restart: no
+    ports:
+      - "8501:8501"
+    volumes:
+      - /data/datasets/text:/workspace/datasets
+      - /data/checkpoints/unsloth:/workspace/outputs
+      - /data/models/vllm:/workspace/models
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0,3
+      - NCCL_P2P_LEVEL=NVL
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0', '3']
+              capabilities: [gpu]
+    profiles:
+      - training
+
+  # ── Label Studio: training data annotation ────────────────────────────────
+  label-studio:
+    image: heartexlabs/label-studio:latest
+    container_name: label-studio
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - label-studio-data:/label-studio/data
+      - /data/datasets:/label-studio/files
+    environment:
+      - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
+      - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/files
+      - LABEL_STUDIO_USERNAME=admin@local.dev
+      - LABEL_STUDIO_PASSWORD=${LABEL_STUDIO_PASSWORD}
+
+  # ── JupyterLab: experimentation ───────────────────────────────────────────
+  jupyterlab:
+    image: quay.io/jupyter/pytorch-notebook:cuda12-pytorch-2.4.0
+    container_name: jupyterlab
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    volumes:
+      - /data/notebooks:/home/jovyan/work
+      - /data/models:/home/jovyan/models
+      - /data/datasets:/home/jovyan/datasets
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+volumes:
+  label-studio-data:

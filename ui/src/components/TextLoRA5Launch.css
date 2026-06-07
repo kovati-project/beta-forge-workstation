@@ -1,0 +1,67 @@
+.text-lora-launch {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.launch-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text);
+  letter-spacing: 0.3px;
+}
+
+.summary-box {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-section {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.summary-section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.summary-label {
+  color: var(--text3);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.summary-value {
+  color: var(--text);
+  font-family: var(--mono);
+  text-align: right;
+  flex: 0 1 auto;
+}
+
+.error-message {
+  background-color: rgba(248, 113, 113, 0.1);
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 9px;
+  color: var(--red);
+  text-align: center;
+}
+
+.button-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}

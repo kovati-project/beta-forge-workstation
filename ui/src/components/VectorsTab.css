@@ -1,0 +1,183 @@
+.vectors-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vectors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.vectors-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.vectors-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.vectors-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.vectors-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.collection-name {
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.vectors-table .actions {
+  display: flex;
+  gap: 6px;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 9px;
+  padding: 2px 6px;
+  transition: color 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  color: var(--cyan);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn.delete:hover:not(:disabled) {
+  color: var(--red);
+}
+
+.loading,
+.empty {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}
+
+.delete-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-dialog {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  max-width: 400px;
+  width: 90%;
+}
+
+.delete-dialog h3 {
+  margin: 0 0 8px 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.delete-dialog p {
+  margin: 0 0 8px 0;
+  font-size: 9px;
+  color: var(--text2);
+}
+
+.confirm-name {
+  background-color: var(--surface2);
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--cyan);
+}
+
+.delete-dialog input {
+  width: 100%;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 9px;
+  color: var(--text);
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+
+.delete-dialog input:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.dialog-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-cancel,
+.btn-delete {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 12px;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-cancel {
+  color: var(--text3);
+}
+
+.btn-cancel:hover {
+  border-color: var(--text3);
+  color: var(--text);
+}
+
+.btn-delete {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.btn-delete:hover:not(:disabled) {
+  background-color: var(--red);
+  color: var(--surface);
+}
+
+.btn-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

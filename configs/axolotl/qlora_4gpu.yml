@@ -1,0 +1,51 @@
+base_model: /workspace/models/qwen2.5-32b
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+
+load_in_4bit: false
+bf16: true
+tf32: true
+
+fsdp:
+  - full_shard
+  - auto_wrap
+fsdp_config:
+  fsdp_offload_params: false
+  fsdp_state_dict_type: FULL_STATE_DICT
+  fsdp_transformer_layer_cls_to_wrap: Qwen2DecoderLayer
+
+datasets:
+  - path: /workspace/datasets/text/formatted
+    type: alpaca
+    data_files:
+      - train.jsonl
+
+dataset_prepared_path: /workspace/datasets/.cache
+val_set_size: 0.02
+
+output_dir: /workspace/outputs/qlora-run-001
+sequence_len: 8192
+sample_packing: true
+
+micro_batch_size: 2
+gradient_accumulation_steps: 4
+num_epochs: 3
+learning_rate: 2e-5
+lr_scheduler: cosine
+warmup_ratio: 0.05
+optimizer: adamw_torch_fused
+
+lora_r: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - v_proj
+  - k_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+saves_per_epoch: 2
+logging_steps: 10

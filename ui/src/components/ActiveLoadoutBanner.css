@@ -1,0 +1,126 @@
+/* Active Loadout Banner */
+
+.loadout-banner {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  flex: 2;
+  display: flex;
+  align-items: center;
+}
+
+.loadout-banner-empty {
+  justify-content: space-between;
+  min-height: 120px;
+}
+
+.loadout-banner-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.loadout-empty-text {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+
+.loadout-banner-title {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+}
+
+.loadout-profile-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--cyan);
+  word-break: break-word;
+}
+
+.loadout-profile-meta {
+  font-size: 9px;
+  color: var(--text3);
+  line-height: 1.4;
+}
+
+.loadout-services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.loadout-banner-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Switching state */
+
+.loadout-banner-switching {
+  border-color: var(--cyan);
+  animation: borderPulse 1s ease-in-out infinite;
+}
+
+@keyframes borderPulse {
+  0%, 100% {
+    border-color: var(--cyan);
+  }
+  50% {
+    border-color: rgba(0, 217, 255, 0.5);
+  }
+}
+
+.loadout-switching-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cyan);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loadout-switching-icon {
+  display: inline-block;
+  animation: spin 2s linear infinite;
+}
+
+.loadout-switching-desc {
+  font-size: 10px;
+  color: var(--text2);
+}
+
+.loadout-progress-bar {
+  width: 100%;
+  height: 4px;
+  background-color: var(--surface2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.loadout-progress-fill {
+  width: 45%;
+  height: 100%;
+  background-color: var(--cyan);
+  animation: progress-slide 2s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 80%;
+  }
+  100% {
+    width: 100%;
+  }
+}

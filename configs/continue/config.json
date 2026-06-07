@@ -1,0 +1,173 @@
+{
+  "models": [
+    {
+      "title": "Qwen2.5-Coder 32B [Primary]",
+      "provider": "openai",
+      "model": "current-model",
+      "apiBase": "http://10.10.10.2:8000/v1",
+      "apiKey": "EMPTY",
+      "contextLength": 32768,
+      "completionOptions": {
+        "temperature": 0.1,
+        "maxTokens": 4096,
+        "topP": 0.95
+      }
+    },
+    {
+      "title": "DeepSeek Coder 16B [Debug]",
+      "provider": "ollama",
+      "model": "deepseek-coder-v2:16b",
+      "apiBase": "http://10.10.10.2:11434",
+      "contextLength": 16384,
+      "completionOptions": {
+        "temperature": 0.2,
+        "topP": 0.95
+      }
+    },
+    {
+      "title": "Codellama 70B [Architect]",
+      "provider": "openai",
+      "model": "large-model",
+      "apiBase": "http://10.10.10.2:8002/v1",
+      "apiKey": "EMPTY",
+      "contextLength": 100000,
+      "completionOptions": {
+        "temperature": 0.1,
+        "maxTokens": 8192
+      }
+    },
+    {
+      "title": "Qwen2.5-Coder 14B [Fast]",
+      "provider": "ollama",
+      "model": "qwen2.5-coder:14b",
+      "apiBase": "http://10.10.10.2:11434",
+      "contextLength": 16384,
+      "completionOptions": {
+        "temperature": 0.1,
+        "topP": 0.95
+      }
+    }
+  ],
+
+  "tabAutocompleteModel": {
+    "title": "Qwen2.5-Coder 7B [Autocomplete]",
+    "provider": "ollama",
+    "model": "qwen2.5-coder:7b",
+    "apiBase": "http://10.10.10.2:11434",
+    "contextLength": 4096,
+    "completionOptions": {
+      "temperature": 0.05,
+      "topP": 0.9
+    }
+  },
+
+  "embeddingsProvider": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "apiBase": "http://10.10.10.2:11434"
+  },
+
+  "contextProviders": [
+    {
+      "name": "code",
+      "params": {}
+    },
+    {
+      "name": "docs",
+      "params": {}
+    },
+    {
+      "name": "diff",
+      "params": {}
+    },
+    {
+      "name": "terminal",
+      "params": {}
+    },
+    {
+      "name": "problems",
+      "params": {}
+    },
+    {
+      "name": "folder",
+      "params": {}
+    },
+    {
+      "name": "codebase",
+      "params": {
+        "nRetrieve": 25,
+        "nFinal": 5,
+        "useReranking": true
+      }
+    }
+  ],
+
+  "slashCommands": [
+    {
+      "name": "edit",
+      "description": "Edit selected code block"
+    },
+    {
+      "name": "comment",
+      "description": "Add or improve inline documentation"
+    },
+    {
+      "name": "tests",
+      "description": "Generate unit tests with high coverage"
+    },
+    {
+      "name": "refactor",
+      "description": "Refactor for clarity, performance, and idiomaticity"
+    },
+    {
+      "name": "review",
+      "description": "Security and quality code review"
+    },
+    {
+      "name": "explain",
+      "description": "Explain code functionality and architecture"
+    }
+  ],
+
+  "customCommands": [
+    {
+      "name": "security-review",
+      "prompt": "Review this code for security vulnerabilities. Check for: injection flaws (SQL, command, template), authentication/authorization bypasses, insecure deserialization, sensitive data exposure, SSRF, privilege escalation, cryptographic weaknesses, XXE, CSRF, and unsafe dependencies. Provide specific, actionable remediation for each finding with code examples.",
+      "description": "Security-focused code review"
+    },
+    {
+      "name": "optimize",
+      "prompt": "Analyze this code for performance issues and optimization opportunities. Identify: algorithmic complexity problems (Big-O analysis), unnecessary allocations and copies, blocking I/O calls, cache inefficiencies, lock contention, and memory leaks. Provide concrete improvements with complexity analysis and benchmarking suggestions.",
+      "description": "Performance analysis and optimization"
+    },
+    {
+      "name": "document",
+      "prompt": "Write comprehensive documentation for this code. Include: function/class signatures, parameter descriptions with types, return values and error conditions, exceptions/errors thrown, usage examples, architectural notes, preconditions/postconditions, and thread-safety notes where relevant. Use standard docstring format for the language.",
+      "description": "Generate complete documentation"
+    },
+    {
+      "name": "cuda-review",
+      "prompt": "Review this CUDA code for correctness and performance. Check: memory access patterns and coalescing, warp occupancy and register pressure, synchronization and race conditions, shared memory bank conflicts, PCIe bandwidth usage, and GPU memory hierarchy efficiency. Provide optimization recommendations with specific kernel improvements.",
+      "description": "CUDA-specific code review"
+    }
+  ],
+
+  "codebaseContext": {
+    "excludeDirs": [
+      "node_modules", ".git", "dist", "build",
+      "__pycache__", ".venv", "vendor",
+      ".pytest_cache", ".tox", "htmlcov",
+      "target", ".cargo", "zig-cache",
+      "venv", ".env"
+    ],
+    "excludeGlobs": [
+      "*.min.js", "*.lock", "*.png", "*.jpg", "*.jpeg",
+      "*.gif", "*.mp4", "*.pdf", "package-lock.json",
+      "yarn.lock", "Cargo.lock", "poetry.lock"
+    ]
+  },
+
+  "telemetry": {
+    "enabled": false
+  }
+}

@@ -1,0 +1,13 @@
+/* GPU Status Row */
+
+.gpu-status-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.gpu-status-row > * {
+  flex: 1;
+  min-width: 180px;
+}

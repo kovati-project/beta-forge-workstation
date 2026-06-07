@@ -1,0 +1,35 @@
+/* VBar component — horizontal fill bar */
+
+.vbar {
+  height: 6px;
+  width: 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+}
+
+.vbar-fill {
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.vbar-cyan .vbar-fill {
+  background-color: var(--cyan);
+}
+
+.vbar-amber .vbar-fill {
+  background-color: var(--amber);
+}
+
+.vbar-green .vbar-fill {
+  background-color: var(--green);
+}
+
+.vbar-red .vbar-fill {
+  background-color: var(--red);
+}
+
+.vbar-purple .vbar-fill {
+  background-color: var(--purple);
+}

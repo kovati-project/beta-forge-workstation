@@ -1,0 +1,158 @@
+profiles:
+
+  # ── INFERENCE PROFILES ────────────────────────────────────────────────────
+
+  inference-small:
+    description: "Single GPU chat — 7B-13B models, lowest latency"
+    compose_files:
+      - compose.inference.yml
+    services:
+      - ollama
+    gpu_assignment:
+      ollama: ["0", "3"]
+    exclusive_gpus: ["0", "3"]
+    compatible_with: [image-studio]
+
+  inference-pair-a:
+    description: "NVLink pair A [GPU0,GPU3] — 32B-40B models, fast"
+    compose_files:
+      - compose.inference.yml
+    services:
+      - vllm-pair-a
+      - ollama
+    gpu_assignment:
+      vllm-pair-a: ["0", "3"]
+      ollama: ["1"]
+    exclusive_gpus: ["0", "3"]
+    incompatible_with: [inference-small, inference-4gpu, inference-4gpu-large,
+                        dual-stack, training-lora-text, training-lora-image, training-unsloth]
+
+  inference-pair-b:
+    description: "NVLink pair B [GPU1,GPU2] — 32B-40B second model"
+    compose_files:
+      - compose.inference.yml
+    services:
+      - vllm-pair-b
+    gpu_assignment:
+      vllm-pair-b: ["1", "2"]
+    exclusive_gpus: ["1", "2"]
+    incompatible_with: [inference-4gpu, inference-4gpu-large, dual-stack,
+                        image-studio, training-lora-text, training-lora-image]
+
+  inference-4gpu:
+    description: "Full mesh [GPU0,1,2,3] — 70B+ models"
+    compose_files:
+      - compose.inference.yml
+    services:
+      - vllm-4gpu
+    gpu_assignment:
+      vllm-4gpu: ["0", "1", "2", "3"]
+    exclusive_gpus: ["0", "1", "2", "3"]
+    vram_required_gb: 88
+    incompatible_with: [inference-small, inference-pair-a, inference-pair-b, 
+                        inference-4gpu-large, dual-stack, image-studio,
+                        training-lora-text, training-lora-image, training-unsloth]
+
+  dual-stack:
+    description: "Two simultaneous models — pair A + pair B"
+    compose_files:
+      - compose.inference.yml
+    services:
+      - vllm-pair-a
+      - vllm-pair-b
+    gpu_assignment:
+      vllm-pair-a: ["0", "3"]
+      vllm-pair-b: ["1", "2"]
+    exclusive_gpus: ["0", "1", "2", "3"]
+    vram_required_gb: 96
+    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+                        inference-4gpu, inference-4gpu-large, image-studio,
+                        training-lora-text, training-lora-image, training-unsloth]
+
+  # ── STUDIO PROFILES ──────────────────────────────────────────────────────
+
+  image-studio:
+    description: "ComfyUI on GPU0, text inference on GPU1+GPU2"
+    compose_files:
+      - compose.studio.yml
+      - compose.inference.yml
+    services:
+      - comfyui
+      - rembg
+      - vllm-pair-b
+    gpu_assignment:
+      comfyui: ["0"]
+      vllm-pair-b: ["1", "2"]
+    exclusive_gpus: ["0", "1", "2"]
+    vram_required_gb: 72
+    compatible_with: [inference-small]
+    incompatible_with: [inference-pair-b, inference-4gpu, inference-4gpu-large,
+                        dual-stack, training-lora-text, training-lora-image]
+
+  # ── TRAINING PROFILES ────────────────────────────────────────────────────
+
+  training-lora-image:
+    description: "Kohya_ss image LoRA on NVLink pair B [GPU1,GPU2]"
+    compose_files:
+      - compose.training.yml
+    services:
+      - kohya
+      - label-studio
+    gpu_assignment:
+      kohya: ["1", "2"]
+    exclusive_gpus: ["1", "2"]
+    vram_required_gb: 48
+    incompatible_with: [inference-pair-b, inference-4gpu, inference-4gpu-large, 
+                        dual-stack, image-studio, training-lora-text, training-unsloth]
+
+  training-lora-text:
+    description: "Axolotl text fine-tuning — all 4 GPUs FSDP"
+    compose_files:
+      - compose.training.yml
+    services:
+      - axolotl
+    gpu_assignment:
+      axolotl: ["0", "1", "2", "3"]
+    exclusive_gpus: ["0", "1", "2", "3"]
+    vram_required_gb: 90
+    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+                        inference-4gpu, inference-4gpu-large, dual-stack, image-studio, training-lora-image]
+
+  training-unsloth:
+    description: "Fast LoRA fine-tuning via Unsloth on NVLink pair A [GPU0,GPU3]"
+    compose_files:
+      - compose.training.yml
+    services:
+      - unsloth
+    gpu_assignment:
+      unsloth: ["0", "3"]
+    exclusive_gpus: ["0", "3"]
+    vram_required_gb: 48
+    incompatible_with: [inference-small, inference-pair-a, inference-4gpu, 
+                        inference-4gpu-large, dual-stack, training-lora-text, training-lora-image]
+
+  inference-4gpu-large:
+    description: "Pipeline-parallel 130B+ models (all GPUs, TP=2 PP=2)"
+    compose_files:
+      - compose.inference.yml
+    services:
+      - vllm-4gpu
+    gpu_assignment:
+      vllm-4gpu: ["0", "1", "2", "3"]
+    exclusive_gpus: ["0", "1", "2", "3"]
+    vram_required_gb: 96
+    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+                        inference-4gpu, dual-stack, image-studio, training-lora-text, 
+                        training-lora-image, training-unsloth]
+    environment:
+      VLLM_TENSOR_PARALLEL_SIZE: "2"
+      VLLM_PIPELINE_PARALLEL_SIZE: "2"
+
+  idle:
+    description: "No GPU allocation — CPU-only services and maintenance"
+    compose_files: []
+    services: []
+    gpu_assignment: {}
+    exclusive_gpus: []
+    vram_required_gb: 0
+    incompatible_with: []

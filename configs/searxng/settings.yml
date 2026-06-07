@@ -1,0 +1,28 @@
+use_default_settings: true
+
+server:
+  secret_key: "change-this-to-a-random-32-char-string"
+  bind_address: "0.0.0.0:8080"
+  base_url: "http://10.10.10.2:8080/"
+
+search:
+  safe_search: 0
+  default_lang: "en"
+
+engines:
+  - name: google
+    engine: google
+    disabled: false
+  - name: duckduckgo
+    engine: duckduckgo
+    disabled: false
+  - name: bing
+    engine: bing
+    disabled: false
+  - name: wikipedia
+    engine: wikipedia
+    disabled: false
+
+ui:
+  default_theme: simple
+  infinite_scroll: true

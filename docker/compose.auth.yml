@@ -1,0 +1,100 @@
+services:
+
+  # ── PostgreSQL for Authentik (authentication database) ────────────────────
+  postgres:
+    image: docker.io/library/postgres:15-alpine
+    container_name: authentik-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=authentik
+      - POSTGRES_USER=authentik
+      - POSTGRES_PASSWORD=${AUTHENTIK_PG_PASSWORD}
+    volumes:
+      - /data/authentik/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "authentik"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-auth
+
+  # ── Redis for Authentik session/cache ───────────────────────────────────
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: authentik-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${AUTHENTIK_REDIS_PASSWORD}
+    volumes:
+      - /data/authentik/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai-auth
+
+  # ── Authentik: Identity Provider with OAuth2/OIDC/LDAP ─────────────────
+  authentik:
+    image: ghcr.io/goauthentik/server:latest
+    container_name: authentik
+    restart: unless-stopped
+    ports:
+      - "9080:9000"
+      - "9443:9443"
+    environment:
+      - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
+      - AUTHENTIK_POSTGRESQL__HOST=authentik-postgres
+      - AUTHENTIK_POSTGRESQL__USER=authentik
+      - AUTHENTIK_POSTGRESQL__NAME=authentik
+      - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_PG_PASSWORD}
+      - AUTHENTIK_REDIS__HOST=authentik-redis
+      - AUTHENTIK_REDIS__PASSWORD=${AUTHENTIK_REDIS_PASSWORD}
+      - AUTHENTIK_ERROR_REPORTING__ENABLED=false
+      - AUTHENTIK_DISABLE_UPDATE_CHECK=true
+      - AUTHENTIK_LISTEN__HTTP=0.0.0.0:9000
+      - AUTHENTIK_LISTEN__HTTPS=0.0.0.0:9443
+    volumes:
+      - /data/authentik/media:/media
+      - /data/authentik/custom-templates:/templates
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/-/health/live/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - ai-auth
+
+  # ── Authentik worker (background tasks) ────────────────────────────────
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:latest
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    environment:
+      - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
+      - AUTHENTIK_POSTGRESQL__HOST=authentik-postgres
+      - AUTHENTIK_POSTGRESQL__USER=authentik
+      - AUTHENTIK_POSTGRESQL__NAME=authentik
+      - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_PG_PASSWORD}
+      - AUTHENTIK_REDIS__HOST=authentik-redis
+      - AUTHENTIK_REDIS__PASSWORD=${AUTHENTIK_REDIS_PASSWORD}
+      - AUTHENTIK_ERROR_REPORTING__ENABLED=false
+    volumes:
+      - /data/authentik/media:/media
+      - /data/authentik/custom-templates:/templates
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - ai-auth
+
+networks:
+  ai-auth:
+    name: ai-auth
+    driver: bridge

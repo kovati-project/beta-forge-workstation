@@ -1,0 +1,148 @@
+services:
+
+  # ── n8n: visual workflow automation ───────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - /data/n8n-files:/files
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://10.10.10.2:5678/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - DB_TYPE=sqlite
+      - EXECUTIONS_PROCESS=main
+      # LLM integration via OpenAI-compatible endpoint (Ollama)
+      - N8N_AI_ENABLED=true
+      - N8N_AI_PROVIDER=openai
+      - N8N_AI_OPENAI_API_KEY=EMPTY
+      - N8N_AI_OPENAI_BASE_URL=http://10.10.10.2:11434/v1
+
+  # ── Dify: LLM app development platform ────────────────────────────────────
+  dify-api:
+    image: langgenius/dify-api:latest
+    container_name: dify-api
+    restart: unless-stopped
+    environment:
+      - MODE=api
+      - SECRET_KEY=${DIFY_SECRET_KEY}
+      - DB_USERNAME=dify
+      - DB_PASSWORD=${DIFY_DB_PASSWORD}
+      - DB_HOST=dify-db
+      - DB_DATABASE=dify
+      - REDIS_HOST=dify-redis
+      - STORAGE_TYPE=local
+      - OPENAI_API_BASE=http://10.10.10.2:11434/v1
+    depends_on:
+      - dify-db
+      - dify-redis
+    volumes:
+      - dify-storage:/app/api/storage
+    ports:
+      - "5001:5001"
+
+  dify-web:
+    image: langgenius/dify-web:latest
+    container_name: dify-web
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    environment:
+      - NEXT_PUBLIC_API_PREFIX=http://10.10.10.2:5001/v1
+      - NEXT_PUBLIC_APP_API_PREFIX=http://10.10.10.2:5001/api
+
+  dify-db:
+    image: postgres:15-alpine
+    container_name: dify-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=dify
+      - POSTGRES_PASSWORD=${DIFY_DB_PASSWORD}
+      - POSTGRES_DB=dify
+    volumes:
+      - dify-db-data:/var/lib/postgresql/data
+
+  dify-redis:
+    image: redis:7-alpine
+    container_name: dify-redis
+    restart: unless-stopped
+    volumes:
+      - dify-redis-data:/data
+
+  # ── MCP Servers ───────────────────────────────────────────────────────────
+
+  mcp-filesystem:
+    image: node:20-alpine
+    container_name: mcp-filesystem
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - /data:/data:ro
+    command: >
+      sh -c "npm install -g @modelcontextprotocol/server-filesystem &&
+             npx @modelcontextprotocol/server-filesystem --port 3100 /data"
+
+  mcp-fetch:
+    image: node:20-alpine
+    container_name: mcp-fetch
+    restart: unless-stopped
+    ports:
+      - "3103:3103"
+    command: >
+      sh -c "npm install -g @modelcontextprotocol/server-fetch &&
+             npx @modelcontextprotocol/server-fetch --port 3103"
+
+  mcp-browser:
+    image: mcr.microsoft.com/playwright:v1.48.0-jammy
+    container_name: mcp-browser
+    restart: unless-stopped
+    ports:
+      - "3101:3101"
+    command: >
+      sh -c "npm install -g @modelcontextprotocol/server-browser &&
+             npx @modelcontextprotocol/server-browser --port 3101"
+
+  mcp-code-exec:
+    image: node:20-alpine
+    container_name: mcp-code-exec
+    restart: unless-stopped
+    ports:
+      - "3102:3102"
+    environment:
+      - PORT=3102
+    command: >
+      sh -c "npm install -g @modelcontextprotocol/server-code-executor &&
+             npx @modelcontextprotocol/server-code-executor --port 3102"
+
+  # ── JupyterLab: interactive notebook environment ───────────────────────────
+  # Start with: docker compose --profile notebook up jupyterlab
+  # Access at http://10.10.10.2:8888 — token set via JUPYTER_TOKEN in .env
+  jupyterlab:
+    image: quay.io/jupyter/scipy-notebook:latest
+    container_name: jupyterlab
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    volumes:
+      - /data:/home/jovyan/work
+      - /data/models:/home/jovyan/models:ro
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-changeme}
+      - GRANT_SUDO=yes
+    user: root
+    profiles:
+      - notebook
+
+volumes:
+  n8n-data:
+  dify-storage:
+  dify-db-data:
+  dify-redis-data:

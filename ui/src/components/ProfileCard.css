@@ -1,0 +1,160 @@
+/* Profile Card */
+
+.profile-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.profile-card:hover:not(.incompatible) {
+  border-color: var(--border2);
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.profile-card.active {
+  border: 2px solid;
+  background-color: rgba(0, 217, 255, 0.06);
+}
+
+.profile-card.incompatible {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.profile-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: white;
+  background-color: var(--cyan);
+  padding: 3px 6px;
+  border-radius: 2px;
+}
+
+.profile-badge.lock {
+  background-color: transparent;
+  color: var(--text3);
+  font-size: 12px;
+  padding: 0;
+}
+
+.profile-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.profile-description {
+  font-size: 10px;
+  color: var(--text3);
+  line-height: 1.3;
+}
+
+.mini-gpu-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mini-gpu-row {
+  display: flex;
+  gap: 3px;
+  justify-content: flex-start;
+}
+
+.mini-gpu-box {
+  width: 20px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.mini-gpu-box.claimed {
+  background-color: rgba(0, 217, 255, 0.12);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.mini-bridge-indicator {
+  font-size: 8px;
+  color: var(--text3);
+  padding: 4px 0;
+  letter-spacing: 0.2px;
+}
+
+.profile-services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.vram-check {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  padding: 6px;
+  background-color: var(--surface2);
+  border-radius: 3px;
+}
+
+.vram-check.available {
+  color: var(--green);
+}
+
+.vram-check.unavailable {
+  color: var(--red);
+}
+
+.vram-label {
+  font-weight: 400;
+}
+
+.vram-check-icon {
+  font-weight: 600;
+  min-width: 12px;
+  text-align: right;
+}
+
+.incompatible-tooltip {
+  display: none;
+  position: absolute;
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 8px;
+  color: var(--text2);
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.profile-card.incompatible:hover .incompatible-tooltip {
+  display: block;
+}

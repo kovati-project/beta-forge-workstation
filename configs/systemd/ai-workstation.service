@@ -1,0 +1,37 @@
+# Install: sudo cp this file /etc/systemd/system/ai-workstation.service
+#          sudo systemctl daemon-reload && sudo systemctl enable ai-workstation
+#
+# Or use scripts/setup-systemd-service.sh which generates this file with the
+# correct paths and also installs the backup and healthcheck timers.
+
+[Unit]
+Description=AI Workstation Services
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=kasemo
+WorkingDirectory=/home/kasemo/ai-workstation
+ExecStart=/home/kasemo/ai-workstation/scripts/start-all.sh
+ExecStop=docker compose \
+    -f /home/kasemo/ai-workstation/docker/compose.webui.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.agentic.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.codegen.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.voice.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.training.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.inference.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.loadout.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.auth.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.monitoring.yml \
+    -f /home/kasemo/ai-workstation/docker/compose.storage.yml \
+    down
+TimeoutStartSec=600
+TimeoutStopSec=120
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

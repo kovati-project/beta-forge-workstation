@@ -1,0 +1,114 @@
+/* GPU Card component */
+
+.gpu-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  transition: border-color 0.2s ease;
+}
+
+.gpu-card.skeleton {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+}
+
+.skeleton-bar {
+  height: 6px;
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  border-radius: 3px;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.gpu-card-default {
+  border-color: var(--border);
+}
+
+.gpu-card-claimed {
+  border-color: var(--cyan);
+}
+
+.gpu-card-warning {
+  border-color: var(--amber);
+}
+
+.gpu-card-critical {
+  border-color: var(--red);
+}
+
+.gpu-card-bridge-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text3);
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  padding: 2px 4px;
+}
+
+.gpu-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.gpu-card-label {
+  font-size: 10px;
+  color: var(--text3);
+  font-weight: 400;
+}
+
+.gpu-card-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.gpu-card-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gpu-card-metric-label {
+  font-size: 9px;
+  color: var(--text3);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.gpu-card-metric-value {
+  font-size: 10px;
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+}
+
+.gpu-card-service {
+  margin-top: 4px;
+  display: flex;
+  justify-content: flex-start;
+}
