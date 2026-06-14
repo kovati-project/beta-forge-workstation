@@ -1,0 +1,408 @@
+<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+
+    <!-- ═══════════════════════════════════════════════════════════ TITLE -->
+    <mxCell id="2" value="Kovati Workstation — Platform Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="20" width="1620" height="40" as="geometry" />
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════════ USER / CLIENT -->
+    <mxCell id="3" value="User / Browser" style="shape=mxgraph.cisco.computers_and_peripherals.pc;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="790" y="75" width="60" height="55" as="geometry" />
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ ACCESS LAYER -->
+    <mxCell id="10" value="ACCESS LAYER" style="swimlane;fontStyle=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;startSize=28;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="145" width="1620" height="130" as="geometry" />
+    </mxCell>
+
+    <mxCell id="11" value="&lt;b&gt;Caddy&lt;/b&gt;&lt;br&gt;TLS Reverse Proxy&lt;br&gt;:80 / :443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="10">
+      <mxGeometry x="20" y="38" width="190" height="72" as="geometry" />
+    </mxCell>
+
+    <mxCell id="12" value="&lt;b&gt;Open WebUI&lt;/b&gt;&lt;br&gt;Unified Chat UI&lt;br&gt;:3000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="10">
+      <mxGeometry x="240" y="38" width="190" height="72" as="geometry" />
+    </mxCell>
+
+    <mxCell id="13" value="&lt;b&gt;SearXNG&lt;/b&gt;&lt;br&gt;Private Web Search&lt;br&gt;:8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="10">
+      <mxGeometry x="460" y="38" width="190" height="72" as="geometry" />
+    </mxCell>
+
+    <mxCell id="14" value="&lt;b&gt;Dify Web&lt;/b&gt;&lt;br&gt;LLM App Builder UI&lt;br&gt;:3010" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="10">
+      <mxGeometry x="680" y="38" width="190" height="72" as="geometry" />
+    </mxCell>
+
+    <mxCell id="15" value="&lt;b&gt;Grafana&lt;/b&gt;&lt;br&gt;Dashboards&lt;br&gt;:3001" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="10">
+      <mxGeometry x="900" y="38" width="190" height="72" as="geometry" />
+    </mxCell>
+
+    <mxCell id="16" value="&lt;b&gt;Authentik&lt;/b&gt;&lt;br&gt;SSO / Auth Gateway&lt;br&gt;(Phase 13 — planned)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontColor=#333333;fontSize=10;dashed=1;" vertex="1" parent="10">
+      <mxGeometry x="1120" y="38" width="190" height="72" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════════════ ORCHESTRATION -->
+    <mxCell id="20" value="ORCHESTRATION" style="swimlane;fontStyle=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;startSize=28;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="295" width="1620" height="100" as="geometry" />
+    </mxCell>
+
+    <mxCell id="21" value="&lt;b&gt;Loadout Manager&lt;/b&gt; · FastAPI · :8800&lt;br&gt;VRAM-aware GPU profile switching · Manages all GPU service stacks via Docker socket&lt;br&gt;Profiles: inference-small | pair-a | pair-b | 4gpu | dual-stack | image-studio | training-* | idle" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="20">
+      <mxGeometry x="310" y="32" width="1000" height="58" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════ TEXT INFERENCE (GPU) -->
+    <mxCell id="30" value="TEXT INFERENCE (GPU)" style="swimlane;fontStyle=1;fontSize=10;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;startSize=25;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="415" width="460" height="300" as="geometry" />
+    </mxCell>
+
+    <mxCell id="31" value="&lt;b&gt;Ollama&lt;/b&gt;&lt;br&gt;7B–14B Chat&lt;br&gt;:11434 · GPU[0]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="30">
+      <mxGeometry x="15" y="33" width="200" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="32" value="&lt;b&gt;vLLM — Pair A&lt;/b&gt;&lt;br&gt;32B–40B · TP=2&lt;br&gt;:8000 · GPU[0,3] NVLink" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="30">
+      <mxGeometry x="240" y="33" width="205" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="33" value="&lt;b&gt;vLLM — Pair B&lt;/b&gt;&lt;br&gt;32B–40B · TP=2&lt;br&gt;:8001 · GPU[1,2] NVLink" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="30">
+      <mxGeometry x="15" y="115" width="200" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="34" value="&lt;b&gt;vLLM — 4-GPU&lt;/b&gt;&lt;br&gt;70B+ · TP=4 · fp8&lt;br&gt;:8002 · GPU[0,1,2,3]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="30">
+      <mxGeometry x="240" y="115" width="205" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="35" value="4× NVIDIA GPU · NVLink Full Mesh · 24 GB VRAM each (96 GB total)" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="30">
+      <mxGeometry x="15" y="200" width="430" height="25" as="geometry" />
+    </mxCell>
+
+    <mxCell id="36" value="OpenAI-compatible API endpoints" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="30">
+      <mxGeometry x="15" y="228" width="430" height="22" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════ IMAGE GENERATION (GPU) -->
+    <mxCell id="40" value="IMAGE GENERATION (GPU)" style="swimlane;fontStyle=1;fontSize=10;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;startSize=25;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="520" y="415" width="460" height="300" as="geometry" />
+    </mxCell>
+
+    <mxCell id="41" value="&lt;b&gt;ComfyUI&lt;/b&gt;&lt;br&gt;SDXL / Flux Node-Graph&lt;br&gt;:8188 · GPU[0]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="40">
+      <mxGeometry x="15" y="33" width="200" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="42" value="&lt;b&gt;InvokeAI&lt;/b&gt;&lt;br&gt;Canvas / Inpainting&lt;br&gt;:9090 · GPU[0] ⚡" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="40">
+      <mxGeometry x="240" y="33" width="205" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="43" value="&lt;b&gt;RealESRGAN&lt;/b&gt;&lt;br&gt;Upscaling API&lt;br&gt;:8189 · GPU[0] ⚡" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="40">
+      <mxGeometry x="15" y="115" width="200" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="44" value="&lt;b&gt;RemBG&lt;/b&gt;&lt;br&gt;Background Removal&lt;br&gt;:8190 · CPU" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="40">
+      <mxGeometry x="240" y="115" width="205" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="45" value="⚡ = optional profile (mutually exclusive with ComfyUI on GPU[0])" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="40">
+      <mxGeometry x="15" y="200" width="430" height="25" as="geometry" />
+    </mxCell>
+
+    <mxCell id="46" value="Profile: image-studio (ComfyUI + vLLM-B + RemBG)" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="40">
+      <mxGeometry x="15" y="228" width="430" height="22" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════ VOICE I/O -->
+    <mxCell id="50" value="VOICE I/O" style="swimlane;fontStyle=1;fontSize=10;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;startSize=25;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="1000" y="415" width="290" height="300" as="geometry" />
+    </mxCell>
+
+    <mxCell id="51" value="&lt;b&gt;Whisper&lt;/b&gt;&lt;br&gt;Speech-to-Text (STT)&lt;br&gt;faster-whisper large-v3&lt;br&gt;:9099 · GPU[0]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="50">
+      <mxGeometry x="15" y="33" width="260" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="52" value="&lt;b&gt;Piper&lt;/b&gt;&lt;br&gt;Text-to-Speech (TTS)&lt;br&gt;en_US-lessac-high&lt;br&gt;:5000 · CPU" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="50">
+      <mxGeometry x="15" y="130" width="260" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="53" value="OpenAI-compatible STT/TTS API" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="50">
+      <mxGeometry x="15" y="228" width="260" height="22" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════ TRAINING & DATA (GPU) -->
+    <mxCell id="60" value="TRAINING &amp; DATA (GPU)" style="swimlane;fontStyle=1;fontSize=10;fillColor=#ffd966;strokeColor=#b46504;strokeWidth=2;startSize=25;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="1310" y="415" width="350" height="300" as="geometry" />
+    </mxCell>
+
+    <mxCell id="61" value="&lt;b&gt;Kohya&lt;/b&gt;&lt;br&gt;Image LoRA / Dreambooth&lt;br&gt;:7860 · GPU[1,2] NVLink" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd966;strokeColor=#b46504;fontSize=10;" vertex="1" parent="60">
+      <mxGeometry x="15" y="33" width="310" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="62" value="&lt;b&gt;Axolotl&lt;/b&gt;&lt;br&gt;Text Fine-Tuning · FSDP&lt;br&gt;CLI only · GPU[0,1,2,3] ⚡" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd966;strokeColor=#b46504;fontSize=10;" vertex="1" parent="60">
+      <mxGeometry x="15" y="105" width="310" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="63" value="&lt;b&gt;Unsloth&lt;/b&gt;&lt;br&gt;Fast LoRA · :8501&lt;br&gt;GPU[0,3] ⚡" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd966;strokeColor=#b46504;fontSize=10;" vertex="1" parent="60">
+      <mxGeometry x="15" y="177" width="145" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="64" value="&lt;b&gt;Label Studio&lt;/b&gt;&lt;br&gt;Data Tagging&lt;br&gt;:8081 · CPU" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd966;strokeColor=#b46504;fontSize=10;" vertex="1" parent="60">
+      <mxGeometry x="175" y="177" width="150" height="65" as="geometry" />
+    </mxCell>
+
+    <mxCell id="65" value="⚡ = training profile only (restart: no)" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="60">
+      <mxGeometry x="15" y="258" width="310" height="22" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════ AGENTIC & WORKFLOW -->
+    <mxCell id="70" value="AGENTIC &amp; WORKFLOW" style="swimlane;fontStyle=1;fontSize=11;fillColor=#d0e0e3;strokeColor=#006eaf;strokeWidth=2;startSize=28;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="735" width="1620" height="210" as="geometry" />
+    </mxCell>
+
+    <mxCell id="71" value="&lt;b&gt;n8n&lt;/b&gt;&lt;br&gt;Visual Workflow&lt;br&gt;Automation&lt;br&gt;:5678" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0e0e3;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="70">
+      <mxGeometry x="20" y="38" width="165" height="80" as="geometry" />
+    </mxCell>
+
+    <!-- Dify sub-group -->
+    <mxCell id="72" value="Dify — LLM App Platform" style="swimlane;fontStyle=1;fontSize=9;fillColor=#b3d4d9;strokeColor=#006eaf;startSize=22;rounded=1;" vertex="1" parent="70">
+      <mxGeometry x="205" y="33" width="510" height="95" as="geometry" />
+    </mxCell>
+
+    <mxCell id="73" value="&lt;b&gt;API&lt;/b&gt;&lt;br&gt;:5001" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b3d4d9;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="72">
+      <mxGeometry x="10" y="27" width="105" height="58" as="geometry" />
+    </mxCell>
+
+    <mxCell id="74" value="&lt;b&gt;PostgreSQL&lt;/b&gt;&lt;br&gt;(internal)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b3d4d9;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="72">
+      <mxGeometry x="130" y="27" width="110" height="58" as="geometry" />
+    </mxCell>
+
+    <mxCell id="75" value="&lt;b&gt;Redis&lt;/b&gt;&lt;br&gt;(internal)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b3d4d9;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="72">
+      <mxGeometry x="255" y="27" width="110" height="58" as="geometry" />
+    </mxCell>
+
+    <mxCell id="76" value="&lt;b&gt;OpenHands&lt;/b&gt;&lt;br&gt;Autonomous Coding&lt;br&gt;:3003 ⚡ (planned)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b3d4d9;strokeColor=#006eaf;fontSize=10;dashed=1;" vertex="1" parent="72">
+      <mxGeometry x="380" y="27" width="120" height="58" as="geometry" />
+    </mxCell>
+
+    <!-- MCP Servers sub-group -->
+    <mxCell id="77" value="MCP Servers" style="swimlane;fontStyle=1;fontSize=9;fillColor=#9ac8d0;strokeColor=#006eaf;startSize=22;rounded=1;" vertex="1" parent="70">
+      <mxGeometry x="730" y="33" width="520" height="95" as="geometry" />
+    </mxCell>
+
+    <mxCell id="78" value="&lt;b&gt;Filesystem&lt;/b&gt;&lt;br&gt;:3100" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9ac8d0;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="77">
+      <mxGeometry x="10" y="27" width="110" height="58" as="geometry" />
+    </mxCell>
+
+    <mxCell id="79" value="&lt;b&gt;Browser&lt;/b&gt;&lt;br&gt;:3101" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9ac8d0;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="77">
+      <mxGeometry x="130" y="27" width="110" height="58" as="geometry" />
+    </mxCell>
+
+    <mxCell id="80" value="&lt;b&gt;Code Exec&lt;/b&gt;&lt;br&gt;:3102" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9ac8d0;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="77">
+      <mxGeometry x="250" y="27" width="110" height="58" as="geometry" />
+    </mxCell>
+
+    <mxCell id="81" value="&lt;b&gt;Fetch&lt;/b&gt;&lt;br&gt;:3103" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9ac8d0;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="77">
+      <mxGeometry x="370" y="27" width="110" height="58" as="geometry" />
+    </mxCell>
+
+    <!-- JupyterLab -->
+    <mxCell id="82" value="&lt;b&gt;JupyterLab&lt;/b&gt;&lt;br&gt;PyTorch + CUDA&lt;br&gt;Notebooks&lt;br&gt;:8888 · GPU[0]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0e0e3;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="70">
+      <mxGeometry x="1270" y="38" width="165" height="80" as="geometry" />
+    </mxCell>
+
+    <!-- Langfuse (agentic section) -->
+    <mxCell id="83" value="&lt;b&gt;Langfuse&lt;/b&gt;&lt;br&gt;Prompt Tracking &amp; Eval&lt;br&gt;:3002" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d0e0e3;strokeColor=#006eaf;fontSize=10;" vertex="1" parent="70">
+      <mxGeometry x="1270" y="128" width="165" height="65" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════ STORAGE & DATABASES -->
+    <mxCell id="90" value="STORAGE &amp; DATABASES" style="swimlane;fontStyle=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;startSize=28;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="965" width="1620" height="140" as="geometry" />
+    </mxCell>
+
+    <mxCell id="91" value="&lt;b&gt;MinIO&lt;/b&gt;&lt;br&gt;S3-Compatible Object Store&lt;br&gt;:9000 API · :9001 Console&lt;br&gt;models / loras / datasets / outputs / backups" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="90">
+      <mxGeometry x="20" y="35" width="310" height="85" as="geometry" />
+    </mxCell>
+
+    <mxCell id="92" value="&lt;b&gt;Qdrant&lt;/b&gt;&lt;br&gt;Vector Database (RAG)&lt;br&gt;:6333 REST · :6334 gRPC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="90">
+      <mxGeometry x="350" y="35" width="280" height="85" as="geometry" />
+    </mxCell>
+
+    <mxCell id="93" value="&lt;b&gt;PostgreSQL&lt;/b&gt;&lt;br&gt;Shared Relational DB&lt;br&gt;:5432&lt;br&gt;Langfuse · n8n schemas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="90">
+      <mxGeometry x="650" y="35" width="280" height="85" as="geometry" />
+    </mxCell>
+
+    <mxCell id="94" value="Host Filesystem&lt;br&gt;/data/minio&lt;br&gt;/data/documents/{research,code,security}&lt;br&gt;/models (NFS)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="90">
+      <mxGeometry x="950" y="35" width="310" height="85" as="geometry" />
+    </mxCell>
+
+    <!-- ════════════════════════════════════ MONITORING -->
+    <mxCell id="100" value="MONITORING &amp; OBSERVABILITY" style="swimlane;fontStyle=1;fontSize=11;fillColor=#e8def8;strokeColor=#7b68c8;strokeWidth=2;startSize=28;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="1125" width="1620" height="140" as="geometry" />
+    </mxCell>
+
+    <mxCell id="101" value="&lt;b&gt;Prometheus&lt;/b&gt;&lt;br&gt;Metrics Scraper&lt;br&gt;:9091 · 90-day retention" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8def8;strokeColor=#7b68c8;fontSize=10;" vertex="1" parent="100">
+      <mxGeometry x="20" y="35" width="220" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="102" value="&lt;b&gt;Grafana&lt;/b&gt;&lt;br&gt;Dashboards&lt;br&gt;:3001" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8def8;strokeColor=#7b68c8;fontSize=10;" vertex="1" parent="100">
+      <mxGeometry x="260" y="35" width="220" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="103" value="&lt;b&gt;DCGM Exporter&lt;/b&gt;&lt;br&gt;Deep GPU Metrics&lt;br&gt;:9400" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8def8;strokeColor=#7b68c8;fontSize=10;" vertex="1" parent="100">
+      <mxGeometry x="500" y="35" width="220" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="104" value="&lt;b&gt;Node Exporter&lt;/b&gt;&lt;br&gt;Host System Metrics&lt;br&gt;:9100" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8def8;strokeColor=#7b68c8;fontSize=10;" vertex="1" parent="100">
+      <mxGeometry x="740" y="35" width="220" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="105" value="&lt;b&gt;cAdvisor&lt;/b&gt;&lt;br&gt;Container Metrics&lt;br&gt;:8989 · privileged" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8def8;strokeColor=#7b68c8;fontSize=10;" vertex="1" parent="100">
+      <mxGeometry x="980" y="35" width="220" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="106" value="&lt;b&gt;AlertManager&lt;/b&gt;&lt;br&gt;Alert Routing&lt;br&gt;:9093" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8def8;strokeColor=#7b68c8;fontSize=10;" vertex="1" parent="100">
+      <mxGeometry x="1220" y="35" width="220" height="80" as="geometry" />
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ CONNECTIONS -->
+
+    <!-- User → Caddy -->
+    <mxCell id="200" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" source="3" target="11" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- User → Open WebUI -->
+    <mxCell id="201" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" source="3" target="12" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Caddy → Open WebUI (routes) -->
+    <mxCell id="202" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#6c8ebf;endArrow=open;endFill=0;" edge="1" source="11" target="12" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Open WebUI → Ollama -->
+    <mxCell id="203" value="chat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#d6b656;fontSize=9;endArrow=open;endFill=0;" edge="1" source="12" target="31" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Open WebUI → vLLM Pair A -->
+    <mxCell id="204" value="chat" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#d6b656;fontSize=9;endArrow=open;endFill=0;" edge="1" source="12" target="32" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Open WebUI → Whisper (STT) -->
+    <mxCell id="205" value="STT" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#9673a6;fontSize=9;endArrow=open;endFill=0;" edge="1" source="12" target="51" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Open WebUI → Piper (TTS) -->
+    <mxCell id="206" value="TTS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#9673a6;fontSize=9;endArrow=open;endFill=0;" edge="1" source="12" target="52" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Open WebUI → ComfyUI (image gen) -->
+    <mxCell id="207" value="image gen" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#b85450;fontSize=9;endArrow=open;endFill=0;" edge="1" source="12" target="41" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Open WebUI → SearXNG -->
+    <mxCell id="208" value="search" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#6c8ebf;fontSize=9;endArrow=open;endFill=0;" edge="1" source="12" target="13" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Open WebUI → Qdrant (RAG) -->
+    <mxCell id="209" value="RAG" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#82b366;fontSize=9;endArrow=open;endFill=0;" edge="1" source="12" target="92" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Loadout Manager → Text Inference (manages) -->
+    <mxCell id="210" value="manages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#82b366;fontSize=9;endArrow=open;endFill=0;" edge="1" source="21" target="30" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Loadout Manager → Image Gen (manages) -->
+    <mxCell id="211" value="manages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#82b366;fontSize=9;endArrow=open;endFill=0;" edge="1" source="21" target="40" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Loadout Manager → Training (manages) -->
+    <mxCell id="212" value="manages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#82b366;fontSize=9;endArrow=open;endFill=0;" edge="1" source="21" target="60" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- n8n → Ollama (AI backend) -->
+    <mxCell id="213" value="LLM API" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#d6b656;fontSize=9;endArrow=open;endFill=0;" edge="1" source="71" target="31" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Dify API → Ollama -->
+    <mxCell id="214" value="LLM API" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#d6b656;fontSize=9;endArrow=open;endFill=0;" edge="1" source="73" target="31" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Langfuse → PostgreSQL (depends_on) -->
+    <mxCell id="215" value="depends_on" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;fontSize=9;" edge="1" source="83" target="93" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Grafana → Prometheus -->
+    <mxCell id="216" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7b68c8;fontSize=9;" edge="1" source="102" target="101" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Prometheus → DCGM -->
+    <mxCell id="217" value="scrapes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#7b68c8;fontSize=9;endArrow=open;endFill=0;" edge="1" source="101" target="103" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Prometheus → Node Exporter -->
+    <mxCell id="218" value="scrapes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#7b68c8;fontSize=9;endArrow=open;endFill=0;" edge="1" source="101" target="104" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Prometheus → cAdvisor -->
+    <mxCell id="219" value="scrapes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#7b68c8;fontSize=9;endArrow=open;endFill=0;" edge="1" source="101" target="105" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Prometheus → AlertManager -->
+    <mxCell id="220" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7b68c8;fontSize=9;" edge="1" source="101" target="106" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- MinIO → Host Filesystem -->
+    <mxCell id="221" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;fontSize=9;endArrow=open;endFill=0;" edge="1" source="91" target="94" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Training → MinIO (checkpoints) -->
+    <mxCell id="222" value="checkpoints" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#b46504;fontSize=9;endArrow=open;endFill=0;" edge="1" source="60" target="91" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ LEGEND -->
+    <mxCell id="300" value="Legend" style="swimlane;fontStyle=1;fontSize=10;fillColor=#f5f5f5;strokeColor=#666666;startSize=22;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="1340" y="965" width="320" height="145" as="geometry" />
+    </mxCell>
+
+    <mxCell id="301" value="Solid arrow: hard dependency / data flow" style="text;html=1;fontSize=9;align=left;" vertex="1" parent="300">
+      <mxGeometry x="15" y="28" width="290" height="20" as="geometry" />
+    </mxCell>
+
+    <mxCell id="302" value="Dashed arrow: API call / optional integration" style="text;html=1;fontSize=9;align=left;" vertex="1" parent="300">
+      <mxGeometry x="15" y="50" width="290" height="20" as="geometry" />
+    </mxCell>
+
+    <mxCell id="303" value="Dashed border box: planned / profile-optional" style="text;html=1;fontSize=9;align=left;" vertex="1" parent="300">
+      <mxGeometry x="15" y="72" width="290" height="20" as="geometry" />
+    </mxCell>
+
+    <mxCell id="304" value="⚡ = requires explicit loadout profile activation" style="text;html=1;fontSize=9;align=left;" vertex="1" parent="300">
+      <mxGeometry x="15" y="94" width="290" height="20" as="geometry" />
+    </mxCell>
+
+    <mxCell id="305" value="Network: ai-workstation bridge · Host: 10.10.10.2" style="text;html=1;fontSize=9;align=left;fontStyle=2;" vertex="1" parent="300">
+      <mxGeometry x="15" y="116" width="290" height="20" as="geometry" />
+    </mxCell>
+
+  </root>
+</mxGraphModel>
