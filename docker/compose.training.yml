@@ -36,7 +36,7 @@ services:
       - /data/datasets/text:/workspace/datasets
       - /data/checkpoints/axolotl:/workspace/outputs
       - /data/models/vllm:/workspace/models
-      - ./configs/axolotl:/workspace/configs
+      - ../configs/axolotl:/workspace/configs
     ipc: host
     environment:
       - NVIDIA_VISIBLE_DEVICES=0,1,2,3

@@ -39,7 +39,7 @@ services:
     volumes:
       - /data/models/vllm:/models
       - /data/models/hf-cache:/root/.cache/huggingface
-      - ./configs/nccl/nccl.conf:/etc/nccl.conf:ro
+      - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
       - CUDA_VISIBLE_DEVICES=0,3
       - NCCL_P2P_LEVEL=NVL
@@ -76,7 +76,7 @@ services:
     volumes:
       - /data/models/vllm:/models
       - /data/models/hf-cache:/root/.cache/huggingface
-      - ./configs/nccl/nccl.conf:/etc/nccl.conf:ro
+      - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
       - CUDA_VISIBLE_DEVICES=1,2
       - NCCL_P2P_LEVEL=NVL
@@ -115,7 +115,7 @@ services:
     volumes:
       - /data/models/vllm:/models
       - /data/models/hf-cache:/root/.cache/huggingface
-      - ./configs/nccl/nccl.conf:/etc/nccl.conf:ro
+      - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
       - CUDA_VISIBLE_DEVICES=0,1,2,3
       - NCCL_P2P_LEVEL=NVL

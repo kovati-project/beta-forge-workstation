@@ -62,7 +62,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./configs/searxng:/etc/searxng
+      - ../configs/searxng:/etc/searxng
 
 volumes:
   open-webui-data:

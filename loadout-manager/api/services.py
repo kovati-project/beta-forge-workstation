@@ -12,9 +12,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 logger = logging.getLogger(__name__)
 
 try:
-    from config import SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES, COMPOSE_SERVICE_NAME
+    from config import SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES, COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT
 except ImportError:
-    from ..config import SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES, COMPOSE_SERVICE_NAME
+    from ..config import SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES, COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT
 
 router = APIRouter()
 
@@ -31,14 +31,12 @@ except Exception as e:
     print(f"Warning: Docker client not available: {e}")
 
 
-async def _compose(compose_file: str, subcommand: str, *args: str) -> int:
-    """Run: docker compose -f <file> <subcommand> [args...]"""
-    cmd = [
-        "docker", "compose",
-        "-f", str(_COMPOSE_DIR / compose_file),
-        subcommand,
-        *args,
-    ]
+async def _compose(compose_file: str, subcommand: str, *args: str, profile: str = None) -> int:
+    """Run: docker compose [--profile <name>] -f <file> <subcommand> [args...]"""
+    cmd = ["docker", "compose"]
+    if profile:
+        cmd += ["--profile", profile]
+    cmd += ["-f", str(_COMPOSE_DIR / compose_file), subcommand, *args]
     logger.info("compose cmd: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -95,15 +93,19 @@ async def list_services() -> Dict:
     
     containers = docker_client.containers.list(all=True)
     
+    _status_map = {"exited": "stopped", "created": "stopped", "dead": "error", "removing": "stopping"}
+
     for svc_name, docker_name in SERVICE_MAP.items():
         container = next((c for c in containers if docker_name in c.name), None)
-        
+        raw_status = container.status if container else "exited"
+
         result[svc_name] = {
-            "status": container.status if container else "stopped",
+            "status": _status_map.get(raw_status, raw_status),
             "port": PORT_MAP.get(svc_name),
             "image": container.image.tags[0] if container and container.image.tags else None,
             "uptime_seconds": _get_uptime(container) if container else 0,
             "compose_file": COMPOSE_FILES.get(svc_name),
+            "gpus": GPU_ASSIGNMENT.get(svc_name, []),
         }
     
     return result
@@ -117,14 +119,16 @@ async def get_service(name: str) -> Dict:
     
     container = _get_container(name)
     
+    _status_map = {"exited": "stopped", "created": "stopped", "dead": "error", "removing": "stopping"}
     return {
         "name": name,
-        "status": container.status,
+        "status": _status_map.get(container.status, container.status),
         "port": PORT_MAP.get(name),
         "image": container.image.tags[0] if container.image.tags else None,
         "image_id": container.image.id,
         "uptime_seconds": _get_uptime(container),
         "compose_file": COMPOSE_FILES.get(name),
+        "gpus": GPU_ASSIGNMENT.get(name, []),
     }
 
 
@@ -140,8 +144,7 @@ async def start_service(name: str, background_tasks: BackgroundTasks) -> Dict:
 
     svc = COMPOSE_SERVICE_NAME.get(name, name)
     profile = SERVICE_PROFILES.get(name)
-    extra = ["--profile", profile] if profile else []
-    background_tasks.add_task(_compose, compose_file, "up", *extra, "-d", "--no-deps", svc)
+    background_tasks.add_task(_compose, compose_file, "up", "-d", "--no-deps", svc, profile=profile)
     return {"status": "starting", "service": name}
 
 
