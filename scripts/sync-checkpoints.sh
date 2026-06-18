@@ -22,7 +22,7 @@ fi
 # Verify MinIO is running
 if ! mc alias ls local &> /dev/null; then
     echo "ERROR: MinIO alias 'local' not configured. Run:"
-    echo "  mc alias set local http://localhost:9000 admin changeme-strong-password"
+    echo "  mc alias set local http://localhost:9000 admin 5c6eb4508af1de3f08b4acdea9d29934
     exit 1
 fi
 

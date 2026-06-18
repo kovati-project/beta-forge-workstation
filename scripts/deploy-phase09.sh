@@ -108,7 +108,7 @@ echo ""
 echo "1. Configure MinIO client (one-time):"
 echo "   wget https://dl.min.io/client/mc/release/linux-amd64/mc"
 echo "   chmod +x mc && sudo mv mc /usr/local/bin/"
-echo "   mc alias set local http://localhost:9000 admin changeme-strong-password"
+echo "   mc alias set local http://localhost:9000 admin 5c6eb4508af1de3f08b4acdea9d29934
 echo ""
 echo "2. Create MinIO buckets:"
 echo "   mc mb local/models local/loras local/datasets local/outputs local/backups"
