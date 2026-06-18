@@ -78,7 +78,7 @@ if (-not $DryRun) {
     # Make scripts executable on workstation
     Write-Host ""
     Write-Host "Setting permissions..."
-    ssh $Host_ "chmod +x ${RemoteDir}/scripts/*.sh ${RemoteDir}/scripts/*.py 2>/dev/null; echo '  + chmod +x scripts/*'"
+    ssh $Host_ "find ${RemoteDir}/scripts -name '*.sh' -o -name '*.py' | xargs dos2unix -q 2>/dev/null; chmod +x ${RemoteDir}/scripts/*.sh ${RemoteDir}/scripts/*.py 2>/dev/null; echo '  + chmod +x / dos2unix scripts/*'"
 }
 
 Write-Host ""
