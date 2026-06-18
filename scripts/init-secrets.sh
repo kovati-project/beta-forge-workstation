@@ -183,7 +183,7 @@ import re, sys
 path, pw = sys.argv[1], sys.argv[2]
 with open(path, 'r') as f:
     content = f.read()
-content = re.sub(r'(mc alias set local http://localhost:9000 admin )\S+',
+content = re.sub(r'(mc alias set local http://localhost:9000 admin )[^"\s]+',
                  r'\g<1>' + pw, content)
 with open(path, 'w') as f:
     f.write(content)
