@@ -24,6 +24,12 @@ _COMPOSE_DIR = Path(os.getenv("COMPOSE_DIR", "/compose"))
 if not _COMPOSE_DIR.exists():
     _COMPOSE_DIR = Path(__file__).parent.parent.parent / "docker"
 
+# HOST_COMPOSE_DIR is the real host-filesystem path to the docker/ directory.
+# Without it, relative paths in compose files (e.g. ../configs/nccl/nccl.conf)
+# resolve to /configs/... on the host instead of <repo>/configs/..., causing
+# bind mount failures and silent container start failures.
+_HOST_COMPOSE_DIR = os.getenv("HOST_COMPOSE_DIR", "")
+
 try:
     docker_client = docker.from_env()
 except Exception as e:
@@ -32,8 +38,10 @@ except Exception as e:
 
 
 async def _compose(compose_file: str, subcommand: str, *args: str, profile: str = None) -> int:
-    """Run: docker compose [--profile <name>] -f <file> <subcommand> [args...]"""
+    """Run: docker compose [--project-directory <dir>] [--profile <name>] -f <file> <subcommand> [args...]"""
     cmd = ["docker", "compose"]
+    if _HOST_COMPOSE_DIR:
+        cmd += ["--project-directory", _HOST_COMPOSE_DIR]
     if profile:
         cmd += ["--profile", profile]
     cmd += ["-f", str(_COMPOSE_DIR / compose_file), subcommand, *args]

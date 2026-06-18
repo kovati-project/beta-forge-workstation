@@ -17,6 +17,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 COMPOSE="docker compose"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$(dirname "$SCRIPT_DIR")/docker"
+export REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Verify docker is running
 if ! docker info &>/dev/null; then

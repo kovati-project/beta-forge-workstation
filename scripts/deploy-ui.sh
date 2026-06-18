@@ -11,6 +11,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export REPO_ROOT
 UI_DIR="$REPO_ROOT/ui"
 LM_DIR="$REPO_ROOT/loadout-manager"
 STATIC_DIR="$LM_DIR/static"

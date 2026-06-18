@@ -3,6 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export REPO_ROOT
 LM_DIR="$REPO_ROOT/loadout-manager"
 
 echo "=== Phase 06: Loadout Manager Deploy ==="
