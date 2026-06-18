@@ -1,7 +1,7 @@
 use_default_settings: true
 
 server:
-  secret_key: "change-this-to-a-random-32-char-string"
+  secret_key: "124379052dfef3d313766abdae1d6024"
   bind_address: "0.0.0.0:8080"
   base_url: "http://10.10.10.2:8080/"
 
