@@ -167,7 +167,16 @@ async def start_service(name: str) -> Dict:
     if container:
         try:
             await asyncio.to_thread(container.start)
+            await asyncio.sleep(2)
+            await asyncio.to_thread(container.reload)
+            if container.status == "exited":
+                logs = await asyncio.to_thread(
+                    lambda: container.logs(tail=30).decode("utf-8", errors="ignore")
+                )
+                raise HTTPException(status_code=500, detail=logs.strip() or "Container exited immediately")
             return {"status": "starting", "service": name}
+        except HTTPException:
+            raise
         except docker.errors.APIError as e:
             raise HTTPException(status_code=500, detail=e.explanation or str(e))
         except Exception as e:

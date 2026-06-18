@@ -25,6 +25,10 @@ SERVICE_MAP = {
     "open-webui": "open-webui",
     "axolotl": "axolotl",
     "kohya": "kohya",
+    "comfyui": "comfyui",
+    "invokeai": "invokeai",
+    "real-esrgan": "real-esrgan",
+    "rembg": "rembg",
     "whisper-stt": "whisper-stt",
     "piper-tts": "piper-tts",
     "n8n": "n8n",
@@ -46,6 +50,10 @@ PORT_MAP = {
     "open-webui": 3000,
     "axolotl": None,
     "kohya": 7860,
+    "comfyui": 8188,
+    "invokeai": 9090,
+    "real-esrgan": 8189,
+    "rembg": 8190,
     "whisper-stt": 9099,
     "piper-tts": 5000,
     "n8n": 5678,
@@ -67,6 +75,10 @@ COMPOSE_FILES = {
     "open-webui":  "compose.webui.yml",
     "axolotl":     "compose.training.yml",
     "kohya":       "compose.training.yml",
+    "comfyui":     "compose.studio.yml",
+    "invokeai":    "compose.studio.yml",
+    "real-esrgan": "compose.studio.yml",
+    "rembg":       "compose.studio.yml",
     "whisper-stt": "compose.voice.yml",
     "piper-tts":   "compose.voice.yml",
     "n8n":         "compose.agentic.yml",
@@ -83,6 +95,7 @@ COMPOSE_FILES = {
 COMPOSE_SERVICE_NAME = {
     "whisper-stt": "whisper",
     "piper-tts":   "piper",
+    "real-esrgan": "realesrgan",
 }
 
 # Services that are gated behind a compose profile — must pass --profile when starting
@@ -92,6 +105,8 @@ SERVICE_PROFILES = {
     "axolotl":     "training",
     "unsloth":     "training",
     "jupyterlab":  "notebook",
+    "invokeai":    "studio",
+    "real-esrgan": "studio",
 }
 
 GPU_ASSIGNMENT = {
@@ -100,6 +115,9 @@ GPU_ASSIGNMENT = {
     "vllm-4gpu": [0, 1, 2, 3],
     "axolotl": [0, 1, 2, 3],
     "kohya": [1, 2],
+    "comfyui": [0],
+    "invokeai": [0],
+    "real-esrgan": [0],
     "whisper-stt": [0],
     "ollama": [0],
 }
