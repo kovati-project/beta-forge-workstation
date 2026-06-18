@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict
 from pathlib import Path
 import docker
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +37,10 @@ except Exception as e:
     print(f"Warning: Docker client not available: {e}")
 
 
-async def _compose(compose_file: str, subcommand: str, *args: str, profile: str = None) -> int:
-    """Run: docker compose [--project-directory <dir>] [--profile <name>] -f <file> <subcommand> [args...]"""
-    cmd = ["docker", "compose"]
+async def _compose(compose_file: str, subcommand: str, *args: str, profile: str = None) -> tuple[int, str]:
+    """Run: docker compose [--project-directory <dir>] [--profile <name>] -f <file> <subcommand> [args...]
+    Returns (exit_code, combined_output)."""
+    cmd = ["docker", "compose", "--ansi", "never"]
     if _HOST_COMPOSE_DIR:
         cmd += ["--project-directory", _HOST_COMPOSE_DIR]
     if profile:
@@ -52,12 +53,12 @@ async def _compose(compose_file: str, subcommand: str, *args: str, profile: str 
         stderr=asyncio.subprocess.STDOUT,
     )
     stdout, _ = await proc.communicate()
-    if stdout:
-        for line in stdout.decode(errors="replace").splitlines():
-            logger.info("compose[%s]: %s", subcommand, line)
+    output = stdout.decode(errors="replace") if stdout else ""
+    for line in output.splitlines():
+        logger.info("compose[%s]: %s", subcommand, line)
     if proc.returncode != 0:
         logger.error("compose %s %s exited %d", subcommand, compose_file, proc.returncode)
-    return proc.returncode
+    return proc.returncode, output
 
 
 def _get_container(name: str):
@@ -141,8 +142,8 @@ async def get_service(name: str) -> Dict:
 
 
 @router.post("/services/{name}/start")
-async def start_service(name: str, background_tasks: BackgroundTasks) -> Dict:
-    """Start a service."""
+async def start_service(name: str) -> Dict:
+    """Start a service. Runs docker compose synchronously so errors are returned to the caller."""
     if name not in SERVICE_MAP:
         raise HTTPException(status_code=404, detail=f"Service {name} not found")
 
@@ -152,13 +153,15 @@ async def start_service(name: str, background_tasks: BackgroundTasks) -> Dict:
 
     svc = COMPOSE_SERVICE_NAME.get(name, name)
     profile = SERVICE_PROFILES.get(name)
-    background_tasks.add_task(_compose, compose_file, "up", "-d", "--no-deps", svc, profile=profile)
+    rc, output = await _compose(compose_file, "up", "-d", "--no-deps", svc, profile=profile)
+    if rc != 0:
+        raise HTTPException(status_code=500, detail=output.strip() or f"docker compose up failed (exit {rc})")
     return {"status": "starting", "service": name}
 
 
 @router.post("/services/{name}/stop")
-async def stop_service(name: str, background_tasks: BackgroundTasks) -> Dict:
-    """Stop a service."""
+async def stop_service(name: str) -> Dict:
+    """Stop a service. Runs docker compose synchronously so errors are returned to the caller."""
     if name not in SERVICE_MAP:
         raise HTTPException(status_code=404, detail=f"Service {name} not found")
 
@@ -167,7 +170,9 @@ async def stop_service(name: str, background_tasks: BackgroundTasks) -> Dict:
         raise HTTPException(status_code=400, detail=f"No compose file for {name}")
 
     svc = COMPOSE_SERVICE_NAME.get(name, name)
-    background_tasks.add_task(_compose, compose_file, "stop", svc)
+    rc, output = await _compose(compose_file, "stop", svc)
+    if rc != 0:
+        raise HTTPException(status_code=500, detail=output.strip() or f"docker compose stop failed (exit {rc})")
     return {"status": "stopping", "service": name}
 
 
