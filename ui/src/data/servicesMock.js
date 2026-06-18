@@ -16,9 +16,6 @@ export const ALWAYS_ON_SERVICES = new Set([
   'cadvisor',
   'authentik-server',
   'authentik-worker',
-  'n8n',
-  'langfuse',
-  'langfuse-worker',
 ]);
 
 export const SERVICE_CATEGORIES = {

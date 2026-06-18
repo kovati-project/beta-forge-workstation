@@ -57,7 +57,7 @@ declare -a PHASES=(
     "6|Loadout Manager (GPU orchestrator)|scripts/deploy-phase06.sh|"
     "7|Training Pipeline (Kohya + Axolotl + JupyterLab)|scripts/deploy-phase07.sh|"
     "8|Agentic Workflows & MCP (n8n + Dify)|scripts/deploy-phase08.sh|n8n owner account created manually after deploy."
-    "9|Storage, Vector DB & RAG (MinIO + Qdrant + Postgres + Langfuse)|scripts/deploy-phase09.sh|Update secrets in compose.storage.yml before deploying."
+    "9|Storage, Vector DB & RAG (MinIO + Qdrant + Postgres + Langfuse)|scripts/deploy-phase09.sh|Requires init-secrets.sh to have been run (docker/.env must exist)."
     "10|Monitoring (Prometheus + Grafana + DCGM)|scripts/deploy-phase10.sh|Change GF_SECURITY_ADMIN_PASSWORD in compose.monitoring.yml first."
     "11|Code Generation (OpenHands + Continue.dev)|scripts/deploy-phase11.sh|Pull code models first: ollama pull qwen2.5-coder:32b"
     "12|Voice I/O (Whisper STT + Piper TTS)|scripts/deploy-phase12.sh|First start downloads whisper-large-v3 (~1.5GB). Allow 2-5 min."

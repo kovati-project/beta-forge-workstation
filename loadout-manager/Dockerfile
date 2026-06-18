@@ -24,6 +24,7 @@ RUN pip install -q --no-cache-dir -r requirements.txt
 
 # Copy application
 COPY main.py profiles.yaml ./
+COPY api/ ./api/
 
 # Copy React build output (built by deploy-ui.sh before docker build)
 COPY static/ ./static/

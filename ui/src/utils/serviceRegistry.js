@@ -17,7 +17,7 @@ export const SERVICE_GROUPS = [
   },
   {
     name: 'Voice I/O',
-    services: ['faster-whisper', 'piper-tts'],
+    services: ['whisper-stt', 'piper-tts'],
   },
   {
     name: 'Chat UI',
@@ -54,8 +54,8 @@ export const SERVICE_URLS = {
   'n8n': 'http://{host}:5678',
   'dify': 'http://{host}:80',
   'openhands': 'http://{host}:3000',
-  'faster-whisper': 'http://{host}:5000',
-  'piper-tts': 'http://{host}:5001',
+  'whisper-stt': 'http://{host}:9099',
+  'piper-tts': 'http://{host}:5000',
   'open-webui': 'http://{host}:3000',
   'searxng': 'http://{host}:8888',
   'minio': 'http://{host}:9000',
