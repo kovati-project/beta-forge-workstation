@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict
 from pathlib import Path
 import docker
+import docker.errors
 from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
@@ -141,17 +142,42 @@ async def get_service(name: str) -> Dict:
     }
 
 
+def _sdk_find(docker_name: str):
+    """Return the container object for docker_name, or None."""
+    if not docker_client:
+        return None
+    for c in docker_client.containers.list(all=True):
+        if docker_name in c.name:
+            return c
+    return None
+
+
 @router.post("/services/{name}/start")
 async def start_service(name: str) -> Dict:
-    """Start a service. Runs docker compose synchronously so errors are returned to the caller."""
+    """Start a service via Docker SDK (fast, no path-resolution issues).
+    Falls back to docker compose only when the container doesn't exist yet."""
     if name not in SERVICE_MAP:
         raise HTTPException(status_code=404, detail=f"Service {name} not found")
+    if not docker_client:
+        raise HTTPException(status_code=503, detail="Docker not available")
 
+    docker_name = COMPOSE_SERVICE_NAME.get(name, name)
+    container = _sdk_find(docker_name)
+
+    if container:
+        try:
+            await asyncio.to_thread(container.start)
+            return {"status": "starting", "service": name}
+        except docker.errors.APIError as e:
+            raise HTTPException(status_code=500, detail=e.explanation or str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # Container has never been created — fall back to compose to create + start it.
     compose_file = COMPOSE_FILES.get(name)
     if not compose_file:
         raise HTTPException(status_code=400, detail=f"No compose file for {name}")
-
-    svc = COMPOSE_SERVICE_NAME.get(name, name)
+    svc = docker_name
     profile = SERVICE_PROFILES.get(name)
     rc, output = await _compose(compose_file, "up", "-d", "--no-deps", svc, profile=profile)
     if rc != 0:
@@ -161,19 +187,24 @@ async def start_service(name: str) -> Dict:
 
 @router.post("/services/{name}/stop")
 async def stop_service(name: str) -> Dict:
-    """Stop a service. Runs docker compose synchronously so errors are returned to the caller."""
+    """Stop a service via Docker SDK."""
     if name not in SERVICE_MAP:
         raise HTTPException(status_code=404, detail=f"Service {name} not found")
+    if not docker_client:
+        raise HTTPException(status_code=503, detail="Docker not available")
 
-    compose_file = COMPOSE_FILES.get(name)
-    if not compose_file:
-        raise HTTPException(status_code=400, detail=f"No compose file for {name}")
+    docker_name = COMPOSE_SERVICE_NAME.get(name, name)
+    container = _sdk_find(docker_name)
+    if not container:
+        raise HTTPException(status_code=404, detail=f"Container '{docker_name}' not found")
 
-    svc = COMPOSE_SERVICE_NAME.get(name, name)
-    rc, output = await _compose(compose_file, "stop", svc)
-    if rc != 0:
-        raise HTTPException(status_code=500, detail=output.strip() or f"docker compose stop failed (exit {rc})")
-    return {"status": "stopping", "service": name}
+    try:
+        await asyncio.to_thread(container.stop, timeout=10)
+        return {"status": "stopping", "service": name}
+    except docker.errors.APIError as e:
+        raise HTTPException(status_code=500, detail=e.explanation or str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/services/{name}/logs")

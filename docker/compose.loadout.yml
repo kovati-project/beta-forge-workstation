@@ -16,7 +16,7 @@ services:
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - COMPOSE_DIR=/compose
-      - HOST_COMPOSE_DIR=${REPO_ROOT}/docker
+      - HOST_COMPOSE_DIR=${REPO_ROOT:-/home/kasemo/ai-workstation-project}/docker
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:
