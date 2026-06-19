@@ -14,7 +14,7 @@ function ServiceCardExpanded({ service, serviceName }) {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const response = await fetch(`/api/services/${serviceName}/logs?n=3`);
+        const response = await fetch(`/api/services/${serviceName}/logs?n=100`);
         if (response.ok) {
           const data = await response.json();
           setLogs(data.logs || []);

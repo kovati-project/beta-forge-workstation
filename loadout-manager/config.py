@@ -29,8 +29,8 @@ SERVICE_MAP = {
     "invokeai": "invokeai",
     "real-esrgan": "real-esrgan",
     "rembg": "rembg",
-    "whisper-stt": "whisper-stt",
-    "piper-tts": "piper-tts",
+    "whisper-stt": "whisper",
+    "piper-tts":   "piper",
     "n8n": "n8n",
     "qdrant": "qdrant",
     "minio": "minio",
@@ -91,10 +91,10 @@ COMPOSE_FILES = {
     "grafana":     "compose.monitoring.yml",
 }
 
-# Maps UI service name → actual compose service name when they differ
+# Maps UI service name → actual compose service name when they differ.
+# Only needed when the UI name differs from the compose service key.
+# whisper-stt and piper-tts are handled by SERVICE_MAP directly now.
 COMPOSE_SERVICE_NAME = {
-    "whisper-stt": "whisper",
-    "piper-tts":   "piper",
     "real-esrgan": "realesrgan",
 }
 

@@ -2,7 +2,7 @@ services:
 
   # ── Kohya_ss: image LoRA and Dreambooth ───────────────────────────────────
   kohya:
-    image: ghcr.io/bmaltais/kohya-ss:latest
+    image: bmaltais/kohya-ss:latest
     container_name: kohya
     restart: unless-stopped
     ports:

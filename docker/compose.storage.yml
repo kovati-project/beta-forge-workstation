@@ -52,7 +52,7 @@ services:
 
   # ── Langfuse: prompt versioning and eval tracking ────────────────────────
   langfuse:
-    image: langfuse/langfuse:latest
+    image: langfuse/langfuse:2
     container_name: langfuse
     restart: unless-stopped
     ports:
