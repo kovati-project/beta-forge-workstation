@@ -107,10 +107,26 @@ AUTHENTIK_PG_PASSWORD=$(gen32)
 AUTHENTIK_REDIS_PASSWORD=$(gen32)
 AUTHENTIK_SECRET_KEY=$(gen60b)
 
+# ── Collect ghcr.io credentials ──────────────────────────────────────────────
+echo ""
+echo "  GitHub Container Registry (ghcr.io)"
+echo "  ─────────────────────────────────────"
+echo "  Required for auth-gated images (e.g. kohya-ss)."
+echo "  Create a token at: GitHub → Settings → Developer settings"
+echo "  → Personal access tokens (classic) → check 'read:packages'"
+echo "  Leave blank to skip (you can add it to docker/.env later)."
+echo ""
+read -rp "  GitHub username: " GHCR_USER
+read -rp "  GitHub PAT (read:packages): " GHCR_TOKEN
+echo ""
+
 # ── Write docker/.env ─────────────────────────────────────────────────────────
 cat > "$ENV_FILE" <<EOF
 # AI Workstation secrets — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
 # DO NOT COMMIT. Excluded from sync. Back up separately.
+
+GHCR_USER=${GHCR_USER}
+GHCR_TOKEN=${GHCR_TOKEN}
 
 WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
 DIFY_SECRET_KEY=${DIFY_SECRET_KEY}
