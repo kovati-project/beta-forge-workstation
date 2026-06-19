@@ -40,6 +40,16 @@ if grep -q "^N8N_ENCRYPTION_KEY=" "$REPO_ROOT/docker/.env" 2>/dev/null; then
     log_step "  → n8n will reinitialize with a self-managed key on next start"
 fi
 
+# ── Pre-flight: ghcr.io login for auth-gated images (e.g. kohya-ss) ─────────
+if grep -q "^GHCR_TOKEN=" "$REPO_ROOT/docker/.env" 2>/dev/null; then
+    GHCR_TOKEN=$(grep "^GHCR_TOKEN=" "$REPO_ROOT/docker/.env" | cut -d= -f2-)
+    GHCR_USER=$(grep "^GHCR_USER=" "$REPO_ROOT/docker/.env" | cut -d= -f2-)
+    if [[ -n "$GHCR_TOKEN" && -n "$GHCR_USER" ]]; then
+        log_step "Logging into ghcr.io as $GHCR_USER..."
+        echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+    fi
+fi
+
 # ── Pre-flight: remove containers whose images changed ───────────────────────
 # docker compose up -d won't recreate a container whose image tag changed if
 # the old container is still present. Force-remove known-changed containers.
