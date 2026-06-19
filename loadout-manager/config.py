@@ -136,7 +136,6 @@ AFFECTS_MAP = {
 
 # Secrets that must be non-empty in docker/.env before a service can start.
 SECRETS_REQUIRED = {
-    "n8n":      ["N8N_ENCRYPTION_KEY"],
     "langfuse": ["LANGFUSE_DB_PASSWORD", "LANGFUSE_NEXTAUTH_SECRET"],
     "postgres": ["POSTGRES_ADMIN_PASSWORD"],
     "minio":    ["MINIO_ROOT_PASSWORD"],

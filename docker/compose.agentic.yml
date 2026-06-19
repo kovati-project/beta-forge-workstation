@@ -15,7 +15,6 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - WEBHOOK_URL=http://10.10.10.2:5678/
-      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - DB_TYPE=sqlite
       - EXECUTIONS_PROCESS=main
       # LLM integration via OpenAI-compatible endpoint (Ollama)

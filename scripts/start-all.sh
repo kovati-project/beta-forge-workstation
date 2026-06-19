@@ -25,6 +25,37 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
+# ── Pre-flight: storage directories ──────────────────────────────────────────
+log_step "Pre-flight: ensuring storage directories exist..."
+bash "$SCRIPT_DIR/setup-storage-phase07.sh" 2>&1 | grep -E "(Creating|✓|Error)" || true
+
+# ── Pre-flight: n8n encryption key cleanup ───────────────────────────────────
+# N8N_ENCRYPTION_KEY is no longer managed via docker/.env — n8n self-manages
+# its key in /data/n8n/config. If a stale env var is present, remove it to
+# prevent the "mismatching encryption keys" crash loop.
+if grep -q "^N8N_ENCRYPTION_KEY=" "$REPO_ROOT/docker/.env" 2>/dev/null; then
+    log_step "Removing stale N8N_ENCRYPTION_KEY from docker/.env..."
+    sed -i '/^N8N_ENCRYPTION_KEY=/d' "$REPO_ROOT/docker/.env"
+    rm -f /data/n8n/config
+    log_step "  → n8n will reinitialize with a self-managed key on next start"
+fi
+
+# ── Pre-flight: remove containers whose images changed ───────────────────────
+# docker compose up -d won't recreate a container whose image tag changed if
+# the old container is still present. Force-remove known-changed containers.
+for cname in kohya langfuse n8n; do
+    old_image=$(docker inspect "$cname" --format '{{.Config.Image}}' 2>/dev/null || true)
+    case "$cname" in
+        kohya)   expected="bmaltais/kohya-ss" ;;
+        langfuse) expected="langfuse/langfuse:2" ;;
+        n8n)     expected="n8nio/n8n" ;;
+    esac
+    if [[ -n "$old_image" && "$old_image" != *"$expected"* ]]; then
+        log_step "Removing stale $cname container (image: $old_image)..."
+        docker rm -f "$cname" 2>/dev/null || true
+    fi
+done
+
 log_step "=== Starting AI Workstation Services ==="
 log_step "Base directory: $BASE"
 echo ""
@@ -47,7 +78,10 @@ start_service() {
 }
 
 # 1. Storage layer (everything depends on this)
-start_service "Storage stack (MinIO, Qdrant, PostgreSQL)" "compose.storage.yml" || exit 1
+# --force-recreate langfuse so the :latest→:2 image change takes effect
+log_step "Starting Storage stack (MinIO, Qdrant, PostgreSQL, Langfuse)..."
+$COMPOSE -f "$BASE/compose.storage.yml" up -d --force-recreate langfuse || true
+$COMPOSE -f "$BASE/compose.storage.yml" up -d || exit 1
 sleep 5
 
 # 2. Monitoring (start early to catch startup metrics)
@@ -94,14 +128,16 @@ sleep 5
 # 8. Start training services (if available)
 if [ -f "$BASE/compose.training.yml" ]; then
     log_step "Starting training services (Kohya, Label Studio, JupyterLab)..."
-    $COMPOSE -f "$BASE/compose.training.yml" up -d
+    $COMPOSE -f "$BASE/compose.training.yml" up -d --force-recreate kohya || true
+    $COMPOSE -f "$BASE/compose.training.yml" up -d label-studio || true
     sleep 3
 fi
 
 # 9. Start webui and agentic services
 start_service "Web UI (Open WebUI, SearXNG)" "compose.webui.yml" || exit 1
 log_step "Starting agentic services (n8n, MCP servers)..."
-$COMPOSE -f "$BASE/compose.agentic.yml" up -d n8n mcp-filesystem mcp-fetch mcp-browser || echo "Agentic services failed (optional)"
+# --force-recreate on n8n ensures the volume binding change (named→bind) takes effect
+$COMPOSE -f "$BASE/compose.agentic.yml" up -d --force-recreate n8n mcp-filesystem mcp-fetch mcp-browser || echo "Agentic services failed (optional)"
 log_step "Starting code generation services (OpenHands)..."
 $COMPOSE -f "$BASE/compose.codegen.yml" up -d || echo "Code generation services failed (optional)"
 sleep 3

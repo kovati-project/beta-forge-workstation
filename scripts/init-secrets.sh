@@ -91,14 +91,9 @@ gen64()  { printf '%s%s' "$ENTROPY" "$(openssl rand -hex 16)" | sha256sum | cut 
 gen60b() { printf '%s%s' "$ENTROPY" "$(openssl rand -hex 20)" | sha256sum | cut -c1-60; }
 
 WEBUI_SECRET_KEY=$(gen64)
-# Preserve the existing n8n encryption key if n8n has already been initialized.
-# Re-generating it would make n8n refuse to start (key stored in /data/n8n/config
-# would no longer match the env var).
-if [[ -f /data/n8n/config ]]; then
-    N8N_ENCRYPTION_KEY=$(grep -o '"encryptionKey":"[^"]*"' /data/n8n/config | cut -d'"' -f4)
-    [[ -n "$N8N_ENCRYPTION_KEY" ]] && warn "n8n already initialized — preserving existing encryption key"
-fi
-[[ -z "${N8N_ENCRYPTION_KEY:-}" ]] && N8N_ENCRYPTION_KEY=$(gen32)
+# N8N_ENCRYPTION_KEY is intentionally not set here — n8n generates and persists
+# its own key in /data/n8n/config on first start. Injecting an env var causes
+# mismatch failures if the var ever changes after first init.
 DIFY_SECRET_KEY=$(gen64)
 DIFY_DB_PASSWORD=$(gen32)
 GF_ADMIN_PASSWORD=$(gen32)
@@ -118,7 +113,6 @@ cat > "$ENV_FILE" <<EOF
 # DO NOT COMMIT. Excluded from sync. Back up separately.
 
 WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
-N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
 DIFY_SECRET_KEY=${DIFY_SECRET_KEY}
 DIFY_DB_PASSWORD=${DIFY_DB_PASSWORD}
 GF_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD}
