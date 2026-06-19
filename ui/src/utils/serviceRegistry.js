@@ -5,7 +5,7 @@ export const SERVICE_GROUPS = [
   },
   {
     name: 'Image Studio',
-    services: ['comfyui', 'invokeai', 'real-esrgan', 'rembg'],
+    services: ['comfyui', 'invokeai', 'rembg'],
   },
   {
     name: 'Training',
@@ -44,7 +44,6 @@ export const SERVICE_URLS = {
   'ollama': 'http://{host}:11434',
   'comfyui': 'http://{host}:8188',
   'invokeai': 'http://{host}:9090',
-  'real-esrgan': 'http://{host}:8686',
   'rembg': 'http://{host}:5000',
   'kohya': 'http://{host}:7860',
   'axolotl': 'http://{host}:6006',

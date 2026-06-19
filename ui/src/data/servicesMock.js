@@ -18,6 +18,9 @@ export const ALWAYS_ON_SERVICES = new Set([
   'authentik-worker',
 ]);
 
+// Batch training jobs — exit immediately by design. No toggle; launch from Training page.
+export const BATCH_SERVICES = new Set(['axolotl', 'unsloth']);
+
 export const SERVICE_CATEGORIES = {
   INFRASTRUCTURE: 'infrastructure',
   MONITORING: 'monitoring',
@@ -197,14 +200,6 @@ export const SERVICES_MOCK = [
     description: 'Image generation (ComfyUI)',
     status: 'stopped',
     port: 8188,
-    always_on: false,
-  },
-  {
-    name: 'real-esrgan',
-    category: SERVICE_CATEGORIES.IMAGE_GEN,
-    description: 'Image upscaling',
-    status: 'stopped',
-    port: 8000,
     always_on: false,
   },
   {

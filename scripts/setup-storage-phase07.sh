@@ -21,6 +21,7 @@ echo "Creating model directories..."
 sudo mkdir -p /data/models/comfyui/{loras,checkpoints,vae,controlnet,embeddings,upscale_models}
 sudo mkdir -p /data/models/{vllm,hf-cache,whisper,piper,ollama,invokeai}
 sudo mkdir -p /data/outputs/{comfyui,invokeai,upscaled,rembg}
+sudo mkdir -p /data/audio
 
 # Create notebooks directory
 echo "Creating notebooks directory..."
@@ -28,8 +29,8 @@ sudo mkdir -p /data/notebooks
 
 # Set ownership to current user
 echo "Setting permissions..."
-sudo chown -R "$(id -u):$(id -g)" /data/datasets /data/checkpoints /data/notebooks /data/models /data/outputs
-sudo chmod -R 755 /data/datasets /data/checkpoints /data/notebooks /data/models /data/outputs
+sudo chown -R "$(id -u):$(id -g)" /data/datasets /data/checkpoints /data/notebooks /data/models /data/outputs /data/audio
+sudo chmod -R 755 /data/datasets /data/checkpoints /data/notebooks /data/models /data/outputs /data/audio
 
 echo ""
 echo "✓ All directories created:"
@@ -38,6 +39,7 @@ echo "  - /data/checkpoints/{kohya,axolotl,unsloth}"
 echo "  - /data/models/comfyui/{loras,checkpoints,vae,controlnet,embeddings,upscale_models}"
 echo "  - /data/models/{vllm,hf-cache,whisper,piper,ollama,invokeai}"
 echo "  - /data/outputs/{comfyui,invokeai,upscaled,rembg}"
+echo "  - /data/audio"
 echo "  - /data/notebooks"
 echo ""
 echo "Next: Upload training data to these directories"

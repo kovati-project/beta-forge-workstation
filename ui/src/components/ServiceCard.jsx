@@ -4,7 +4,7 @@ import { Toggle } from './Toggle';
 import { DotStatus } from './DotStatus';
 import { Tag } from './Tag';
 import { getServiceUrl } from '../utils/serviceRegistry';
-import { ALWAYS_ON_SERVICES } from '../data/servicesMock';
+import { ALWAYS_ON_SERVICES, BATCH_SERVICES } from '../data/servicesMock';
 import './ServiceCard.css';
 
 function ServiceCardExpanded({ service, serviceName }) {
@@ -86,6 +86,7 @@ function ServiceCardInner({
   const [toggling, setToggling] = useState(false);
   const cardRef = useRef(null);
   const isAlwaysOn = ALWAYS_ON_SERVICES.has(serviceName);
+  const isBatch = BATCH_SERVICES.has(serviceName);
 
   // Handle focus from dashboard click
   useEffect(() => {
@@ -167,6 +168,13 @@ function ServiceCardInner({
             title="System service — managed independently of loadout profiles"
           >
             SYSTEM
+          </span>
+        ) : isBatch ? (
+          <span
+            className="service-badge-batch"
+            title="Batch training job — launch from the Training page, not via toggle"
+          >
+            BATCH
           </span>
         ) : (
           <Toggle

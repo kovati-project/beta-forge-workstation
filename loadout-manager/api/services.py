@@ -13,9 +13,13 @@ from fastapi import APIRouter, HTTPException
 logger = logging.getLogger(__name__)
 
 try:
-    from config import SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES, COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT
+    from config import (SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES,
+                        COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT,
+                        BATCH_SERVICES, REQUIRED_HOST_DIRS, SECRETS_REQUIRED)
 except ImportError:
-    from ..config import SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES, COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT
+    from ..config import (SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES,
+                          COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT,
+                          BATCH_SERVICES, REQUIRED_HOST_DIRS, SECRETS_REQUIRED)
 
 router = APIRouter()
 
@@ -30,6 +34,28 @@ if not _COMPOSE_DIR.exists():
 # resolve to /configs/... on the host instead of <repo>/configs/..., causing
 # bind mount failures and silent container start failures.
 _HOST_COMPOSE_DIR = os.getenv("HOST_COMPOSE_DIR", "")
+
+# docker/.env is bind-mounted into the container at /compose/.env
+_ENV_FILE = Path(os.getenv("ENV_FILE", "/compose/.env"))
+
+
+def _missing_secrets(service_name: str) -> list:
+    """Return list of required-but-missing secret keys for a service."""
+    required = SECRETS_REQUIRED.get(service_name, [])
+    if not required:
+        return []
+    if not _ENV_FILE.exists():
+        return required
+    env_vars: dict = {}
+    try:
+        for line in _ENV_FILE.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                env_vars[k.strip()] = v.strip()
+    except Exception:
+        return required
+    return [k for k in required if not env_vars.get(k)]
 
 try:
     docker_client = docker.from_env()
@@ -161,19 +187,44 @@ async def start_service(name: str) -> Dict:
     if not docker_client:
         raise HTTPException(status_code=503, detail="Docker not available")
 
+    # Pre-flight: secrets gate
+    missing = _missing_secrets(name)
+    if missing:
+        raise HTTPException(
+            status_code=424,
+            detail=(
+                f"Cannot start {name}: secrets not initialized. "
+                f"Missing in docker/.env: {', '.join(missing)}. "
+                f"Run: bash scripts/init-secrets.sh"
+            ),
+        )
+
+    # Pre-flight: required host directories
+    missing_dirs = [d for d in REQUIRED_HOST_DIRS.get(name, []) if not Path(d).exists()]
+    if missing_dirs:
+        raise HTTPException(
+            status_code=412,
+            detail=(
+                f"Cannot start {name}: required directories missing: "
+                f"{missing_dirs}. Run: bash scripts/setup-storage-phase07.sh"
+            ),
+        )
+
     docker_name = COMPOSE_SERVICE_NAME.get(name, name)
     container = _sdk_find(docker_name)
 
     if container:
         try:
             await asyncio.to_thread(container.start)
-            await asyncio.sleep(2)
-            await asyncio.to_thread(container.reload)
-            if container.status == "exited":
-                logs = await asyncio.to_thread(
-                    lambda: container.logs(tail=30).decode("utf-8", errors="ignore")
-                )
-                raise HTTPException(status_code=500, detail=logs.strip() or "Container exited immediately")
+            # Batch jobs exit immediately by design — skip liveness check
+            if name not in BATCH_SERVICES:
+                await asyncio.sleep(2)
+                await asyncio.to_thread(container.reload)
+                if container.status == "exited":
+                    logs = await asyncio.to_thread(
+                        lambda: container.logs(tail=30).decode("utf-8", errors="ignore")
+                    )
+                    raise HTTPException(status_code=500, detail=logs.strip() or "Container exited immediately")
             return {"status": "starting", "service": name}
         except HTTPException:
             raise
@@ -189,6 +240,18 @@ async def start_service(name: str) -> Dict:
     svc = docker_name
     profile = SERVICE_PROFILES.get(name)
     rc, output = await _compose(compose_file, "up", "-d", "--no-deps", svc, profile=profile)
+
+    # Recover from "container name already in use" — orphan from a prior failed attempt
+    if rc != 0 and "container name" in output and "already in use" in output:
+        try:
+            orphan = docker_client.containers.get(docker_name)
+            if orphan.status != "running":
+                await asyncio.to_thread(orphan.remove, force=True)
+                logger.warning("Removed orphan container %s, retrying compose up", docker_name)
+                rc, output = await _compose(compose_file, "up", "-d", "--no-deps", svc, profile=profile)
+        except docker.errors.NotFound:
+            pass
+
     if rc != 0:
         raise HTTPException(status_code=500, detail=output.strip() or f"docker compose up failed (exit {rc})")
     return {"status": "starting", "service": name}

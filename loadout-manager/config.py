@@ -123,16 +123,37 @@ GPU_ASSIGNMENT = {
 }
 
 AFFECTS_MAP = {
-    "POSTGRES_PASSWORD": ["postgres", "langfuse", "n8n"],
-    "LANGFUSE_SECRET_KEY": ["langfuse"],
-    "LANGFUSE_SALT": ["langfuse"],
-    "MINIO_SECRET_KEY": ["minio"],
-    "AUTHENTIK_SECRET_KEY": ["authentik"],
-    "N8N_ENCRYPTION_KEY": ["n8n"],
-    "DIFY_SECRET_KEY": ["dify"],
-    "GRAFANA_ADMIN_PASS": ["grafana"],
-    "REDIS_PASSWORD": ["redis"],
-    "CADDY_ADMIN_PASS": ["caddy"],
+    "POSTGRES_ADMIN_PASSWORD":  ["postgres", "langfuse", "n8n"],
+    "LANGFUSE_DB_PASSWORD":     ["langfuse"],
+    "LANGFUSE_NEXTAUTH_SECRET": ["langfuse"],
+    "MINIO_ROOT_PASSWORD":      ["minio"],
+    "AUTHENTIK_SECRET_KEY":     ["authentik"],
+    "AUTHENTIK_REDIS_PASSWORD": ["authentik"],
+    "N8N_ENCRYPTION_KEY":       ["n8n"],
+    "DIFY_SECRET_KEY":          ["dify"],
+    "GF_ADMIN_PASSWORD":        ["grafana"],
+}
+
+# Secrets that must be non-empty in docker/.env before a service can start.
+SECRETS_REQUIRED = {
+    "n8n":      ["N8N_ENCRYPTION_KEY"],
+    "langfuse": ["LANGFUSE_DB_PASSWORD", "LANGFUSE_NEXTAUTH_SECRET"],
+    "postgres": ["POSTGRES_ADMIN_PASSWORD"],
+    "minio":    ["MINIO_ROOT_PASSWORD"],
+    "grafana":  ["GF_ADMIN_PASSWORD"],
+}
+
+# Batch (run-to-completion) services — restart: no in compose.
+# The post-start liveness check is skipped; they exit immediately by design.
+BATCH_SERVICES = {"axolotl", "unsloth"}
+
+# Host directories that must exist before the service can start.
+REQUIRED_HOST_DIRS = {
+    "comfyui":    ["/data/outputs/comfyui", "/data/models/comfyui/checkpoints"],
+    "invokeai":   ["/data/outputs/invokeai", "/data/models/invokeai"],
+    "rembg":      ["/data/outputs/rembg"],
+    "whisper-stt": ["/data/models/whisper", "/data/audio"],
+    "piper-tts":  ["/data/models/piper", "/data/audio"],
 }
 
 # External service URLs

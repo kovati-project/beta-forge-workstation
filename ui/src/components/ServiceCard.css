@@ -92,7 +92,8 @@
   display: block;
 }
 
-.service-badge-system {
+.service-badge-system,
+.service-badge-batch {
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -102,6 +103,12 @@
   color: var(--text3);
   border: 1px solid var(--border2);
   white-space: nowrap;
+}
+
+.service-badge-batch {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 /* Expanded state */
