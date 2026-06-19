@@ -27,10 +27,17 @@ sudo mkdir -p /data/audio
 echo "Creating notebooks directory..."
 sudo mkdir -p /data/notebooks
 
+# Create agentic service directories (bind mounts instead of named volumes)
+echo "Creating agentic service directories..."
+sudo mkdir -p /data/n8n
+sudo mkdir -p /data/n8n-files
+
 # Set ownership to current user
 echo "Setting permissions..."
-sudo chown -R "$(id -u):$(id -g)" /data/datasets /data/checkpoints /data/notebooks /data/models /data/outputs /data/audio
+sudo chown -R "$(id -u):$(id -g)" /data/datasets /data/checkpoints /data/notebooks /data/models /data/outputs /data/audio /data/n8n /data/n8n-files
 sudo chmod -R 755 /data/datasets /data/checkpoints /data/notebooks /data/models /data/outputs /data/audio
+# n8n runs as uid 1000 inside the container
+sudo chown -R 1000:1000 /data/n8n /data/n8n-files
 
 echo ""
 echo "✓ All directories created:"

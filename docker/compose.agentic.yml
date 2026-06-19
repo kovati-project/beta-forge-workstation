@@ -8,7 +8,7 @@ services:
     ports:
       - "5678:5678"
     volumes:
-      - n8n-data:/home/node/.n8n
+      - /data/n8n:/home/node/.n8n
       - /data/n8n-files:/files
     environment:
       - N8N_HOST=0.0.0.0
@@ -142,7 +142,6 @@ services:
       - notebook
 
 volumes:
-  n8n-data:
   dify-storage:
   dify-db-data:
   dify-redis-data:
