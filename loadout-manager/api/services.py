@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 try:
     from config import (SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES,
                         COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT,
-                        BATCH_SERVICES, REQUIRED_HOST_DIRS, SECRETS_REQUIRED)
+                        BATCH_SERVICES, SECRETS_REQUIRED)
 except ImportError:
     from ..config import (SERVICE_MAP, PORT_MAP, COMPOSE_FILES, SERVICE_PROFILES,
                           COMPOSE_SERVICE_NAME, GPU_ASSIGNMENT,
-                          BATCH_SERVICES, REQUIRED_HOST_DIRS, SECRETS_REQUIRED)
+                          BATCH_SERVICES, SECRETS_REQUIRED)
 
 router = APIRouter()
 
@@ -196,17 +196,6 @@ async def start_service(name: str) -> Dict:
                 f"Cannot start {name}: secrets not initialized. "
                 f"Missing in docker/.env: {', '.join(missing)}. "
                 f"Run: bash scripts/init-secrets.sh"
-            ),
-        )
-
-    # Pre-flight: required host directories
-    missing_dirs = [d for d in REQUIRED_HOST_DIRS.get(name, []) if not Path(d).exists()]
-    if missing_dirs:
-        raise HTTPException(
-            status_code=412,
-            detail=(
-                f"Cannot start {name}: required directories missing: "
-                f"{missing_dirs}. Run: bash scripts/setup-storage-phase07.sh"
             ),
         )
 
