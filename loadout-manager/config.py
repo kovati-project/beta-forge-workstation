@@ -62,8 +62,8 @@ PORT_MAP = {
     "postgres": 5432,
     "redis": 6379,
     "langfuse": 3002,
-    "prometheus": 9090,
-    "grafana": 3000,
+    "prometheus": 9091,   # host port (mapped 9091→9090 inside container)
+    "grafana": 3001,       # host port (mapped 3001→3000 inside container)
     "caddy": 80,
 }
 
@@ -89,6 +89,7 @@ COMPOSE_FILES = {
     "langfuse":    "compose.storage.yml",
     "prometheus":  "compose.monitoring.yml",
     "grafana":     "compose.monitoring.yml",
+    "caddy":       "compose.caddy.yml",
 }
 
 # Maps UI service name → actual compose service name when they differ.
@@ -140,6 +141,9 @@ SECRETS_REQUIRED = {
     "postgres": ["POSTGRES_ADMIN_PASSWORD"],
     "minio":    ["MINIO_ROOT_PASSWORD"],
     "grafana":  ["GF_ADMIN_PASSWORD"],
+    # ghcr.io/bmaltais/kohya-ss is a public package — no GHCR auth needed.
+    # Authentik (SSO) secrets required by caddy forward-auth.
+    "caddy":    ["AUTHENTIK_SECRET_KEY"],
 }
 
 # Batch (run-to-completion) services — restart: no in compose.
@@ -150,9 +154,13 @@ BATCH_SERVICES = {"axolotl", "unsloth"}
 REQUIRED_HOST_DIRS = {
     "comfyui":    ["/data/outputs/comfyui", "/data/models/comfyui/checkpoints"],
     "invokeai":   ["/data/outputs/invokeai", "/data/models/invokeai"],
+    "real-esrgan": ["/data/outputs/upscaled"],
     "rembg":      ["/data/outputs/rembg"],
     "whisper-stt": ["/data/models/whisper", "/data/audio"],
     "piper-tts":  ["/data/models/piper", "/data/audio"],
+    "kohya":      ["/data/datasets/images", "/data/models/comfyui/loras",
+                   "/data/checkpoints/kohya", "/data/models/comfyui/checkpoints"],
+    "axolotl":    ["/data/datasets/text", "/data/checkpoints/axolotl", "/data/models/vllm"],
 }
 
 # External service URLs

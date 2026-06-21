@@ -24,8 +24,21 @@
   letter-spacing: 0.3px;
 }
 
-.sections-container {
+.sections-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.sections-col {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .sections-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -28,10 +28,17 @@ services:
               capabilities: [gpu]
 
   # ── Axolotl: text model fine-tuning ───────────────────────────────────────
+  # Batch service (restart: no). Set AXOLOTL_CONFIG to choose which config
+  # file under /workspace/configs to train with. Defaults to qlora_4gpu.yml.
+  # Launched via: docker compose --profile training up axolotl
   axolotl:
     image: winglian/axolotl:main-latest
     container_name: axolotl
     restart: no
+    command: >
+      torchrun --nproc_per_node 4
+      -m axolotl.cli.train
+      /workspace/configs/${AXOLOTL_CONFIG:-qlora_4gpu.yml}
     volumes:
       - /data/datasets/text:/workspace/datasets
       - /data/checkpoints/axolotl:/workspace/outputs
@@ -91,7 +98,7 @@ services:
       - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
       - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/files
       - LABEL_STUDIO_USERNAME=admin@local.dev
-      - LABEL_STUDIO_PASSWORD=${LABEL_STUDIO_PASSWORD}
+      - LABEL_STUDIO_PASSWORD=${LABEL_STUDIO_PASSWORD:-admin}
 
   # ── JupyterLab: experimentation ───────────────────────────────────────────
   jupyterlab:
@@ -107,7 +114,7 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=0
       - JUPYTER_ENABLE_LAB=yes
-      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-changeme}
     deploy:
       resources:
         reservations:

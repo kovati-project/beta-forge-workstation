@@ -55,12 +55,50 @@ def _update_gpu_history():
 
 @router.get("/metrics/gpu")
 async def get_gpu_metrics() -> Dict:
-    """GPU VRAM history (30 min at 3s resolution)."""
+    """Per-GPU telemetry: VRAM, utilization, temp, and 30-min VRAM history."""
     _update_gpu_history()
-    return {
-        f"GPU{i}": {"vram_history": list(gpu_history[i])}
-        for i in range(4)
-    }
+    result: Dict = {}
+
+    if _NVML_OK:
+        try:
+            count = pynvml.nvmlDeviceGetCount()
+            for i in range(min(4, count)):
+                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                mem  = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+                try:
+                    power_w = round(pynvml.nvmlDeviceGetPowerUsage(handle) / 1000, 1)
+                except Exception:
+                    power_w = 0
+
+                vram_used  = round(mem.used  / 1024 ** 3, 2)
+                vram_total = round(mem.total / 1024 ** 3, 1)
+                result[f"GPU{i}"] = {
+                    "vram_used_gb":  vram_used,
+                    "vram_total_gb": vram_total,
+                    "utilization":   util.gpu,
+                    "temp":          temp,
+                    "power_w":       power_w,
+                    "active":        util.gpu > 5 or vram_used > 2.0,
+                    "vram_history":  list(gpu_history[i]),
+                }
+        except Exception:
+            pass
+
+    # Ensure all 4 GPU slots are present even if NVML failed
+    for i in range(4):
+        result.setdefault(f"GPU{i}", {
+            "vram_used_gb":  0.0,
+            "vram_total_gb": 24.0,
+            "utilization":   0,
+            "temp":          0,
+            "power_w":       0,
+            "active":        False,
+            "vram_history":  list(gpu_history[i]),
+        })
+
+    return result
 
 
 @router.get("/metrics/system")

@@ -190,12 +190,22 @@ async def start_service(name: str) -> Dict:
     # Pre-flight: secrets gate
     missing = _missing_secrets(name)
     if missing:
+        ghcr_keys = {"GHCR_TOKEN", "GHCR_USER"}
+        if ghcr_keys & set(missing):
+            hint = (
+                "GHCR credentials required to pull this image. "
+                "Add to docker/.env: GHCR_USER=<github-username> and "
+                "GHCR_TOKEN=<PAT with read:packages>. "
+                "Generate at: github.com → Settings → Developer settings → PAT (classic)"
+            )
+        else:
+            hint = "Run: bash scripts/init-secrets.sh"
         raise HTTPException(
             status_code=424,
             detail=(
                 f"Cannot start {name}: secrets not initialized. "
                 f"Missing in docker/.env: {', '.join(missing)}. "
-                f"Run: bash scripts/init-secrets.sh"
+                f"{hint}"
             ),
         )
 

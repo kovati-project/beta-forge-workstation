@@ -3,8 +3,6 @@ import { getGPUMetrics } from '../utils/monitorAPI';
 import { VBar } from './VBar';
 import './GPUTelemetrySection.css';
 
-const GPU_MAX_VRAM = 24; // GB
-
 function renderGPUChart(canvas, data, color) {
   if (!canvas || !data || data.length < 2) return;
 
@@ -15,15 +13,14 @@ function renderGPUChart(canvas, data, color) {
   const h = canvas.height;
   ctx.clearRect(0, 0, w, h);
 
+  const MAX_VRAM = 24;
   const points = data.map((v, i) => [
     (i / (data.length - 1)) * w,
-    h - (Math.min(v, GPU_MAX_VRAM) / GPU_MAX_VRAM) * h,
+    h - (Math.min(v, MAX_VRAM) / MAX_VRAM) * h,
   ]);
 
-  // Fill area under line
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  const rgbColor = color; // Assume color is already in rgb format
-  grad.addColorStop(0, rgbColor.replace(')', ', 0.2)').replace('rgb', 'rgba'));
+  grad.addColorStop(0, color.replace(')', ', 0.2)').replace('rgb', 'rgba'));
   grad.addColorStop(1, 'transparent');
 
   ctx.beginPath();
@@ -33,23 +30,20 @@ function renderGPUChart(canvas, data, color) {
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Draw line
   ctx.beginPath();
   points.forEach(([x, y], i) => {
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = rgbColor;
+  ctx.strokeStyle = color;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Last value label
   const lastValue = data[data.length - 1];
-  const labelText = `${lastValue.toFixed(1)} GB`;
-  ctx.fillStyle = rgbColor;
-  ctx.font = '9px --mono';
+  ctx.fillStyle = color;
+  ctx.font = '9px monospace';
   ctx.textAlign = 'right';
-  ctx.fillText(labelText, w - 4, 12);
+  ctx.fillText(`${lastValue.toFixed(1)} GB`, w - 4, 12);
 }
 
 export function GPUTelemetrySection() {
@@ -58,16 +52,17 @@ export function GPUTelemetrySection() {
   const canvasRefs = useRef({});
 
   useEffect(() => {
-    const loadMetrics = async () => {
+    const load = async () => {
       const data = await getGPUMetrics();
       setGPUData(data);
       setLoading(false);
     };
-    loadMetrics();
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    // Render charts when data updates
     Object.entries(gpuData).forEach(([gpuId, gpu]) => {
       if (gpu.vram_history && canvasRefs.current[gpuId]) {
         const color = gpu.active ? 'rgb(0,217,255)' : 'rgb(0,255,100)';
@@ -80,82 +75,80 @@ export function GPUTelemetrySection() {
     return <div className="gpu-section loading">Loading GPU metrics...</div>;
   }
 
-  const orderedGPUs = ['GPU0', 'GPU3', 'GPU1', 'GPU2']; // Active pair first
+  // NVLink pair order: active pair (0,3) first, idle pair (1,2) second
+  const orderedGPUs = ['GPU0', 'GPU3', 'GPU1', 'GPU2'];
 
   return (
     <div className="gpu-section">
+      {/* VRAM sparkline charts */}
       <div className="charts-grid">
         {orderedGPUs.map((gpuId) => {
           const gpu = gpuData[gpuId];
           if (!gpu) return null;
-
           const status = gpu.active ? 'active' : 'idle';
-          const chartColor = gpu.active ? '#00d9ff' : '#00ff64';
-
           return (
             <div key={gpuId} className="gpu-chart">
               <div className="chart-header">
                 <span className="chart-title">{gpuId} VRAM</span>
+                <span className="chart-vram">
+                  {gpu.vram_used_gb?.toFixed(1) ?? '—'} / {gpu.vram_total_gb ?? 24} GB
+                </span>
                 <span className={`status-badge ${status}`}>{status}</span>
               </div>
               <canvas
-                ref={(el) => {
-                  canvasRefs.current[gpuId] = el;
-                }}
+                ref={(el) => { canvasRefs.current[gpuId] = el; }}
                 width={300}
                 height={80}
                 className="vram-canvas"
               />
+              <div className="chart-footer">
+                <span className="chart-stat">
+                  {gpu.utilization ?? 0}% util
+                </span>
+                <span className="chart-stat">
+                  {gpu.temp ?? 0}°C
+                </span>
+                <span className="chart-stat">
+                  {gpu.power_w ?? 0} W
+                </span>
+              </div>
             </div>
           );
         })}
       </div>
 
+      {/* Per-GPU gauges */}
       <div className="gauges-grid">
-        {Object.entries(gpuData).map(([gpuId, gpu]) => {
+        {orderedGPUs.map((gpuId) => {
+          const gpu = gpuData[gpuId];
+          if (!gpu) return null;
+          const vramPct = ((gpu.vram_used_gb ?? 0) / (gpu.vram_total_gb ?? 24)) * 100;
           const tempColor =
             gpu.temp > 75 ? 'red' : gpu.temp > 60 ? 'amber' : 'cyan';
+          const vramVariant =
+            vramPct > 80 ? 'red' : vramPct > 50 ? 'amber' : vramPct < 10 ? 'green' : 'cyan';
           return (
-            <div key={`temp-${gpuId}`} className="gauge-item">
-              <span className="gauge-label">
-                {gpuId} Temp
-              </span>
-              <VBar
-                value={(gpu.temp / 100) * 100}
-                label={`${gpu.temp}°C`}
-                variant={tempColor}
-              />
+            <div key={`gauge-${gpuId}`} className="gauge-item">
+              <span className="gauge-label">{gpuId}</span>
+              <div className="gauge-row">
+                <span className="gauge-sub">VRAM</span>
+                <VBar
+                  value={vramPct}
+                  label={`${gpu.vram_used_gb?.toFixed(1)} GB`}
+                  variant={vramVariant}
+                />
+              </div>
+              <div className="gauge-row">
+                <span className="gauge-sub">Temp</span>
+                <VBar
+                  value={(gpu.temp ?? 0)}
+                  label={`${gpu.temp ?? 0}°C`}
+                  variant={tempColor}
+                />
+              </div>
             </div>
           );
         })}
-
-        {gpuData.CPU && (
-          <div className="gauge-item">
-            <span className="gauge-label">CPU Load</span>
-            <VBar
-              value={gpuData.CPU.utilization}
-              label={`${gpuData.CPU.utilization.toFixed(0)}%`}
-              variant={
-                gpuData.CPU.utilization > 90
-                  ? 'red'
-                  : gpuData.CPU.utilization > 70
-                    ? 'amber'
-                    : 'cyan'
-              }
-            />
-          </div>
-        )}
-
-        {gpuData.RAM && (
-          <div className="gauge-item">
-            <span className="gauge-label">RAM Used</span>
-            <VBar
-              value={(gpuData.RAM.used / gpuData.RAM.total) * 100}
-              label={`${(gpuData.RAM.used / 1024).toFixed(0)} GB`}
-              variant="green"
-            />
-          </div>
-        )}
       </div>
     </div>
   );

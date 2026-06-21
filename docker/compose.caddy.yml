@@ -1,0 +1,41 @@
+services:
+
+  # ── Caddy: reverse proxy + TLS + Authentik SSO ───────────────────────────
+  # Sits in front of all services. Uses forward_auth to gate access via
+  # Authentik. The Caddyfile lives at /data/caddy/Caddyfile on the host
+  # (copied from configs/caddy/Caddyfile.security during deploy).
+  #
+  # SETUP (one-time on host):
+  #   mkdir -p /data/caddy/certs /data/caddy/config /var/log/caddy
+  #   cp configs/caddy/Caddyfile.security /data/caddy/Caddyfile
+  #
+  # Caddy resolves `authentik:9000` via the shared ai-auth bridge network.
+  # compose.auth.yml must be up before starting caddy.
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /data/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /data/caddy/certs:/data
+      - caddy-config:/config
+      - /var/log/caddy:/var/log/caddy
+    networks:
+      - ai-auth
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/.health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  ai-auth:
+    external: true
+    name: ai-auth
+
+volumes:
+  caddy-config:

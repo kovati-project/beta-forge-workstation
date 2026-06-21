@@ -59,6 +59,12 @@
   color: var(--green);
 }
 
+.chart-vram {
+  font-size: 9px;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+}
+
 .vram-canvas {
   width: 100%;
   height: 80px;
@@ -67,9 +73,21 @@
   display: block;
 }
 
+.chart-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.chart-stat {
+  font-size: 8px;
+  color: var(--text3);
+  font-variant-numeric: tabular-nums;
+}
+
 .gauges-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 
@@ -86,6 +104,19 @@
 .gauge-label {
   font-size: 8px;
   font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.gauge-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gauge-sub {
+  font-size: 7px;
   color: var(--text3);
   text-transform: uppercase;
   letter-spacing: 0.2px;
