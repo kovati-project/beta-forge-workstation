@@ -13,7 +13,7 @@ router = APIRouter(tags=["voice"])
 WHISPER_URL = os.getenv("WHISPER_URL", "http://localhost:9099")
 PIPER_URL = os.getenv("PIPER_URL", "http://localhost:5000")
 
-@router.get("/api/voice/status")
+@router.get("/voice/status")
 async def get_voice_status():
     """Check Whisper and Piper availability."""
     results = {
@@ -42,7 +42,7 @@ async def get_voice_status():
     
     return results
 
-@router.post("/api/voice/transcribe")
+@router.post("/voice/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     """Transcribe audio file using Whisper."""
     try:
@@ -65,7 +65,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription error: {str(e)}")
 
-@router.post("/api/voice/synthesize")
+@router.post("/voice/synthesize")
 async def synthesize_speech(text: str, voice: str = "en_US-lessac-high"):
     """Synthesize speech using Piper TTS."""
     try:
@@ -91,7 +91,7 @@ async def synthesize_speech(text: str, voice: str = "en_US-lessac-high"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Synthesis error: {str(e)}")
 
-@router.get("/api/voice/voices")
+@router.get("/voice/voices")
 async def list_voices():
     """List available Piper voices."""
     try:
@@ -103,7 +103,7 @@ async def list_voices():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Voice listing error: {str(e)}")
 
-@router.get("/api/voice/models")
+@router.get("/voice/models")
 async def list_models():
     """List available Whisper models."""
     try:

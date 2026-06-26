@@ -19,7 +19,7 @@ except ImportError:
 
 router = APIRouter(tags=["operations"])
 
-@router.get("/api/operations/health")
+@router.get("/operations/health")
 async def system_health():
     """Get comprehensive system health status."""
     try:
@@ -63,7 +63,7 @@ async def system_health():
             "error": str(e),
         }
 
-@router.get("/api/operations/services")
+@router.get("/operations/services")
 async def service_status():
     """Get status of all deployed services."""
     services = [
@@ -86,7 +86,7 @@ async def service_status():
         "timestamp": datetime.utcnow().isoformat(),
     }
 
-@router.post("/api/operations/backup")
+@router.post("/operations/backup")
 async def trigger_backup(backup_type: str = "full"):
     """Trigger a system backup."""
     try:
@@ -100,7 +100,7 @@ async def trigger_backup(backup_type: str = "full"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Backup error: {str(e)}")
 
-@router.post("/api/operations/restart-service")
+@router.post("/operations/restart-service")
 async def restart_service(service: str):
     """Restart a specific service."""
     try:
@@ -112,7 +112,7 @@ async def restart_service(service: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Restart error: {str(e)}")
 
-@router.post("/api/operations/system-update")
+@router.post("/operations/system-update")
 async def system_update():
     """Trigger system updates (OS and packages)."""
     try:
@@ -124,7 +124,7 @@ async def system_update():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Update error: {str(e)}")
 
-@router.get("/api/operations/diagnostics")
+@router.get("/operations/diagnostics")
 async def run_diagnostics():
     """Run system diagnostics and return results."""
     return {
@@ -140,7 +140,7 @@ async def run_diagnostics():
         "timestamp": datetime.utcnow().isoformat(),
     }
 
-@router.get("/api/operations/runbook")
+@router.get("/operations/runbook")
 async def get_runbook():
     """Get operations runbook with procedures."""
     return {
@@ -188,7 +188,7 @@ async def get_runbook():
         ]
     }
 
-@router.get("/api/operations/logs")
+@router.get("/operations/logs")
 async def get_operation_logs(service: str = None, limit: int = 50):
     """Get operation logs (stub)."""
     return {
@@ -210,27 +210,10 @@ ALERTMANAGER_CONFIG = os.getenv(
 ALERTMANAGER_URL = os.getenv("ALERTMANAGER_URL", "http://alertmanager:9093")
 
 
-@router.get("/api/alerts")
-async def get_active_alerts():
-    """Return active alerts from Alertmanager. Empty list when Alertmanager is down."""
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{ALERTMANAGER_URL}/api/v2/alerts")
-            if resp.status_code == 200:
-                alerts = resp.json()
-                return [
-                    {
-                        "name":     a.get("labels", {}).get("alertname", "unknown"),
-                        "severity": a.get("labels", {}).get("severity", "info"),
-                        "state":    a.get("status", {}).get("state", "active"),
-                        "summary":  a.get("annotations", {}).get("summary", ""),
-                        "starts_at": a.get("startsAt", ""),
-                    }
-                    for a in alerts
-                ]
-    except Exception:
-        pass
-    return []
+# NOTE: the active-alerts endpoint (GET /api/alerts) is served by api/alerts.py.
+# A duplicate definition previously lived here at "/api/alerts", which — combined
+# with the router-level "/api" prefix — resolved to /api/api/alerts (dead) and would
+# collide with alerts.py once the prefix is corrected. Removed to keep alerts.py canonical.
 
 
 class AlertRoutingUpdate(BaseModel):
@@ -239,7 +222,7 @@ class AlertRoutingUpdate(BaseModel):
     inhibit_rules: Optional[list] = None
 
 
-@router.get("/api/operations/alert-routing")
+@router.get("/operations/alert-routing")
 async def get_alert_routing():
     """Read the current AlertManager routing configuration."""
     if not _YAML_AVAILABLE:
@@ -259,7 +242,7 @@ async def get_alert_routing():
         raise HTTPException(status_code=500, detail=f"Failed to read config: {e}")
 
 
-@router.patch("/api/operations/alert-routing")
+@router.patch("/operations/alert-routing")
 async def update_alert_routing(payload: AlertRoutingUpdate):
     """
     Patch the AlertManager routing config and trigger a live reload.

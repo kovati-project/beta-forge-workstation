@@ -33,7 +33,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     is_active: Optional[bool] = None
 
-@router.get("/api/admin/status")
+@router.get("/admin/status")
 async def get_admin_status():
     """Check Authentik service availability."""
     try:
@@ -52,7 +52,7 @@ async def get_admin_status():
             "error": str(e),
         }
 
-@router.get("/api/admin/users")
+@router.get("/admin/users")
 async def list_users():
     """List users via Authentik API."""
     if not AUTHENTIK_TOKEN:
@@ -74,7 +74,7 @@ async def list_users():
         raise HTTPException(status_code=500, detail=f"User listing error: {e}")
 
 
-@router.post("/api/admin/users")
+@router.post("/admin/users")
 async def create_user(payload: UserCreate):
     """Create a new user in Authentik."""
     try:
@@ -113,7 +113,7 @@ async def create_user(payload: UserCreate):
         raise HTTPException(status_code=500, detail=f"Create user error: {e}")
 
 
-@router.patch("/api/admin/users/{user_id}")
+@router.patch("/admin/users/{user_id}")
 async def update_user(user_id: int, payload: UserUpdate):
     """Update a user in Authentik (email, name, active status)."""
     update_body = {k: v for k, v in payload.model_dump().items() if v is not None}
@@ -136,7 +136,7 @@ async def update_user(user_id: int, payload: UserUpdate):
         raise HTTPException(status_code=500, detail=f"Update user error: {e}")
 
 
-@router.delete("/api/admin/users/{user_id}")
+@router.delete("/admin/users/{user_id}")
 async def delete_user(user_id: int):
     """Delete a user from Authentik."""
     try:
@@ -153,7 +153,7 @@ async def delete_user(user_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete user error: {e}")
 
-@router.get("/api/admin/oauth2-apps")
+@router.get("/admin/oauth2-apps")
 async def list_oauth2_apps():
     """List OAuth2 applications."""
     if not AUTHENTIK_TOKEN:
@@ -200,7 +200,7 @@ async def list_oauth2_apps():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OAuth2 app listing error: {str(e)}")
 
-@router.get("/api/admin/security-policies")
+@router.get("/admin/security-policies")
 async def get_security_policies():
     """Get security policies and settings."""
     return {
@@ -215,7 +215,7 @@ async def get_security_policies():
         "network_isolation": True,
     }
 
-@router.get("/api/admin/auth-logs")
+@router.get("/admin/auth-logs")
 async def get_auth_logs(limit: int = 50):
     """Get recent authentication events."""
     return {
