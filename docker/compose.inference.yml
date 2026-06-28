@@ -141,3 +141,7 @@ services:
               capabilities: [gpu]
     profiles:
       - large
+
+networks:
+  default:
+    name: ai-workstation
