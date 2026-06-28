@@ -144,3 +144,7 @@ volumes:
   dify-storage:
   dify-db-data:
   dify-redis-data:
+
+networks:
+  default:
+    name: ai-workstation

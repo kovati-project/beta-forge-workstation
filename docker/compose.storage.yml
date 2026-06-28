@@ -73,3 +73,7 @@ services:
 volumes:
   qdrant-data:
   postgres-data:
+
+networks:
+  default:
+    name: ai-workstation

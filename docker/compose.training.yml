@@ -125,3 +125,7 @@ services:
 
 volumes:
   label-studio-data:
+
+networks:
+  default:
+    name: ai-workstation

@@ -135,3 +135,7 @@ volumes:
   prometheus-data:
   grafana-data:
   alertmanager-data:
+
+networks:
+  default:
+    name: ai-workstation

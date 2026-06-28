@@ -105,3 +105,7 @@ services:
 volumes:
   comfyui-custom-nodes:
   invokeai-db:
+
+networks:
+  default:
+    name: ai-workstation
