@@ -1,0 +1,366 @@
+/* Help page layout */
+
+.help-page {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* Left navigation */
+
+.help-nav {
+  width: 156px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 0;
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+}
+
+.help-nav-section-header {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text3);
+  padding: 8px 12px 4px;
+}
+
+.help-nav-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  padding: 7px 12px;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.help-nav-item:hover {
+  background-color: rgba(0, 217, 255, 0.05);
+  color: var(--text);
+}
+
+.help-nav-item.active {
+  border-left-color: var(--cyan);
+  background-color: var(--cyan-dim);
+  color: var(--cyan);
+  font-weight: 500;
+}
+
+.help-nav-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 8px 0;
+}
+
+/* Right content area */
+
+.help-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Section wrapper */
+
+.help-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.help-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.help-section-subtitle {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+/* Help content blocks */
+
+.help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+.help-body p {
+  margin: 0;
+}
+
+.help-body h3 {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 4px;
+}
+
+.help-body ul,
+.help-body ol {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.help-body li {
+  line-height: 1.5;
+}
+
+/* Tip box */
+
+.help-tip {
+  background: var(--cyan-dim);
+  border: 1px solid rgba(0, 217, 255, 0.25);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 10px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.help-tip strong {
+  color: var(--cyan);
+}
+
+.help-warn {
+  background: var(--amber-dim);
+  border: 1px solid rgba(255, 179, 71, 0.25);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 10px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.help-warn strong {
+  color: var(--amber);
+}
+
+/* Table styling */
+
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.help-table th {
+  text-align: left;
+  padding: 7px 10px;
+  background: var(--surface2);
+  color: var(--text3);
+  font-weight: 600;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-table td {
+  padding: 7px 10px;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.help-table tr:last-child td {
+  border-bottom: none;
+}
+
+.help-table td strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* Step list */
+
+.help-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: step-counter;
+}
+
+.help-step {
+  display: flex;
+  gap: 10px;
+  counter-increment: step-counter;
+}
+
+.help-step-number {
+  width: 20px;
+  height: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--cyan);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.help-step-body {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.help-step-body strong {
+  color: var(--text);
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* Common tasks landing */
+
+.help-common-tasks-intro {
+  font-size: 11px;
+  color: var(--text2);
+  line-height: 1.6;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-tasks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.help-task-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.help-task-card:hover {
+  border-color: var(--border2);
+  background: var(--surface2);
+}
+
+.help-task-card-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.help-task-card-arrow {
+  color: var(--cyan);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.help-task-card-desc {
+  font-size: 10px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.help-task-card-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.help-tag {
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.help-tag-cyan {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+}
+
+.help-tag-purple {
+  background: var(--purple-dim);
+  color: var(--purple);
+}
+
+.help-tag-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.help-tag-green {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+/* Route chip */
+
+.help-route-chip {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 7px;
+  font-size: 9px;
+  color: var(--cyan);
+  font-family: var(--mono);
+}
+
+/* Code inline */
+
+.help-code {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--cyan);
+}

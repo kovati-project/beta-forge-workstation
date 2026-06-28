@@ -109,6 +109,12 @@
   text-align: center;
 }
 
+.sidebar-help {
+  padding: 0 12px 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
 .sidebar-footer {
   padding: 12px;
   border-top: 1px solid var(--border);

@@ -234,3 +234,29 @@ export async function getPlatformSetup() {
     return { completed: false };
   }
 }
+
+export async function getConfig() {
+  try {
+    const response = await fetch('/api/config');
+    if (response.ok) return await response.json();
+    return { config: [] };
+  } catch (error) {
+    console.error('Failed to fetch config:', error);
+    return { config: [] };
+  }
+}
+
+export async function updateConfig(key, value) {
+  try {
+    const response = await fetch(`/api/config/${key}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value }),
+    });
+    if (response.ok) return await response.json();
+    throw new Error('Failed to update config');
+  } catch (error) {
+    console.error('Failed to update config:', error);
+    throw error;
+  }
+}

@@ -19,6 +19,7 @@ export function Topbar() {
     '/monitor': 'Monitor',
     '/settings': 'Settings',
     '/setup': 'Setup',
+    '/help': 'Help',
   };
 
   const currentPath = location.pathname;

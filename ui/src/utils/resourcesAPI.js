@@ -185,6 +185,19 @@ export async function getStorageSummary() {
   }
 }
 
+export async function getStorageDetail(type, name) {
+  try {
+    const response = await fetch(
+      `/api/storage/detail?type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}`
+    );
+    if (response.ok) return await response.json();
+    return null;
+  } catch (error) {
+    console.error('Failed to fetch storage detail:', error);
+    return null;
+  }
+}
+
 export async function getBackupHistory() {
   try {
     const response = await fetch('/api/backup/history');

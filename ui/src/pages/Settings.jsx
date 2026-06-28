@@ -6,6 +6,7 @@ import { AuthSection } from '../components/AuthSection';
 import { StackManagementSection } from '../components/StackManagementSection';
 import { BackupsSection } from '../components/BackupsSection';
 import { PlatformSetupSection } from '../components/PlatformSetupSection';
+import { ConfigSection } from '../components/ConfigSection';
 import './Settings.css';
 
 export function Settings() {
@@ -55,6 +56,15 @@ export function Settings() {
       </div>
 
       <div className="full-width-sections">
+        <Panel
+          title="Configuration"
+          icon="⚙️"
+          expanded={true}
+          onToggle={() => {}}
+        >
+          <ConfigSection isAppliance={isAppliance} />
+        </Panel>
+
         <Panel
           title="Stack Management"
           icon="📦"

@@ -171,6 +171,26 @@ MINIO_URL = "http://localhost:9000"
 QDRANT_URL = "http://localhost:6333"
 AUTHENTIK_URL = "http://localhost:9000"
 
+# User-configurable settings exposed in the Settings UI.
+# Tuple: (category, key, description, sensitive, affects)
+# sensitive=True → value is masked in API responses; never returned in plaintext.
+# affects → list of service names to restart after an update.
+CONFIG_SCHEMA = [
+    ("Registry Access", "GHCR_USER",            "GitHub Container Registry username",                    False, []),
+    ("Registry Access", "GHCR_TOKEN",           "GitHub Container Registry PAT (scope: read:packages)",  True,  []),
+    ("AI Providers",    "HUGGINGFACE_TOKEN",     "HuggingFace API token for downloading gated models",   True,  ["axolotl", "unsloth"]),
+    ("AI Providers",    "WANDB_API_KEY",         "Weights & Biases API key for training run logging",    True,  ["axolotl", "unsloth"]),
+    ("Training",        "LABEL_STUDIO_PASSWORD", "Label Studio admin password",                           True,  ["label-studio"]),
+    ("Training",        "JUPYTER_TOKEN",         "JupyterLab access token",                               True,  ["jupyterlab"]),
+    ("Training",        "AXOLOTL_CONFIG",        "Axolotl training config filename (e.g. qlora_4gpu.yml)", False, []),
+    ("System",          "KOVATI_OS_MODE",        "System mode: workstation or appliance",                 False, []),
+]
+
+CONFIG_SCHEMA_MAP = {
+    key: {"category": cat, "description": desc, "sensitive": sensitive, "affects": affects}
+    for cat, key, desc, sensitive, affects in CONFIG_SCHEMA
+}
+
 # Training engines
 class TrainingEngine(str, Enum):
     AXOLOTL = "axolotl"

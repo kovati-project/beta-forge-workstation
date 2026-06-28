@@ -1,7 +1,7 @@
 """API routers for Kovati OS."""
 
 from fastapi import APIRouter
-from . import services, metrics, training, storage, models, auth, secrets, network, stack, backup, activity, traces, vectors, mcp, keys, setup, voice, admin, operations, alerts
+from . import services, metrics, training, storage, models, auth, secrets, network, stack, backup, activity, traces, vectors, mcp, keys, setup, voice, admin, operations, alerts, config
 
 def create_router():
     """Create and configure the main API router."""
@@ -27,6 +27,7 @@ def create_router():
     router.include_router(admin.router, prefix="/api", tags=["admin"])
     router.include_router(operations.router, prefix="/api", tags=["operations"])
     router.include_router(alerts.router, prefix="/api", tags=["alerts"])
+    router.include_router(config.router, prefix="/api", tags=["config"])
 
     return router
 

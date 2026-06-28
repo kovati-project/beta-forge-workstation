@@ -58,6 +58,10 @@ export function Sidebar() {
         </div>
       </div>
 
+      <div className="sidebar-help">
+        <NavItem to="/help">Help</NavItem>
+      </div>
+
       <div className="sidebar-footer">
         <div className="sidebar-footer-item">
           <DotStatus status="green" />

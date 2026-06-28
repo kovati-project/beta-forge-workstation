@@ -11,6 +11,7 @@ import { Settings } from './pages/Settings';
 import { Voice } from './pages/Voice';
 import { Admin } from './pages/Admin';
 import { Operations } from './pages/Operations';
+import { Help } from './pages/Help';
 import { Setup } from './pages/Setup';
 
 export function App() {
@@ -35,6 +36,7 @@ export function App() {
                 <Route path="/voice" element={<Voice />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/operations" element={<Operations />} />
+                <Route path="/help" element={<Help />} />
               </Routes>
             </Shell>
           }
