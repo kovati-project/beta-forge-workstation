@@ -1,0 +1,232 @@
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.config-section.appliance {
+  padding: 16px;
+  background-color: var(--surface2);
+  border-radius: 4px;
+  color: var(--text3);
+  font-size: 9px;
+  text-align: center;
+}
+
+.config-section.loading {
+  text-align: center;
+  color: var(--text3);
+  padding: 20px;
+  font-size: 10px;
+}
+
+.config-category {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-category-title {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  background-color: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.config-table thead {
+  background-color: var(--surface3);
+  border-bottom: 1px solid var(--border);
+}
+
+.config-table th {
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  font-size: 8px;
+}
+
+.config-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  vertical-align: top;
+}
+
+.config-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.config-table tbody tr:hover {
+  background-color: rgba(0, 255, 255, 0.03);
+}
+
+.config-table tbody tr.editing {
+  background-color: rgba(0, 217, 255, 0.04);
+}
+
+.config-key {
+  color: var(--cyan);
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.config-desc {
+  color: var(--text3);
+  font-size: 8px;
+  max-width: 260px;
+}
+
+.config-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+}
+
+.value-set {
+  color: var(--text2);
+}
+
+.value-unset {
+  color: var(--text3);
+  font-style: italic;
+}
+
+.config-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.edit-btn {
+  background-color: rgba(0, 217, 255, 0.1);
+  border: 1px solid var(--cyan);
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: 8px;
+  color: var(--cyan);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.edit-btn:hover:not(:disabled) {
+  background-color: rgba(0, 217, 255, 0.2);
+}
+
+.edit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.save-btn {
+  background-color: rgba(0, 255, 136, 0.1);
+  border: 1px solid var(--green);
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: 8px;
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 500;
+  margin-right: 4px;
+  transition: all 0.15s ease;
+}
+
+.save-btn:hover:not(:disabled) {
+  background-color: rgba(0, 255, 136, 0.2);
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 4px 8px;
+  font-size: 8px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  border-color: var(--text3);
+  color: var(--text2);
+}
+
+.cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.config-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-input-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.config-input {
+  flex: 1;
+  background-color: var(--surface3);
+  border: 1px solid var(--cyan);
+  border-radius: 2px;
+  padding: 4px 6px;
+  font-size: 8px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+  min-width: 180px;
+}
+
+.config-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0, 217, 255, 0.2);
+}
+
+.toggle-vis-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.toggle-vis-btn:hover {
+  opacity: 1;
+}
+
+.restart-notice {
+  background-color: rgba(255, 179, 71, 0.1);
+  border: 1px solid var(--amber);
+  border-radius: 2px;
+  padding: 4px 6px;
+  font-size: 8px;
+  color: var(--amber);
+}

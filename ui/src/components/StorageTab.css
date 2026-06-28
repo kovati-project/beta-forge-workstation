@@ -1,133 +1,125 @@
 .storage-tab {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 .storage-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .storage-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--text);
+  color: var(--text3);
   letter-spacing: 0.3px;
 }
 
-.disk-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.disk-label {
-  font-size: 9px;
-  color: var(--text2);
-}
-
-.buckets-chart {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.stacked-bar {
-  display: flex;
-  height: 20px;
+/* ── Type badges ── */
+.type-badge {
+  display: inline-block;
+  padding: 1px 6px;
   border-radius: 3px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background-color: var(--surface2);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 
-.bucket-bar {
-  transition: opacity 0.15s ease;
-}
+.type-badge--minio    { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+.type-badge--qdrant   { background: rgba(139,92,246,0.15); color: #a78bfa;      border: 1px solid rgba(139,92,246,0.3); }
+.type-badge--postgres { background: rgba(0,255,255,0.10);  color: var(--cyan);  border: 1px solid rgba(0,255,255,0.2); }
+.type-badge--filesystem { background: rgba(255,255,255,0.05); color: var(--text2); border: 1px solid var(--border); }
 
-.bucket-bar:hover {
-  opacity: 0.8;
-}
-
-.buckets-table {
+/* ── Partition cards ── */
+.partitions-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  font-size: 9px;
+  gap: 8px;
 }
 
-.table-header {
+.partition-card {
   display: grid;
-  grid-template-columns: 1fr 100px 80px;
-  gap: 12px;
-  padding: 8px;
-  background-color: var(--surface3);
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  background: var(--surface2);
   border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 4px 4px 0 0;
-  font-weight: 600;
+  border-radius: 4px;
+}
+
+.partition-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.partition-card__device {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: monospace;
+}
+
+.partition-card__mount {
+  font-size: 9px;
+  color: var(--cyan);
+  font-family: monospace;
+}
+
+.partition-card__fs {
+  font-size: 8px;
   color: var(--text3);
   text-transform: uppercase;
-  font-size: 8px;
-  letter-spacing: 0.2px;
 }
 
-.table-row {
-  display: grid;
-  grid-template-columns: 1fr 100px 80px;
-  gap: 12px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-top: none;
-  color: var(--text2);
-  background-color: var(--surface2);
+.partition-card__bar {
+  flex: 1;
 }
 
-.table-row:last-child {
-  border-radius: 0 0 4px 4px;
-}
-
-.table-row:hover {
-  background-color: rgba(0, 255, 255, 0.03);
-}
-
-.bucket-name {
+.partition-card__stats {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 9px;
+  color: var(--text2);
+  text-align: right;
+  min-width: 110px;
 }
 
-.bucket-indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
+.stat-label {
+  color: var(--text3);
+  font-size: 8px;
+  margin-right: 4px;
 }
 
-.pg-table,
-.backups-table {
+/* ── Collection tables ── */
+.collection-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 9px;
-  background-color: var(--surface2);
+  background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
 }
 
-.pg-table thead,
-.backups-table thead {
-  background-color: var(--surface3);
+.collection-table thead {
+  background: var(--surface3);
   border-bottom: 1px solid var(--border);
 }
 
-.pg-table th,
-.backups-table th {
-  padding: 8px;
+.collection-table th {
+  padding: 7px 10px;
   text-align: left;
   font-weight: 600;
   color: var(--text3);
@@ -136,47 +128,65 @@
   font-size: 8px;
 }
 
-.pg-table td,
-.backups-table td {
-  padding: 8px;
+.collection-row {
+  cursor: pointer;
+  transition: background 0.1s ease, border-left-color 0.1s ease;
+  border-left: 2px solid transparent;
+}
+
+.collection-row td {
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   color: var(--text2);
 }
 
-.pg-table tbody tr:hover,
-.backups-table tbody tr:hover {
-  background-color: rgba(0, 255, 255, 0.03);
+.collection-row:last-child td {
+  border-bottom: none;
 }
 
-.pg-table .empty,
-.backups-table .empty {
-  text-align: center;
+.collection-row:hover {
+  background: rgba(0, 255, 255, 0.04);
+  border-left-color: var(--cyan);
+}
+
+.collection-row:hover td {
+  color: var(--text);
+}
+
+.col-arrow {
+  width: 20px;
+  text-align: right;
   color: var(--text3);
-  padding: 12px;
-  background-color: var(--surface);
+  font-size: 12px;
 }
 
-.success {
-  color: var(--green);
+.collection-row:hover .col-arrow {
+  color: var(--cyan);
 }
 
-.failed {
-  color: var(--red);
+.collection-empty {
+  font-size: 9px;
+  color: var(--text3);
+  padding: 10px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
+/* ── Backup section ── */
 .backup-info {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background-color: var(--surface2);
+  gap: 10px;
+  background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 12px;
+  padding: 10px 12px;
 }
 
 .backup-row {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
   font-size: 9px;
 }
@@ -184,25 +194,25 @@
 .backup-row .label {
   color: var(--text3);
   font-weight: 600;
-  min-width: 120px;
+  min-width: 100px;
 }
 
 .backup-row .value {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--text);
 }
 
 .schedule-input {
-  background-color: var(--surface);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 4px 6px;
   font-size: 9px;
   color: var(--text);
   font-family: monospace;
-  width: 200px;
+  width: 160px;
 }
 
 .schedule-input:focus {
@@ -210,23 +220,53 @@
   border-color: var(--cyan);
 }
 
-.delete-btn {
-  background: none;
-  border: none;
-  color: var(--text3);
-  cursor: pointer;
+.backups-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 9px;
-  padding: 2px 6px;
-  transition: color 0.15s ease;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-.delete-btn:hover {
-  color: var(--red);
+.backups-table thead {
+  background: var(--surface3);
+  border-bottom: 1px solid var(--border);
 }
+
+.backups-table th {
+  padding: 7px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 8px;
+}
+
+.backups-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.backups-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.backups-table .empty {
+  text-align: center;
+  color: var(--text3);
+  padding: 12px;
+}
+
+.success { color: var(--green); }
+.failed  { color: var(--red); }
 
 .loading {
   text-align: center;
   color: var(--text3);
-  padding: 20px;
+  padding: 24px;
   font-size: 10px;
 }

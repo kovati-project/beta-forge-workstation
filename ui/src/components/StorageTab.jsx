@@ -1,163 +1,98 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getStorageSummary, getBackupHistory, runBackupNow } from '../utils/resourcesAPI';
 import { VBar } from './VBar';
 import { Btn } from './Btn';
+import { StorageDetail } from './StorageDetail';
 import './StorageTab.css';
 
-export function StorageTab() {
-  const [storage, setStorage] = useState(null);
-  const [backups, setBackups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [backingUp, setBackingUp] = useState(false);
+const TYPE_LABELS = {
+  minio: 'MinIO',
+  qdrant: 'Qdrant',
+  postgres: 'PostgreSQL',
+  filesystem: 'Filesystem',
+};
 
-  useEffect(() => {
-    loadStorageData();
-  }, []);
+function TypeBadge({ type }) {
+  return <span className={`type-badge type-badge--${type}`}>{TYPE_LABELS[type] ?? type}</span>;
+}
 
-  const loadStorageData = async () => {
-    setLoading(true);
-    const [summary, history] = await Promise.all([
-      getStorageSummary(),
-      getBackupHistory(),
-    ]);
-    setStorage(summary);
-    setBackups(history.backups || []);
-    setLoading(false);
-  };
-
-  const handleRunBackup = async () => {
-    setBackingUp(true);
-    try {
-      await runBackupNow();
-      await loadStorageData();
-    } catch (error) {
-      alert(`Backup failed: ${error.message}`);
-    } finally {
-      setBackingUp(false);
-    }
-  };
-
-  if (loading) {
-    return <div className="storage-tab"><div className="loading">Loading storage data...</div></div>;
-  }
-
-  if (!storage) {
-    return <div className="storage-tab"><div className="loading">No storage data available</div></div>;
-  }
-
-  const diskPercent = (storage.disk_used / storage.disk_total) * 100;
-  const diskColor = diskPercent > 90 ? 'red' : diskPercent > 70 ? 'amber' : 'cyan';
-
+function PartitionCard({ partition }) {
+  const color = partition.percent > 90 ? 'red' : partition.percent > 70 ? 'amber' : 'cyan';
+  const device = partition.device.replace('/dev/', '');
   return (
-    <div className="storage-tab">
-      <section className="storage-section">
-        <h3>Disk Usage</h3>
-        <div className="disk-info">
-          <div className="disk-label">
-            /data/ partition — {storage.disk_used_human} / {storage.disk_total_human}
-          </div>
-          <VBar
-            value={diskPercent}
-            label={`${diskPercent.toFixed(0)}%`}
-            variant={diskColor}
-          />
-        </div>
-      </section>
+    <div className="partition-card">
+      <div className="partition-card__meta">
+        <span className="partition-card__device">{device}</span>
+        <span className="partition-card__mount">{partition.mountpoint}</span>
+        <span className="partition-card__fs">{partition.fstype}</span>
+      </div>
+      <div className="partition-card__bar">
+        <VBar value={partition.percent} label={`${partition.percent}%`} variant={color} />
+      </div>
+      <div className="partition-card__stats">
+        <span><span className="stat-label">Total</span> {partition.total_human}</span>
+        <span><span className="stat-label">Used</span> {partition.used_human}</span>
+        <span><span className="stat-label">Free</span> {partition.free_human}</span>
+      </div>
+    </div>
+  );
+}
 
-      <section className="storage-section">
-        <h3>MinIO Buckets</h3>
-        <div className="buckets-chart">
-          <div className="stacked-bar">
-            {storage.buckets?.map((bucket) => {
-              const width = (bucket.size_bytes / storage.total_minio_bytes) * 100;
-              return (
-                <div
-                  key={bucket.name}
-                  className="bucket-bar"
-                  style={{
-                    width: `${width}%`,
-                    backgroundColor: `var(--${bucket.color})`,
-                  }}
-                  title={`${bucket.name}: ${bucket.size_human}`}
-                />
-              );
-            })}
-          </div>
-        </div>
-        <div className="buckets-table">
-          <div className="table-header">
-            <div>Bucket</div>
-            <div>Used</div>
-            <div>Percent</div>
-          </div>
-          {storage.buckets?.map((bucket) => {
-            const percent = (bucket.size_bytes / storage.total_minio_bytes) * 100;
-            return (
-              <div key={bucket.name} className="table-row">
-                <div className="bucket-name">
-                  <span
-                    className="bucket-indicator"
-                    style={{ backgroundColor: `var(--${bucket.color})` }}
-                  />
-                  {bucket.name}
-                </div>
-                <div>{bucket.size_human}</div>
-                <div>{percent.toFixed(1)}%</div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="storage-section">
-        <h3>PostgreSQL Databases</h3>
-        <table className="pg-table">
-          <thead>
-            <tr>
-              <th>Database</th>
-              <th>Size</th>
-            </tr>
-          </thead>
-          <tbody>
-            {storage.databases?.map((db) => (
-              <tr key={db.name}>
-                <td>{db.name}</td>
-                <td>{db.size_human}</td>
-              </tr>
+function CollectionTable({ type, columns, rows, onSelect }) {
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="collection-empty">No {TYPE_LABELS[type]} collections found</div>
+    );
+  }
+  return (
+    <table className="collection-table">
+      <thead>
+        <tr>
+          {columns.map((c) => (
+            <th key={c.key}>{c.label}</th>
+          ))}
+          <th className="col-arrow" />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr
+            key={row.name}
+            className="collection-row"
+            onClick={() => onSelect(type, row.name)}
+          >
+            {columns.map((c) => (
+              <td key={c.key}>{c.render ? c.render(row) : (row[c.key] ?? '—')}</td>
             ))}
-          </tbody>
-        </table>
-      </section>
+            <td className="col-arrow">›</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
+function BackupSection({ storage, backups, backingUp, onRunBackup }) {
+  return (
+    <>
       <section className="storage-section">
         <h3>Backup Management</h3>
         <div className="backup-info">
           <div className="backup-row">
-            <div className="label">Last backup:</div>
-            <div className="value">
-              {storage.last_backup ? (
-                <>
-                  <span>{storage.last_backup.time}</span>
-                  <span>{storage.last_backup.size_human}</span>
-                  <span className={storage.last_backup.success ? 'success' : 'failed'}>
-                    {storage.last_backup.success ? '✓ success' : '✗ failed'}
-                  </span>
-                </>
-              ) : (
-                'Never'
-              )}
-            </div>
-          </div>
-          <div className="backup-row">
             <div className="label">Schedule:</div>
             <div className="value">
-              <input type="text" defaultValue={storage.backup_schedule} className="schedule-input" />
+              <input
+                type="text"
+                defaultValue={storage?.backup_schedule ?? '0 6 * * *'}
+                className="schedule-input"
+              />
             </div>
           </div>
         </div>
         <Btn
-          label="Run Backup Now"
-          onClick={handleRunBackup}
+          label={backingUp ? 'Running…' : 'Run Backup Now'}
+          onClick={onRunBackup}
           disabled={backingUp}
           variant="amber"
         />
@@ -171,28 +106,20 @@ export function StorageTab() {
               <th>Date</th>
               <th>Size</th>
               <th>Status</th>
-              <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {backups.length === 0 ? (
               <tr>
-                <td colSpan="4" className="empty">
-                  No backups
-                </td>
+                <td colSpan="3" className="empty">No backups</td>
               </tr>
             ) : (
               backups.map((backup, idx) => (
                 <tr key={idx}>
                   <td>{backup.date}</td>
-                  <td>{backup.size_human}</td>
-                  <td className={backup.success ? 'success' : 'failed'}>
-                    {backup.success ? '✓ success' : '✗ failed'}
-                  </td>
-                  <td>
-                    <button className="delete-btn" title="Delete backup">
-                      ✕
-                    </button>
+                  <td>{backup.size || backup.size_human || '—'}</td>
+                  <td className={backup.status === 'success' || backup.success ? 'success' : 'failed'}>
+                    {backup.status === 'success' || backup.success ? '✓ success' : '✗ failed'}
                   </td>
                 </tr>
               ))
@@ -200,6 +127,171 @@ export function StorageTab() {
           </tbody>
         </table>
       </section>
+    </>
+  );
+}
+
+export function StorageTab() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [data, setData] = useState(null);
+  const [backups, setBackups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [backingUp, setBackingUp] = useState(false);
+
+  const detailParam = searchParams.get('detail');
+  let detailType = null;
+  let detailName = null;
+  if (detailParam) {
+    const sep = detailParam.indexOf(':');
+    detailType = detailParam.slice(0, sep);
+    detailName = detailParam.slice(sep + 1);
+  }
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  const loadAll = async () => {
+    setLoading(true);
+    const [summary, history] = await Promise.all([getStorageSummary(), getBackupHistory()]);
+    setData(summary);
+    setBackups(history?.backups ?? []);
+    setLoading(false);
+  };
+
+  const handleSelect = (type, name) => {
+    setSearchParams({ tab: 'storage', detail: `${type}:${name}` });
+  };
+
+  const handleBack = () => {
+    setSearchParams({ tab: 'storage' });
+  };
+
+  const handleRunBackup = async () => {
+    setBackingUp(true);
+    try {
+      await runBackupNow();
+      await loadAll();
+    } catch (error) {
+      alert(`Backup failed: ${error.message}`);
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  if (detailType && detailName) {
+    return (
+      <StorageDetail
+        type={detailType}
+        name={detailName}
+        onBack={handleBack}
+      />
+    );
+  }
+
+  if (loading) {
+    return <div className="storage-tab"><div className="loading">Loading storage data…</div></div>;
+  }
+
+  const collections = data?.collections ?? {};
+  const partitions = data?.partitions ?? [];
+
+  const minioColumns = [
+    { key: 'name', label: 'Bucket' },
+    { key: 'object_count', label: 'Objects' },
+    { key: 'size_human', label: 'Size' },
+    { key: 'mountpoint', label: 'Mount' },
+  ];
+
+  const qdrantColumns = [
+    { key: 'name', label: 'Collection' },
+    { key: 'points_count', label: 'Points' },
+    { key: 'size_human', label: 'Size' },
+    { key: 'mountpoint', label: 'Mount' },
+  ];
+
+  const postgresColumns = [
+    { key: 'name', label: 'Database' },
+    { key: 'size_human', label: 'Size' },
+    { key: 'mountpoint', label: 'Mount' },
+  ];
+
+  const filesystemColumns = [
+    { key: 'name', label: 'Directory' },
+    { key: 'path', label: 'Path' },
+    { key: 'size_human', label: 'Size' },
+    { key: 'mountpoint', label: 'Mount' },
+  ];
+
+  return (
+    <div className="storage-tab">
+      <section className="storage-section">
+        <h3>Hardware / Partitions</h3>
+        {partitions.length === 0 ? (
+          <div className="collection-empty">No partition data available</div>
+        ) : (
+          <div className="partitions-list">
+            {partitions.map((p) => (
+              <PartitionCard key={p.mountpoint} partition={p} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="storage-section">
+        <h3>
+          <TypeBadge type="minio" /> Buckets
+        </h3>
+        <CollectionTable
+          type="minio"
+          columns={minioColumns}
+          rows={collections.minio}
+          onSelect={handleSelect}
+        />
+      </section>
+
+      <section className="storage-section">
+        <h3>
+          <TypeBadge type="qdrant" /> Collections
+        </h3>
+        <CollectionTable
+          type="qdrant"
+          columns={qdrantColumns}
+          rows={collections.qdrant}
+          onSelect={handleSelect}
+        />
+      </section>
+
+      <section className="storage-section">
+        <h3>
+          <TypeBadge type="postgres" /> Databases
+        </h3>
+        <CollectionTable
+          type="postgres"
+          columns={postgresColumns}
+          rows={collections.postgres}
+          onSelect={handleSelect}
+        />
+      </section>
+
+      <section className="storage-section">
+        <h3>
+          <TypeBadge type="filesystem" /> Directories
+        </h3>
+        <CollectionTable
+          type="filesystem"
+          columns={filesystemColumns}
+          rows={collections.filesystem}
+          onSelect={handleSelect}
+        />
+      </section>
+
+      <BackupSection
+        storage={data}
+        backups={backups}
+        backingUp={backingUp}
+        onRunBackup={handleRunBackup}
+      />
     </div>
   );
 }
