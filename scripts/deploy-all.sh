@@ -114,6 +114,23 @@ if [[ ! -d /data/models/ollama ]] && [[ "$DRY_RUN" == false ]]; then
     exit 1
 fi
 
+# ── Bootstrap shared network ──────────────────────────────────────────────────
+# All compose files expect a network named ai-workstation. Create it upfront so
+# every phase joins the same network from the first run. If any containers are
+# still attached to docker_default from an earlier deployment, migrate them now.
+if [[ "$DRY_RUN" == false ]]; then
+    if ! docker network inspect ai-workstation &>/dev/null; then
+        log "Creating ai-workstation network..."
+        docker network create ai-workstation
+    fi
+    LEGACY=$(docker network inspect docker_default \
+        --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null | tr -s ' ' || true)
+    if [[ -n "${LEGACY// /}" ]]; then
+        warn "Containers on docker_default detected — migrating to ai-workstation..."
+        bash "$REPO_ROOT/scripts/migrate-network.sh"
+    fi
+fi
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 for entry in "${PHASES[@]}"; do
     IFS='|' read -r num name script notes <<< "$entry"
