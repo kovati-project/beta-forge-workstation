@@ -52,6 +52,54 @@ export async function loadLoRA(path, baseModel) {
   }
 }
 
+export async function getVllmLocalModels() {
+  try {
+    const response = await fetch('/api/models/vllm/local');
+    if (response.ok) return await response.json();
+    return { models: [], slots: {} };
+  } catch (error) {
+    console.error('Failed to fetch vLLM local models:', error);
+    return { models: [], slots: {} };
+  }
+}
+
+export async function activateVllmModel(slot, model) {
+  const response = await fetch('/api/models/vllm/activate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slot, model }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to activate model');
+  }
+  return response.json();
+}
+
+export async function downloadVllmModel(repoId, localName) {
+  const response = await fetch('/api/models/vllm/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo_id: repoId, local_name: localName }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to start download');
+  }
+  return response.json();
+}
+
+export async function getVllmDownloadStatus() {
+  try {
+    const response = await fetch('/api/models/vllm/download/status');
+    if (response.ok) return await response.json();
+    return {};
+  } catch (error) {
+    console.error('Failed to fetch download status:', error);
+    return {};
+  }
+}
+
 export async function getStorageBuckets(bucket) {
   try {
     const response = await fetch(`/api/storage/buckets/${bucket}`);

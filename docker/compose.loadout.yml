@@ -13,6 +13,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./:/compose:ro
       - ../loadout-manager:/app:ro
+      - /data/models/vllm:/data/models/vllm
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - COMPOSE_DIR=/compose
