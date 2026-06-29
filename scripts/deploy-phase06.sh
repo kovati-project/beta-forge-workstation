@@ -4,6 +4,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export REPO_ROOT
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 LM_DIR="$REPO_ROOT/loadout-manager"
 
 echo "=== Phase 06: Loadout Manager Deploy ==="
@@ -35,6 +37,7 @@ docker build -f "$LM_DIR/Dockerfile" -t loadout-manager:latest "$LM_DIR"
 echo "  ✓ Image built"
 
 echo "[4/4] Starting loadout manager..."
+remove_orphan loadout-manager ai-loadout-mgr
 docker compose -f "$REPO_ROOT/docker/compose.loadout.yml" up -d
 echo "  Waiting for startup (5s)..."
 sleep 5

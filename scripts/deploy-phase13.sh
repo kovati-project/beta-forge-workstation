@@ -4,6 +4,10 @@
 
 set -e
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
+
 echo "=== Phase 13: Security Hardening ==="
 echo ""
 
@@ -34,6 +38,9 @@ echo ""
 
 # Start Authentik services
 echo "Starting Authentik Identity Provider..."
+for _c in authentik authentik-worker authentik-postgres authentik-redis; do
+    remove_orphan "$_c" ai-auth-stack
+done
 docker compose -f docker/compose.auth.yml up -d
 echo "✓ Authentik services starting"
 echo ""

@@ -3,6 +3,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
 echo "=== Phase 08: Agentic Workflows & MCP Deploy ==="
 echo ""
@@ -22,6 +24,9 @@ echo "  ✓ n8n files directory ready"
 
 # ── 3. Start agentic services ─────────────────────────────────────────────────
 echo "[3/4] Starting agentic services..."
+for _c in n8n mcp-filesystem mcp-fetch mcp-browser mcp-code-exec; do
+    remove_orphan "$_c" ai-agentic
+done
 docker compose -f "$REPO_ROOT/docker/compose.agentic.yml" up -d \
   n8n mcp-filesystem mcp-fetch mcp-browser mcp-code-exec
 echo "  Waiting for startup (15s)..."

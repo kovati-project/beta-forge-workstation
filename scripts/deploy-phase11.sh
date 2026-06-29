@@ -4,6 +4,10 @@
 
 set -e
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
+
 echo "=== Phase 11: Code Generation ==="
 echo ""
 
@@ -62,6 +66,7 @@ echo ""
 
 # Start OpenHands service
 echo "Starting OpenHands..."
+remove_orphan openhands ai-codegen
 docker compose -f docker/compose.codegen.yml up -d openhands
 echo "✓ OpenHands container started"
 echo ""

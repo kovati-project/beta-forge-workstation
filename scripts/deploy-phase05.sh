@@ -4,6 +4,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
 echo "=== Phase 05: Open WebUI Deploy ==="
 echo ""
@@ -43,6 +45,8 @@ fi
 
 # ── 3. Start services ─────────────────────────────────────────────────────────
 echo "[3/3] Starting Open WebUI and SearXNG..."
+remove_orphan open-webui ai-webui
+remove_orphan searxng ai-webui
 docker compose -f "$REPO_ROOT/docker/compose.webui.yml" up -d
 echo "  Waiting for Open WebUI startup (20s)..."
 sleep 20

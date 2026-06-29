@@ -4,6 +4,10 @@
 
 set -e
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
+
 echo "=== Phase 10: Monitoring & Observability ==="
 echo ""
 
@@ -43,6 +47,9 @@ echo ""
 
 # Start services
 echo "Starting monitoring stack..."
+for _c in prometheus grafana dcgm-exporter node-exporter cadvisor; do
+    remove_orphan "$_c" ai-monitoring
+done
 docker compose -f docker/compose.monitoring.yml up -d prometheus grafana dcgm-exporter node-exporter cadvisor
 echo "✓ Containers started"
 echo ""

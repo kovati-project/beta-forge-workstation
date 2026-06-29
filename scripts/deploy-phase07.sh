@@ -3,6 +3,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
 echo "=== Phase 07: Training Pipeline Deploy ==="
 echo ""
@@ -33,6 +35,8 @@ echo "  ✓ Compose file valid"
 
 # ── 4. Start services ─────────────────────────────────────────────────────────
 echo "[4/4] Starting training services (Label Studio, JupyterLab)..."
+remove_orphan label-studio ai-training
+remove_orphan jupyterlab ai-training
 docker compose -f "$REPO_ROOT/docker/compose.training.yml" up -d label-studio jupyterlab
 echo "  Waiting for startup (10s)..."
 sleep 10

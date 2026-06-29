@@ -4,6 +4,10 @@
 
 set -e
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
+
 echo "=== Phase 09: Storage, Vector DB & RAG ==="
 echo ""
 
@@ -39,6 +43,9 @@ echo ""
 
 # Start services
 echo "Starting services..."
+for _c in minio qdrant postgres langfuse; do
+    remove_orphan "$_c" ai-storage
+done
 docker compose -f docker/compose.storage.yml up -d minio qdrant postgres langfuse
 echo "✓ Containers started"
 echo ""

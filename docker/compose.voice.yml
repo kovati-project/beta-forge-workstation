@@ -59,3 +59,4 @@ services:
 networks:
   default:
     name: ai-workstation
+    external: true

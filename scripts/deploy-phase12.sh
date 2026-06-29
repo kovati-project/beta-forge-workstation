@@ -4,6 +4,10 @@
 
 set -e
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
+
 echo "=== Phase 12: Voice I/O ==="
 echo ""
 
@@ -62,6 +66,8 @@ echo ""
 
 # Start voice services
 echo "Starting voice services..."
+remove_orphan whisper ai-voice
+remove_orphan piper ai-voice
 docker compose -f docker/compose.voice.yml up -d
 echo "✓ Voice services starting"
 echo ""

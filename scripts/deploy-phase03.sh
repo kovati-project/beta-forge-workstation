@@ -4,6 +4,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
 echo "=== Phase 03: Text Inference Deploy ==="
 echo ""
@@ -27,6 +29,7 @@ echo "  ✓ Storage directories present"
 
 # ── 2. Ollama ─────────────────────────────────────────────────────────────────
 echo "[2/4] Starting Ollama..."
+remove_orphan ollama ai-inference
 docker compose -f "$REPO_ROOT/docker/compose.inference.yml" up -d ollama
 sleep 5
 if docker exec ollama ollama list &>/dev/null; then
@@ -46,6 +49,7 @@ if [[ ! -e /data/models/vllm/current ]]; then
 else
     echo "  ✓ Symlink: $(readlink /data/models/vllm/current)"
     echo "[4/4] Starting vLLM pair A..."
+    remove_orphan vllm-pair-a ai-inference
     docker compose -f "$REPO_ROOT/docker/compose.inference.yml" up -d vllm-pair-a
     echo "  Waiting for model load (this takes 1–3 min for 32B)..."
     if timeout 300 bash -c 'until curl -sf http://localhost:8000/v1/models &>/dev/null; do sleep 5; done'; then

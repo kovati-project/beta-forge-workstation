@@ -4,6 +4,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/container-helpers.sh
+source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
 echo "=== Phase 04: Image Inference Deploy ==="
 echo ""
@@ -27,6 +29,8 @@ echo "  ✓ Storage directories present"
 
 # ── 2. Start core services ────────────────────────────────────────────────────
 echo "[2/3] Starting ComfyUI and Rembg..."
+remove_orphan comfyui ai-studio
+remove_orphan rembg ai-studio
 docker compose -f "$REPO_ROOT/docker/compose.studio.yml" up -d comfyui rembg
 echo "  Waiting for ComfyUI startup (30s)..."
 sleep 30

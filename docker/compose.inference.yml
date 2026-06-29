@@ -28,7 +28,7 @@ services:
   # ── vLLM: NVLink Pair A [GPU0, GPU3] ─────────────────────────────────────────
   # High-throughput serving for 32B–40B models.
   # CUDA_VISIBLE_DEVICES=0,3 maps to the confirmed NVLink bridge.
-  # --model path is a symlink — update /data/models/vllm/current before starting.
+  # Model path is a symlink — update /data/models/vllm/current before starting.
   vllm-pair-a:
     image: vllm/vllm-openai:latest
     container_name: vllm-pair-a
@@ -145,3 +145,4 @@ services:
 networks:
   default:
     name: ai-workstation
+    external: true
