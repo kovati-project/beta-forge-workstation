@@ -39,6 +39,7 @@ SERVICE_MAP = {
     "langfuse": "langfuse",
     "prometheus": "prometheus",
     "grafana": "grafana",
+    "authentik": "authentik",
     "caddy": "caddy",
 }
 
@@ -64,6 +65,7 @@ PORT_MAP = {
     "langfuse": 3002,
     "prometheus": 9091,   # host port (mapped 9091→9090 inside container)
     "grafana": 3001,       # host port (mapped 3001→3000 inside container)
+    "authentik": 9080,     # host port (mapped 9080→9000 inside container)
     "caddy": 80,
 }
 
@@ -89,6 +91,7 @@ COMPOSE_FILES = {
     "langfuse":    "compose.storage.yml",
     "prometheus":  "compose.monitoring.yml",
     "grafana":     "compose.monitoring.yml",
+    "authentik":   "compose.auth.yml",
     "caddy":       "compose.caddy.yml",
 }
 
@@ -142,6 +145,7 @@ SECRETS_REQUIRED = {
     "minio":    ["MINIO_ROOT_PASSWORD"],
     "grafana":  ["GF_ADMIN_PASSWORD"],
     # ghcr.io/bmaltais/kohya-ss is a public package — no GHCR auth needed.
+    "authentik": ["AUTHENTIK_SECRET_KEY", "AUTHENTIK_REDIS_PASSWORD", "AUTHENTIK_PG_PASSWORD"],
     # Authentik (SSO) secrets required by caddy forward-auth.
     "caddy":    ["AUTHENTIK_SECRET_KEY"],
 }

@@ -1,3 +1,5 @@
+name: ai-training
+
 services:
 
   # ── Kohya_ss: image LoRA and Dreambooth ───────────────────────────────────

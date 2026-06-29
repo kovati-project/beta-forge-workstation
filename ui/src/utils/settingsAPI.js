@@ -1,14 +1,9 @@
 // Settings API utilities
 
 export async function getSecrets() {
-  try {
-    const response = await fetch('/api/secrets');
-    if (response.ok) return await response.json();
-    return { secrets: [] };
-  } catch (error) {
-    console.error('Failed to fetch secrets:', error);
-    return { secrets: [] };
-  }
+  const response = await fetch('/api/secrets');
+  if (!response.ok) throw new Error(`Failed to fetch secrets: ${response.status}`);
+  return response.json();
 }
 
 export async function rotateSecret(key) {

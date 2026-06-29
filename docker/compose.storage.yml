@@ -1,3 +1,5 @@
+name: ai-storage
+
 services:
 
   # ── MinIO: S3-compatible model and artifact store ─────────────────────────

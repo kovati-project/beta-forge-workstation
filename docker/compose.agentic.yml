@@ -1,3 +1,5 @@
+name: ai-agentic
+
 services:
 
   # ── n8n: visual workflow automation ───────────────────────────────────────

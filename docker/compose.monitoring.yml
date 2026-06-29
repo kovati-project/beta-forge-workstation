@@ -1,3 +1,5 @@
+name: ai-monitoring
+
 services:
 
   # ── Prometheus: metrics collection ────────────────────────────────────────

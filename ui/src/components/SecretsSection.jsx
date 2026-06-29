@@ -11,9 +11,14 @@ export function SecretsSection({ isAppliance }) {
 
   useEffect(() => {
     const loadSecrets = async () => {
-      const data = await getSecrets();
-      setSecrets(data.secrets || []);
-      setLoading(false);
+      try {
+        const data = await getSecrets();
+        setSecrets(data.secrets || []);
+      } catch (err) {
+        setError(`Could not load secrets: ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
     };
     loadSecrets();
   }, []);
@@ -35,7 +40,7 @@ export function SecretsSection({ isAppliance }) {
   };
 
   const handleRotateAll = async () => {
-    if (!window.confirm('Rotate all 14 secrets? All services will restart.')) return;
+    if (!window.confirm(`Rotate all ${secrets.length} secrets? All services will restart.`)) return;
 
     const confirmation = prompt(
       'This will temporarily restart all services. Type "rotate all" to confirm:'
@@ -130,7 +135,7 @@ export function SecretsSection({ isAppliance }) {
       <button
         className="rotate-all-btn"
         onClick={handleRotateAll}
-        disabled={rotating !== null}
+        disabled={rotating !== null || secrets.length === 0}
       >
         {rotating === 'all' ? '⟳ Rotating all...' : 'Rotate All Secrets'}
       </button>

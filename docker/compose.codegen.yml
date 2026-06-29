@@ -1,3 +1,5 @@
+name: ai-codegen
+
 services:
 
   # ── OpenHands: Autonomous coding agent ────────────────────────────────────

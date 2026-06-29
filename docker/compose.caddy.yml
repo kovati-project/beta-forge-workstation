@@ -1,3 +1,5 @@
+name: ai-caddy
+
 services:
 
   # ── Caddy: reverse proxy + TLS + Authentik SSO ───────────────────────────

@@ -120,16 +120,18 @@ async def rotate_all_secrets(background_tasks: BackgroundTasks) -> Dict:
     env_vars = _read_env_file()
     affected_services = set()
     
+    rotated = 0
     for key in env_vars.keys():
         if any(x in key for x in ['PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'SALT']):
             new_value = secrets.token_urlsafe(32)
             _write_env_file(key, new_value)
             affected_services.update(AFFECTS_MAP.get(key, []))
-    
+            rotated += 1
+
     background_tasks.add_task(_restart_services, list(affected_services))
-    
+
     return {
         "status": "rotating",
-        "total": len(env_vars),
+        "total": rotated,
         "affects": list(affected_services),
     }

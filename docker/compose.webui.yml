@@ -1,3 +1,5 @@
+name: ai-webui
+
 services:
 
   # ── Open WebUI: unified chat and inference UI ───────────────────────────────
