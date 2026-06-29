@@ -42,6 +42,7 @@ services:
     image: ghcr.io/goauthentik/server:latest
     container_name: authentik
     restart: unless-stopped
+    command: server
     ports:
       - "9080:9000"
       - "9443:9443"
