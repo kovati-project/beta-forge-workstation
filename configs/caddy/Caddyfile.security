@@ -35,7 +35,7 @@ ai.local {
 		import authentik_forward_auth
 		uri strip_prefix /loadout
 		reverse_proxy 10.10.10.2:8800 {
-			header_uri -Upgrade
+			header_up -Upgrade
 		}
 	}
 
@@ -60,7 +60,7 @@ ai.local {
 		import authentik_forward_auth
 		uri strip_prefix /n8n
 		reverse_proxy 10.10.10.2:5678 {
-			header_uri -Upgrade
+			header_up -Upgrade
 		}
 	}
 
@@ -76,7 +76,7 @@ ai.local {
 		import authentik_forward_auth
 		uri strip_prefix /jupyter
 		reverse_proxy 10.10.10.2:8888 {
-			header_uri -Upgrade
+			header_up -Upgrade
 			# WebSocket support for Jupyter
 			transport http {
 				dial_timeout 10s
@@ -105,7 +105,7 @@ ai.local {
 		import authentik_forward_auth
 		uri strip_prefix /dify
 		reverse_proxy 10.10.10.2:3010 {
-			header_uri -Upgrade
+			header_up -Upgrade
 		}
 	}
 
