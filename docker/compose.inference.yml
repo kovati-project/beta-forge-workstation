@@ -41,7 +41,9 @@ services:
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
-      - CUDA_VISIBLE_DEVICES=0,3
+      # GPU selection is handled by device_ids below; Docker renumbers the
+      # reserved GPUs to 0,1 inside the container, so a CUDA_VISIBLE_DEVICES
+      # listing host indices (0,3) would hide one of them and break TP=2.
       - NCCL_P2P_LEVEL=NVL
       - NCCL_SHM_DISABLE=0
       - HF_HOME=/root/.cache/huggingface
@@ -78,7 +80,7 @@ services:
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
-      - CUDA_VISIBLE_DEVICES=1,2
+      # GPU selection handled by device_ids below (see pair-a note).
       - NCCL_P2P_LEVEL=NVL
       - NCCL_SHM_DISABLE=0
       - HF_HOME=/root/.cache/huggingface
@@ -117,7 +119,7 @@ services:
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
-      - CUDA_VISIBLE_DEVICES=0,1,2,3
+      # GPU selection handled by device_ids below (see pair-a note).
       - NCCL_P2P_LEVEL=NVL
       - NCCL_SHM_DISABLE=0
       - HF_HOME=/root/.cache/huggingface
