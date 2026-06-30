@@ -91,13 +91,24 @@ def get_gpu_info() -> List[Dict]:
             mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
             util = pynvml.nvmlDeviceGetUtilizationRates(handle)
             temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            try:
+                power_w = round(pynvml.nvmlDeviceGetPowerUsage(handle) / 1000, 1)
+            except Exception:
+                power_w = 0
+            try:
+                _pci = pynvml.nvmlDeviceGetPciInfo(handle)
+                bus_id = _pci.busId.decode() if isinstance(_pci.busId, bytes) else _pci.busId
+            except Exception:
+                bus_id = None
             gpus.append({
                 "index": i,
                 "vram_used_gb": round(mem.used / 1024**3, 1),
                 "vram_total_gb": round(mem.total / 1024**3, 1),
                 "vram_free_gb": round(mem.free / 1024**3, 1),
                 "utilization_pct": util.gpu,
-                "temp_c": temp
+                "temp_c": temp,
+                "power_w": power_w,
+                "bus_id": bus_id,
             })
         pynvml.nvmlShutdown()
         return gpus
