@@ -174,7 +174,10 @@ async def activate_vllm_model(req: ActivateRequest) -> Dict:
     try:
         if tmp.exists() or tmp.is_symlink():
             tmp.unlink()
-        tmp.symlink_to(target)
+        # Relative target (basename only): the symlink lives in the same dir as the
+        # model, so it resolves both on the host AND inside the vLLM container, which
+        # mounts this dir at /models. An absolute target breaks inside the container.
+        tmp.symlink_to(target.name)
         os.replace(tmp, link)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Symlink update failed: {e}")
