@@ -1,7 +1,11 @@
 use_default_settings: true
 
 server:
-  secret_key: "124379052dfef3d313766abdae1d6024"
+  # Regenerate this per deployment: python3 -c "import secrets; print(secrets.token_hex(16))"
+  # SearXNG's settings.yml does not support ${VAR} interpolation, so this can't be
+  # routed through docker/.env like the other secrets in scripts/init-secrets.sh —
+  # it must be edited here directly on each real deployment.
+  secret_key: "943ef446d5426e656d37fc34ca3c0366"
   bind_address: "0.0.0.0:8080"
   base_url: "http://10.10.10.2:8080/"
 
