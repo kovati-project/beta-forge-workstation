@@ -8,6 +8,12 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
+# Load generated secrets (e.g. MINIO_ROOT_PASSWORD) so we never hardcode them below.
+if [ -f "$REPO_ROOT/docker/.env" ]; then
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/docker/.env"
+fi
+
 echo "=== Phase 09: Storage, Vector DB & RAG ==="
 echo ""
 
@@ -115,7 +121,7 @@ echo ""
 echo "1. Configure MinIO client (one-time):"
 echo "   wget https://dl.min.io/client/mc/release/linux-amd64/mc"
 echo "   chmod +x mc && sudo mv mc /usr/local/bin/"
-echo "   mc alias set local http://localhost:9000 admin 5c6eb4508af1de3f08b4acdea9d29934"
+echo "   mc alias set local http://localhost:9000 admin \"$MINIO_ROOT_PASSWORD\""
 echo ""
 echo "2. Create MinIO buckets:"
 echo "   mc mb local/models local/loras local/datasets local/outputs local/backups"
