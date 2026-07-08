@@ -7,24 +7,65 @@ import { getServiceUrl } from '../utils/serviceRegistry';
 import { ALWAYS_ON_SERVICES, BATCH_SERVICES } from '../data/servicesMock';
 import './ServiceCard.css';
 
+const MAX_LOG_LINES = 500;
+
 function ServiceCardExpanded({ service, serviceName }) {
   const [logs, setLogs] = useState(null);
   const [logsError, setLogsError] = useState(null);
+  const [streaming, setStreaming] = useState(false);
+  const sourceRef = useRef(null);
 
   useEffect(() => {
-    const fetchLogs = async () => {
+    let cancelled = false;
+
+    const backfillThenStream = async () => {
+      // Backfill the last 100 lines so the panel is populated immediately,
+      // then follow the SSE endpoint for anything written after that.
       try {
         const response = await fetch(`/api/services/${serviceName}/logs?n=100`);
         if (response.ok) {
           const data = await response.json();
-          setLogs(data.logs || []);
+          if (!cancelled) setLogs(data.logs || []);
         }
       } catch (error) {
-        setLogsError('Failed to load logs');
+        if (!cancelled) setLogsError('Failed to load logs');
       }
+
+      if (cancelled) return;
+
+      const source = new EventSource(`/api/services/${serviceName}/logs/stream`);
+      sourceRef.current = source;
+
+      source.onopen = () => {
+        if (!cancelled) setStreaming(true);
+      };
+
+      source.onmessage = (event) => {
+        if (cancelled) return;
+        setLogs((prev) => {
+          const next = [...(prev || []), event.data];
+          return next.length > MAX_LOG_LINES ? next.slice(-MAX_LOG_LINES) : next;
+        });
+      };
+
+      // The stream dies with the container. Fall back to the backfilled
+      // lines rather than surfacing an error over content we already have.
+      source.onerror = () => {
+        if (!cancelled) setStreaming(false);
+        source.close();
+        sourceRef.current = null;
+      };
     };
 
-    fetchLogs();
+    backfillThenStream();
+
+    return () => {
+      cancelled = true;
+      if (sourceRef.current) {
+        sourceRef.current.close();
+        sourceRef.current = null;
+      }
+    };
   }, [serviceName]);
 
   const formatUptime = (seconds) => {
@@ -56,7 +97,10 @@ function ServiceCardExpanded({ service, serviceName }) {
       </div>
 
       <div className="expanded-logs">
-        <div className="expanded-logs-header">Recent logs:</div>
+        <div className="expanded-logs-header">
+          Recent logs:
+          {streaming && <span className="logs-live">● live</span>}
+        </div>
         {logsError ? (
           <div className="logs-error">{logsError}</div>
         ) : logs && logs.length > 0 ? (

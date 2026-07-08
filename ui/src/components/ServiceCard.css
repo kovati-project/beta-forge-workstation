@@ -191,3 +191,11 @@
     display: none;
   }
 }
+
+.logs-live {
+  margin-left: 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--green);
+  opacity: 0.9;
+}
