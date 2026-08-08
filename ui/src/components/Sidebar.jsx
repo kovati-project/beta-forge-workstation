@@ -1,9 +1,11 @@
 import { useApp } from '../context/AppContext';
+import { useSystemMetrics } from '../hooks/useSystemMetrics';
 import { NavItem } from './NavItem';
 import { DotStatus } from './DotStatus';
 
 export function Sidebar() {
   const { state } = useApp();
+  const { metrics } = useSystemMetrics();
   const productName = process.env.VITE_PRODUCT_NAME || 'Kovati OS';
 
   // Determine uptime display
@@ -68,7 +70,7 @@ export function Sidebar() {
           <span>{gpuCount}× A5500 · {totalVram} GB</span>
         </div>
         <div className="sidebar-footer-item">
-          uptime {formatUptime(state.gpus?.[0]?.uptime || 0)}
+          uptime {formatUptime(metrics?.uptime_seconds)}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 """Metrics and monitoring API endpoints."""
 
+import time
 from collections import deque
 from typing import Dict, List
 import httpx
@@ -113,6 +114,7 @@ async def get_system_metrics() -> Dict:
         disk = psutil.disk_usage("/")
 
     return {
+        "uptime_seconds":  int(time.time() - psutil.boot_time()),
         "cpu_load_pct":    round(psutil.cpu_percent(interval=0.2), 1),
         "ram_used_gb":     round(vm.used  / 1024 ** 3, 1),
         "ram_total_gb":    round(vm.total / 1024 ** 3, 1),
