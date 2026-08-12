@@ -13,6 +13,7 @@ function ServiceCardExpanded({ service, serviceName }) {
   const [logs, setLogs] = useState(null);
   const [logsError, setLogsError] = useState(null);
   const [streaming, setStreaming] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const sourceRef = useRef(null);
 
   useEffect(() => {
@@ -68,6 +69,40 @@ function ServiceCardExpanded({ service, serviceName }) {
     };
   }, [serviceName]);
 
+  // Pull a deeper tail than the panel shows and hand it to the browser as a
+  // file. The inline view is capped at 500 lines; an export is for the cases
+  // where you need the whole thing somewhere else.
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      let lines = logs || [];
+      try {
+        const response = await fetch(`/api/services/${serviceName}/logs?n=5000`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.logs && data.logs.length) lines = data.logs;
+        }
+      } catch (error) {
+        // fall back to whatever is already on screen
+      }
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const blob = new Blob([lines.join('\n') + '\n'], {
+        type: 'text/plain;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${serviceName}-${stamp}.log`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const formatUptime = (seconds) => {
     if (!seconds) return '—';
     const hours = Math.floor(seconds / 3600);
@@ -100,6 +135,14 @@ function ServiceCardExpanded({ service, serviceName }) {
         <div className="expanded-logs-header">
           Recent logs:
           {streaming && <span className="logs-live">● live</span>}
+          <button
+            className="logs-export"
+            onClick={handleExport}
+            disabled={exporting || !logs || logs.length === 0}
+            title="Download the last 5000 log lines as a .log file"
+          >
+            {exporting ? 'Exporting…' : 'Export'}
+          </button>
         </div>
         {logsError ? (
           <div className="logs-error">{logsError}</div>

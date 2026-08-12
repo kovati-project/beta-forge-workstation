@@ -199,3 +199,25 @@
   color: var(--green);
   opacity: 0.9;
 }
+
+.logs-export {
+  float: right;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.logs-export:hover:not(:disabled) {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.logs-export:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
