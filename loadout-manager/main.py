@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import subprocess
 import yaml
 import asyncio
+import json
 import time
 from pathlib import Path
 from typing import Optional, Dict, List
@@ -69,12 +70,56 @@ COMPOSE_BASE = Path(__file__).parent.parent / "docker"
 REPO_ROOT = Path(__file__).parent
 
 # ── State ────────────────────────────────────────────────────────────────────
+STATE_PATH = Path(os.environ.get("LOADOUT_STATE_PATH", "/data/loadout-manager/state.json"))
+
 state = {
     "active_profile": None,
     "switching": False,
     "last_switched": None,
     "running_services": []
 }
+
+_PERSISTED_KEYS = ("active_profile", "last_switched", "running_services")
+
+
+def save_state() -> None:
+    """Persist state to disk. Never fatal — a failed write must not break a switch."""
+    try:
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {k: state[k] for k in _PERSISTED_KEYS}
+        # Write via a temp file in the same directory so a crash mid-write
+        # cannot leave a truncated state.json behind.
+        tmp = STATE_PATH.with_suffix(".json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(payload, f)
+        os.replace(tmp, STATE_PATH)
+    except Exception as e:
+        logger.warning(f"Could not persist state to {STATE_PATH}: {e}")
+
+
+def load_state() -> None:
+    """Restore state from disk at startup. Absent or corrupt file is not an error."""
+    if not STATE_PATH.exists():
+        logger.info(f"No persisted state at {STATE_PATH}; starting cold")
+        return
+    try:
+        with open(STATE_PATH) as f:
+            saved = json.load(f)
+        if not isinstance(saved, dict):
+            raise ValueError("state file is not an object")
+        for k in _PERSISTED_KEYS:
+            if k in saved:
+                state[k] = saved[k]
+        # "switching" is deliberately not restored. A switch that was in flight
+        # when the process died is not in flight now, and persisting True would
+        # wedge every subsequent activate/stop behind the 409 guard.
+        state["switching"] = False
+        logger.info(f"Restored state: active_profile={state['active_profile']}")
+    except Exception as e:
+        logger.warning(f"Ignoring unreadable state file {STATE_PATH}: {e}")
+
+
+load_state()
 
 def load_profiles() -> Dict:
     """Load and parse profiles.yaml."""
@@ -161,12 +206,14 @@ async def do_switch(profile_name: str):
         state["active_profile"] = profile_name
         state["running_services"] = profile["services"]
         state["last_switched"] = time.time()
+        save_state()
         logger.info(f"Successfully activated profile: {profile_name}")
         
     except Exception as e:
         logger.error(f"Profile switch failed: {e}")
         state["active_profile"] = None
         state["running_services"] = []
+        save_state()
     finally:
         state["switching"] = False
 
@@ -233,6 +280,7 @@ async def stop_all():
     stop_all_services()
     state["active_profile"] = None
     state["running_services"] = []
+    save_state()
     return {"message": "All services stopped"}
 
 @app.get("/health")
