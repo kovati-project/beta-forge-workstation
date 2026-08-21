@@ -5,7 +5,7 @@ Manages Docker Compose stack switching with GPU exclusivity and VRAM awareness.
 Extends with Kovati OS backend API for all frontend operations.
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -183,6 +183,7 @@ async def do_switch(profile_name: str):
     profile = profiles[profile_name]
     
     state["switching"] = True
+    await broadcast_state()
     try:
         logger.info(f"Switching to profile: {profile_name}")
         
@@ -216,6 +217,58 @@ async def do_switch(profile_name: str):
         save_state()
     finally:
         state["switching"] = False
+        await broadcast_state()
+
+# ── WebSocket event stream ───────────────────────────────────────────────────
+# The UI polls /status every 3s (1s while switching). That is the whole reason a
+# switch feels laggy: a state change is invisible for up to a full interval. This
+# pushes transitions instead. Polling still works and is left in place as a
+# fallback for clients that cannot hold a socket open.
+
+_ws_clients = set()
+
+
+def _state_event() -> Dict:
+    return {
+        "type": "state",
+        "active_profile": state["active_profile"],
+        "switching": state["switching"],
+        "last_switched": state["last_switched"],
+        "running_services": state["running_services"],
+    }
+
+
+async def broadcast_state() -> None:
+    """Push current state to every connected client, dropping any that fail."""
+    if not _ws_clients:
+        return
+    event = _state_event()
+    for ws in list(_ws_clients):
+        try:
+            await ws.send_json(event)
+        except Exception:
+            # A send failure means the peer is gone; discard rather than retry.
+            _ws_clients.discard(ws)
+
+
+@app.websocket("/ws")
+async def ws_events(websocket: WebSocket):
+    """Event stream. Sends current state on connect, then on every transition."""
+    await websocket.accept()
+    _ws_clients.add(websocket)
+    try:
+        await websocket.send_json(_state_event())
+        while True:
+            # There is no client->server protocol yet. Receiving parks the
+            # coroutine and gives us a disconnect signal without a poll loop.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.debug(f"WebSocket closed: {e}")
+    finally:
+        _ws_clients.discard(websocket)
+
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -281,6 +334,7 @@ async def stop_all():
     state["active_profile"] = None
     state["running_services"] = []
     save_state()
+    await broadcast_state()
     return {"message": "All services stopped"}
 
 @app.get("/health")
