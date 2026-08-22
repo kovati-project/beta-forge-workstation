@@ -14,6 +14,7 @@ import yaml
 import asyncio
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List
 import pynvml
@@ -364,6 +365,140 @@ h1{color:#00d9ff;}code{background:#1a1f3a;padding:.4rem .8rem;border-radius:4px;
 <p>On the workstation, run:</p>
 <code>bash scripts/deploy-ui.sh</code>
 </body></html>"""
+
+# ── Scheduler ────────────────────────────────────────────────────────────────
+# Time-based profile switching: run training overnight, drop back to inference
+# in the morning, without anyone being at the keyboard.
+
+SCHEDULE_PATH = Path(os.environ.get("LOADOUT_SCHEDULE_PATH",
+                                    str(STATE_PATH.parent / "schedule.json")))
+
+schedule: List[Dict] = []
+_scheduler_task = None
+_last_fired: Dict[str, str] = {}
+
+
+def load_schedule() -> None:
+    global schedule
+    if not SCHEDULE_PATH.exists():
+        return
+    try:
+        with open(SCHEDULE_PATH) as f:
+            loaded = json.load(f)
+        schedule = loaded if isinstance(loaded, list) else []
+        logger.info(f"Loaded {len(schedule)} schedule entries")
+    except Exception as e:
+        logger.warning(f"Ignoring unreadable schedule {SCHEDULE_PATH}: {e}")
+        schedule = []
+
+
+def save_schedule() -> None:
+    try:
+        SCHEDULE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = SCHEDULE_PATH.with_suffix(".json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(schedule, f)
+        os.replace(tmp, SCHEDULE_PATH)
+    except Exception as e:
+        logger.warning(f"Could not persist schedule: {e}")
+
+
+def _entry_due(entry: Dict, now) -> bool:
+    """True if entry should fire at `now` and has not already fired this minute."""
+    if not entry.get("enabled", True):
+        return False
+    if entry.get("time") != now.strftime("%H:%M"):
+        return False
+    days = entry.get("days")
+    if days and now.weekday() not in days:
+        return False
+    # Guard against firing twice inside the same minute if the loop runs fast.
+    stamp = now.strftime("%Y-%m-%d %H:%M")
+    if _last_fired.get(entry["id"]) == stamp:
+        return False
+    _last_fired[entry["id"]] = stamp
+    return True
+
+
+async def scheduler_loop() -> None:
+    """Check every 30s for entries due to fire."""
+    while True:
+        try:
+            now = datetime.now()
+            for entry in list(schedule):
+                if not _entry_due(entry, now):
+                    continue
+                profile = entry.get("profile")
+                if state["switching"]:
+                    logger.warning(f"Schedule {entry['id']}: switch already in "
+                                   f"progress, skipping {profile}")
+                    continue
+                profiles = load_profiles()
+                if profile not in profiles:
+                    logger.error(f"Schedule {entry['id']}: unknown profile {profile}")
+                    continue
+                logger.info(f"Schedule {entry['id']} firing: activating {profile}")
+                asyncio.create_task(do_switch(profile))
+        except Exception as e:
+            # A bad entry must never kill the loop.
+            logger.error(f"Scheduler iteration failed: {e}")
+        await asyncio.sleep(30)
+
+
+@app.get("/schedule")
+async def list_schedule():
+    return {"schedule": schedule}
+
+
+@app.post("/schedule")
+async def add_schedule(entry: Dict):
+    profile = entry.get("profile")
+    at = entry.get("time")
+    if not profile or not at:
+        raise HTTPException(400, "profile and time are required")
+    if profile not in load_profiles():
+        raise HTTPException(404, f"Unknown profile '{profile}'")
+    try:
+        datetime.strptime(at, "%H:%M")
+    except ValueError:
+        raise HTTPException(400, "time must be HH:MM (24h)")
+    days = entry.get("days")
+    if days is not None:
+        if not isinstance(days, list) or any(
+                not isinstance(d, int) or d < 0 or d > 6 for d in days):
+            raise HTTPException(400, "days must be a list of ints 0-6 (Mon=0)")
+
+    new = {
+        "id": f"sch-{int(time.time() * 1000)}",
+        "profile": profile,
+        "time": at,
+        "days": days,
+        "enabled": bool(entry.get("enabled", True)),
+    }
+    schedule.append(new)
+    save_schedule()
+    return new
+
+
+@app.delete("/schedule/{entry_id}")
+async def delete_schedule(entry_id: str):
+    global schedule
+    remaining = [e for e in schedule if e["id"] != entry_id]
+    if len(remaining) == len(schedule):
+        raise HTTPException(404, f"No schedule entry '{entry_id}'")
+    schedule = remaining
+    _last_fired.pop(entry_id, None)
+    save_schedule()
+    return {"message": f"Deleted {entry_id}"}
+
+
+@app.on_event("startup")
+async def _start_scheduler():
+    global _scheduler_task
+    load_schedule()
+    _scheduler_task = asyncio.create_task(scheduler_loop())
+    logger.info("Scheduler started")
+
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 
