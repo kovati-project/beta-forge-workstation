@@ -111,6 +111,54 @@ async def load_lora(name: str) -> Dict:
     }
 
 
+HF_API = "https://huggingface.co/api/models"
+
+
+@router.get("/models/hf/search")
+async def search_huggingface(q: str, limit: int = 20, task: Optional[str] = None) -> Dict:
+    """Search the Hugging Face Hub so a repo id does not have to be known up front.
+
+    Proxied through the backend rather than called from the browser: the host has
+    outbound access and the UI may not, and it keeps one place to add a token later
+    for gated repos.
+    """
+    q = (q or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="q is required")
+    limit = max(1, min(limit, 50))
+
+    params = {"search": q, "limit": limit, "sort": "downloads", "direction": -1}
+    if task:
+        params["filter"] = task
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(HF_API, params=params)
+            r.raise_for_status()
+            raw = r.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Hugging Face Hub timed out")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Hugging Face Hub unreachable: {e}")
+
+    results = []
+    for m in raw if isinstance(raw, list) else []:
+        repo_id = m.get("modelId") or m.get("id")
+        if not repo_id:
+            continue
+        results.append({
+            "repo_id": repo_id,
+            "downloads": m.get("downloads", 0),
+            "likes": m.get("likes", 0),
+            "pipeline_tag": m.get("pipeline_tag"),
+            "gated": bool(m.get("gated")),
+            "updated": m.get("lastModified"),
+            # Suggested local name, so the download form can be prefilled.
+            "suggested_name": repo_id.split("/")[-1].lower(),
+        })
+    return {"query": q, "count": len(results), "results": results}
+
+
 @router.get("/models/vllm/models")
 async def list_vllm_models(endpoint: str = "vllm-pair-a") -> Dict:
     """List models from vLLM endpoint."""

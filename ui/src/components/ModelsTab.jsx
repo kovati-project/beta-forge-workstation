@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   getModels, deleteModel, pullModel,
   getVllmLocalModels, activateVllmModel, downloadVllmModel, getVllmDownloadStatus,
+  searchHuggingFace,
 } from '../utils/resourcesAPI';
 import { Btn } from './Btn';
 import './ModelsTab.css';
@@ -27,6 +28,10 @@ function VllmModelsSection() {
   const [dlName, setDlName]           = useState('');
   const [dlStatus, setDlStatus]       = useState({});
   const [dlError, setDlError]         = useState(null);
+  const [hfQuery, setHfQuery]         = useState('');
+  const [hfResults, setHfResults]     = useState(null);
+  const [hfSearching, setHfSearching] = useState(false);
+  const [hfError, setHfError]         = useState(null);
   const pollRef = useRef(null);
 
   const loadVllm = async () => {
@@ -105,6 +110,30 @@ function VllmModelsSection() {
     if (!dlName || dlName === deriveLocalName(dlRepo)) {
       setDlName(deriveLocalName(val));
     }
+  };
+
+  const handleHfSearch = async () => {
+    const q = hfQuery.trim();
+    if (!q) return;
+    setHfSearching(true);
+    setHfError(null);
+    try {
+      const data = await searchHuggingFace(q);
+      setHfResults(data.results || []);
+    } catch (err) {
+      setHfError(err.message);
+      setHfResults(null);
+    } finally {
+      setHfSearching(false);
+    }
+  };
+
+  // Clicking a result fills the download form rather than starting a download —
+  // the local name is still editable, and a wrong click costs nothing.
+  const handlePickHfModel = (result) => {
+    handleRepoChange(result.repo_id);
+    setHfResults(null);
+    setHfQuery('');
   };
 
   const deriveLocalName = (repoId) => repoId.includes('/') ? repoId.split('/').pop() : repoId;
@@ -194,6 +223,51 @@ function VllmModelsSection() {
           )}
         </tbody>
       </table>
+
+      {/* Search HuggingFace */}
+      <div className="vllm-subsection-label">Search HuggingFace</div>
+      <div className="hf-search">
+        <input
+          type="text"
+          placeholder="e.g. qwen coder, llama 70b, whisper"
+          value={hfQuery}
+          onChange={e => setHfQuery(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleHfSearch(); }}
+          disabled={hfSearching}
+        />
+        <Btn
+          label={hfSearching ? 'Searching…' : 'Search'}
+          size="sm"
+          disabled={!hfQuery.trim() || hfSearching}
+          onClick={handleHfSearch}
+        />
+      </div>
+
+      {hfError && <div className="error-message">{hfError}</div>}
+
+      {hfResults && hfResults.length === 0 && (
+        <div className="hf-empty">No models matched that search.</div>
+      )}
+
+      {hfResults && hfResults.length > 0 && (
+        <div className="hf-results">
+          {hfResults.map(r => (
+            <button
+              key={r.repo_id}
+              className="hf-result"
+              onClick={() => handlePickHfModel(r)}
+              title={`Use ${r.repo_id}`}
+            >
+              <span className="hf-result-id">{r.repo_id}</span>
+              <span className="hf-result-meta">
+                {r.pipeline_tag && <span className="hf-tag">{r.pipeline_tag}</span>}
+                {r.gated && <span className="hf-gated">gated</span>}
+                {(r.downloads || 0).toLocaleString()} downloads
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Download from HuggingFace */}
       <div className="vllm-subsection-label">Download from HuggingFace</div>

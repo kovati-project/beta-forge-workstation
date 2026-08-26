@@ -232,3 +232,73 @@
   color: var(--cyan);
   border-color: var(--cyan);
 }
+
+/* Hugging Face search */
+.hf-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.hf-search input {
+  flex: 1;
+  min-width: 0;
+}
+
+.hf-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.hf-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.hf-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.hf-result:last-child { border-bottom: none; }
+.hf-result:hover { background: var(--cyan-dim); color: var(--cyan); }
+
+.hf-result-id { font-weight: 500; overflow-wrap: anywhere; }
+
+.hf-result-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.hf-tag,
+.hf-gated {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.hf-gated { color: var(--amber); border-color: var(--amber); }

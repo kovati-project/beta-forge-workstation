@@ -76,6 +76,16 @@ export async function activateVllmModel(slot, model) {
   return response.json();
 }
 
+export async function searchHuggingFace(query, limit = 20) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const response = await fetch(`/api/models/hf/search?${params}`);
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Hugging Face search failed');
+  }
+  return response.json();
+}
+
 export async function downloadVllmModel(repoId, localName) {
   const response = await fetch('/api/models/vllm/download', {
     method: 'POST',
