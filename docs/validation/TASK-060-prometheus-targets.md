@@ -43,3 +43,29 @@ addressing fault, not a service outage.
 
 Fails. Blocked on #51 / #32 — replacing the hardcoded `10.10.10.2` with a
 resolvable name fixes all seven at once.
+
+## Alert rules
+
+Follow-up audit of `configs/prometheus/alerts.yml` against what is actually
+scraped. Several rules referenced metrics nothing in this estate emits, so they
+could never fire. Checked statically (promtool, dcgm-exporter 3.3.6
+`default-counters.csv`, vLLM 0.31 source); the live workstation was not reachable.
+
+| Rule | Problem | Action |
+| --- | --- | --- |
+| `vLLMHighLatency` | `vllm_request_duration_seconds` does not exist; `histogram_quantile` was fed a raw series | Rewritten on `vllm:e2e_request_latency_seconds_bucket` with `rate()` and `sum by (le, ...)` |
+| `OllamaQueueBuildup` | `ollama_queue_size`: stock Ollama exports no metrics | Disabled (commented, with what an exporter would need) |
+| `TrainingCheckpointError` | `training_checkpoint_errors_total`: nothing in the repo emits it | Disabled (commented, with how to enable) |
+| `PrometheusStorageHigh` | `mountpoint="/prometheus"` exists only inside the prometheus container | Disabled; `FilesystemCritical` covers the backing host filesystem |
+| `NVLinkErrors` | wrong field name (`..._ERR_COUNT_TOTAL`); field also commented out in the default counters CSV | Name corrected; still needs a custom counters CSV to be exported |
+| `GPUECCDoublebitError` | valid name, but commented out in the default counters CSV | Unchanged; documented as requiring a counters CSV (and ECC enabled on the card) |
+| `CPUHighTemperature` | matched `chip=~".*coretemp.*"`; host is AMD (`k10temp`) and `chip` is a sysfs path | Selects by driver name through `node_hwmon_chip_names` |
+| `HighScrapeFail` | `rate()` of `prometheus_sd_failed_configs`, a gauge that is always 0 with static configs | Now rate of rejected scraped samples; unreachable targets stay with `ServiceDown` |
+| `GPUPressure` | `rate()` of a PCIe throughput sample is noise | Reduced to `DCGM_FI_DEV_GPU_UTIL > 95` |
+| `FilesystemCritical` | excluded `/` despite being the root-filesystem alert | Exclusion removed |
+| `GPUVRAMCritical` / `GPUVRAMWarning` | annotation said MB; DCGM reports MiB | Annotation only |
+
+Not changed: `ServiceDown` (`up == 0`) semantics; a comment now lists the jobs
+expected to be down. `NetworkInterfaceDown`'s device regex is unverified (needs
+`ip -br link` on the host, and node-exporter is not on the host network
+namespace). Unit tests: `configs/prometheus/tests/alerts_test.yml`.

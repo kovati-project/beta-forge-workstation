@@ -1,5 +1,16 @@
 # Prometheus alerting rules for AI Workstation
 # Monitors GPU, system, and service health
+#
+# Every metric referenced below must be produced by something this estate
+# actually scrapes (see prometheus.yml). Rules whose metric has no producer are
+# NOT kept active -- they are listed, commented out, with what would be needed
+# (search for "DISABLED"). A rule that can never fire is not protection.
+#
+# GPU metric names come from dcgm-exporter 3.3.6-3.4.2's built-in
+# default-counters.csv (docker/compose.monitoring.yml). Counters that CSV ships
+# commented out are called out per rule. DCGM reports framebuffer in MiB.
+# vLLM metric names are colon-named (vllm:...) and histograms need
+# rate(..._bucket[...]) + `le` for histogram_quantile.
 
 groups:
   - name: gpu_alerts
@@ -27,7 +38,7 @@ groups:
           summary: "GPU {{ $labels.gpu }} CRITICAL temperature"
           description: "GPU {{ $labels.gpu }} temperature {{ $value }}°C — throttling or shutdown imminent"
 
-      # VRAM Critical (< 1GB free)
+      # VRAM Critical (< 1 GiB free). DCGM_FI_DEV_FB_FREE is in MiB.
       - alert: GPUVRAMCritical
         expr: DCGM_FI_DEV_FB_FREE < 1024
         for: 1m
@@ -36,9 +47,12 @@ groups:
           component: gpu
         annotations:
           summary: "GPU {{ $labels.gpu }} VRAM nearly full"
-          description: "GPU {{ $labels.gpu }} has only {{ $value | humanize }}MB free VRAM"
+          description: "GPU {{ $labels.gpu }} has only {{ $value | humanize }}MiB free VRAM"
 
-      # VRAM Warning (< 2GB free)
+      # VRAM Warning (< 2 GiB free). DCGM_FI_DEV_FB_FREE is in MiB.
+      # NOTE: a 24 GiB A5500 running vLLM with --gpu-memory-utilization 0.92
+      # (compose.inference.yml pair profiles) leaves ~1.9 GiB free by design, so
+      # this warning will fire for as long as such a profile is loaded.
       - alert: GPUVRAMWarning
         expr: DCGM_FI_DEV_FB_FREE < 2048
         for: 2m
@@ -47,7 +61,7 @@ groups:
           component: gpu
         annotations:
           summary: "GPU {{ $labels.gpu }} VRAM low"
-          description: "GPU {{ $labels.gpu }} has {{ $value | humanize }}MB free VRAM — consider stopping tasks"
+          description: "GPU {{ $labels.gpu }} has {{ $value | humanize }}MiB free VRAM — consider stopping tasks"
 
       # GPU Power Draw Warning (> 220W = TDP for A5500)
       - alert: GPUHighPowerDraw
@@ -61,6 +75,12 @@ groups:
           description: "GPU {{ $labels.gpu }} power draw {{ $value }}W exceeds TDP for 5 minutes"
 
       # GPU ECC Double-Bit Errors (hardware fault)
+      # REQUIRES: DCGM_FI_DEV_ECC_DBE_VOL_TOTAL is commented out in
+      # dcgm-exporter's default-counters.csv, and nothing in this repo mounts a
+      # custom counters file, so this series is NOT exported today and the rule
+      # cannot fire. Enable it by passing a counters CSV with that line
+      # uncommented (dcgm-exporter `-f`/DCGM_EXPORTER_COLLECTORS). ECC must also
+      # be turned on on the card (nvidia-smi -e 1) for the counter to be valid.
       - alert: GPUECCDoublebitError
         expr: DCGM_FI_DEV_ECC_DBE_VOL_TOTAL > 0
         for: 0m
@@ -72,8 +92,13 @@ groups:
           description: "GPU {{ $labels.gpu }} has {{ $value }} double-bit ECC errors — HARDWARE FAULT. Stop workloads immediately."
 
       # NVLink Errors
+      # The previous metric name (..._FLIT_ERR_COUNT_TOTAL) does not exist in
+      # DCGM; the field is ..._FLIT_ERROR_COUNT_TOTAL.
+      # REQUIRES: that field is commented out in dcgm-exporter's
+      # default-counters.csv, so it is NOT exported today and this rule cannot
+      # fire until a custom counters CSV enables it (same as GPUECCDoublebitError).
       - alert: NVLinkErrors
-        expr: DCGM_FI_DEV_NVLINK_CRC_FLIT_ERR_COUNT_TOTAL > 0
+        expr: DCGM_FI_DEV_NVLINK_CRC_FLIT_ERROR_COUNT_TOTAL > 0
         for: 0m
         labels:
           severity: critical
@@ -86,15 +111,25 @@ groups:
     interval: 30s
     rules:
       # CPU Temperature Alert
+      # The host CPU is an AMD Threadripper Pro, whose hwmon driver is k10temp
+      # (coretemp is Intel-only). node_exporter's `chip` label is a sysfs path
+      # (e.g. pci0000:00_0000:00_18_3), NOT the driver name, so a regex on
+      # `chip` can never match; the driver name lives on node_hwmon_chip_names.
+      # Join on `chip` to select by driver name. coretemp is kept so the rule
+      # also works on Intel hosts. Per-sensor label is `sensor` (Tctl, Tccd1...).
       - alert: CPUHighTemperature
-        expr: node_hwmon_temp_celsius{chip=~".*coretemp.*"} > 85
+        expr: |
+          node_hwmon_temp_celsius
+            * on (chip) group_left (chip_name)
+          node_hwmon_chip_names{chip_name=~"k10temp|coretemp"}
+          > 85
         for: 5m
         labels:
           severity: warning
           component: system
         annotations:
           summary: "CPU temperature high"
-          description: "CPU core {{ $labels.core }} temperature {{ $value }}°C exceeds 85°C for 5 minutes"
+          description: "CPU sensor {{ $labels.sensor }} ({{ $labels.chip_name }}) temperature {{ $value }}°C exceeds 85°C for 5 minutes"
 
       # System Load Alert (> num_cpu_cores for 5 min)
       - alert: SystemHighLoad
@@ -118,10 +153,13 @@ groups:
           summary: "System memory low"
           description: "Available memory {{ $value | humanizePercentage }} — consider stopping tasks"
 
-      # Root Filesystem Critical (> 90% full)
+      # Filesystem Critical (> 90% full), including the root filesystem.
+      # The previous expression excluded mountpoint="/" despite being described
+      # as the root-filesystem alert, so the filesystem holding /var/lib/docker
+      # (and the prometheus-data volume) was never checked.
       - alert: FilesystemCritical
         expr: |
-          ((node_filesystem_size_bytes{fstype=~"ext4|xfs",mountpoint!="/"} - node_filesystem_free_bytes)
+          ((node_filesystem_size_bytes{fstype=~"ext4|xfs"} - node_filesystem_free_bytes)
            / node_filesystem_size_bytes) > 0.9
         for: 2m
         labels:
@@ -132,6 +170,11 @@ groups:
           description: "Filesystem {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} full"
 
       # Network Interface Down
+      # UNVERIFIED: the device regex is a guess at the host NIC names (modern
+      # Ubuntu usually names NICs enp*/eno*np*/ens*, not eth0). Also,
+      # node-exporter in compose.monitoring.yml is not on the host network
+      # namespace, so it reports the container's own eth0 (always up), not the
+      # host's NICs. Confirm names with `ip -br link` on the host and fix both.
       - alert: NetworkInterfaceDown
         expr: node_network_up{device=~"eth0|eno1"} == 0
         for: 2m
@@ -146,6 +189,17 @@ groups:
     interval: 30s
     rules:
       # Service Down (cannot scrape)
+      # NOTE: several scrape jobs in prometheus.yml are EXPECTED to be down, so
+      # this rule fires for them permanently until the maintainer decides
+      # whether to drop those jobs (decision pending; semantics unchanged here):
+      #   - loadout-manager : scraped at /health, which is JSON, not Prometheus
+      #                       exposition format (no /metrics endpoint exists)
+      #   - ollama          : stock Ollama exposes no Prometheus endpoint
+      #   - comfyui         : exposes no Prometheus endpoint
+      #   - open-webui      : exposes no Prometheus endpoint
+      # The vllm-pair-a / vllm-pair-b / vllm-4gpu jobs are only up while the
+      # matching loadout profile is running, so at most one is normally up.
+      # Separately, all 10.10.10.2 targets are currently unroutable (TASK-060).
       - alert: ServiceDown
         expr: up == 0
         for: 1m
@@ -156,72 +210,121 @@ groups:
           summary: "Service {{ $labels.job }} unavailable"
           description: "Service {{ $labels.job }} ({{ $labels.instance }}) is not responding to scrape"
 
-      # Prometheus Storage Warning (> 80% used)
-      - alert: PrometheusStorageHigh
-        expr: (node_filesystem_size_bytes{mountpoint="/prometheus"} - node_filesystem_free_bytes{mountpoint="/prometheus"}) / node_filesystem_size_bytes{mountpoint="/prometheus"} > 0.8
-        for: 10m
-        labels:
-          severity: warning
-          component: prometheus
-        annotations:
-          summary: "Prometheus storage usage high"
-          description: "Prometheus storage is {{ $value | humanizePercentage }} full"
+      # DISABLED -- Prometheus Storage Warning (> 80% used)
+      # This used node_filesystem_*{mountpoint="/prometheus"}, but /prometheus is
+      # a mount point only inside the prometheus container (a named docker
+      # volume); node-exporter sees the host mount table, so that series never
+      # exists and the rule could never fire. The host filesystem that backs the
+      # prometheus-data volume is already covered by FilesystemCritical.
+      # To get a real TSDB-size alert, set --storage.tsdb.retention.size in
+      # compose.monitoring.yml and then enable:
+      #   expr: prometheus_tsdb_storage_blocks_bytes / (prometheus_tsdb_retention_limit_bytes > 0) > 0.8
+      # - alert: PrometheusStorageHigh
+      #   expr: prometheus_tsdb_storage_blocks_bytes / (prometheus_tsdb_retention_limit_bytes > 0) > 0.8
+      #   for: 10m
+      #   labels:
+      #     severity: warning
+      #     component: prometheus
+      #   annotations:
+      #     summary: "Prometheus storage usage high"
+      #     description: "Prometheus TSDB is {{ $value | humanizePercentage }} of its size-retention limit"
 
       # High Scrape Failure Rate
+      # Previously used prometheus_sd_failed_configs, a *gauge* of service-
+      # discovery configs that failed to load (always 0 with static_configs);
+      # rate() of it is meaningless. Unreachable targets are caught per-target
+      # by ServiceDown (up == 0). This rule covers scrapes that Prometheus
+      # reached but had to reject (sample limit, body size limit, out-of-order,
+      # out-of-bounds, duplicate timestamps): sum of rejected samples/second.
       - alert: HighScrapeFail
         expr: |
-          rate(prometheus_sd_failed_configs[5m]) > 0.1
+          sum(
+              rate(prometheus_target_scrapes_exceeded_sample_limit_total[5m])
+            + rate(prometheus_target_scrapes_exceeded_body_size_limit_total[5m])
+            + rate(prometheus_target_scrapes_sample_out_of_order_total[5m])
+            + rate(prometheus_target_scrapes_sample_out_of_bounds_total[5m])
+            + rate(prometheus_target_scrapes_sample_duplicate_timestamp_total[5m])
+          ) > 0.1
         for: 5m
         labels:
           severity: warning
           component: prometheus
         annotations:
           summary: "Prometheus scrape failures"
-          description: "Prometheus failing to scrape targets at rate {{ $value | humanizePercentage }} per second"
+          description: "Prometheus is rejecting scraped samples at {{ $value | humanize }} per second"
 
   - name: inference_alerts
     interval: 30s
     rules:
-      # vLLM High Latency
+      # vLLM High Latency (p95 end-to-end request latency > 30s)
+      # Real metric: vllm:e2e_request_latency_seconds (histogram; labels
+      # model_name, engine). histogram_quantile needs the rate of the _bucket
+      # series aggregated by `le`. 30 is a native bucket boundary in vLLM, so
+      # the quantile is not interpolated across the threshold. An idle server
+      # yields NaN, which compares false. Grouped by job so the vllm-pair-a /
+      # pair-b / 4gpu profile is identifiable.
       - alert: vLLMHighLatency
-        expr: histogram_quantile(0.95, vllm_request_duration_seconds) > 30
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, job, instance, model_name) (
+              rate(vllm:e2e_request_latency_seconds_bucket[5m])
+            )
+          ) > 30
         for: 5m
         labels:
           severity: warning
           component: inference
         annotations:
           summary: "vLLM p95 latency high"
-          description: "vLLM p95 request latency {{ $value }}s on {{ $labels.instance }}"
+          description: "vLLM p95 request latency {{ $value | humanizeDuration }} on {{ $labels.job }} ({{ $labels.instance }}, model {{ $labels.model_name }})"
 
-      # Ollama Queue Buildup
-      - alert: OllamaQueueBuildup
-        expr: ollama_queue_size > 20
-        for: 3m
-        labels:
-          severity: warning
-          component: inference
-        annotations:
-          summary: "Ollama queue backed up"
-          description: "Ollama queue has {{ $value }} pending requests"
+      # DISABLED -- Ollama Queue Buildup
+      # Stock Ollama exposes no Prometheus metrics at all (no /metrics, and no
+      # ollama_queue_size anywhere), so this rule could never fire. Enabling it
+      # needs an exporter that publishes a queue-depth gauge named
+      # ollama_queue_size (a sidecar or proxy in front of :11434); none exists
+      # in this repo. The 'ollama' scrape job is also expected to be down (see
+      # ServiceDown). vLLM equivalent, if wanted, is vllm:num_requests_waiting.
+      # - alert: OllamaQueueBuildup
+      #   expr: ollama_queue_size > 20
+      #   for: 3m
+      #   labels:
+      #     severity: warning
+      #     component: inference
+      #   annotations:
+      #     summary: "Ollama queue backed up"
+      #     description: "Ollama queue has {{ $value }} pending requests"
 
   - name: training_alerts
     interval: 30s
     rules:
-      # Training Checkpoint Save Failure
-      - alert: TrainingCheckpointError
-        expr: increase(training_checkpoint_errors_total[5m]) > 0
-        for: 1m
-        labels:
-          severity: critical
-          component: training
-        annotations:
-          summary: "Training checkpoint save failed"
-          description: "Training process unable to save checkpoints ({{ $value }} failures in 5m)"
+      # DISABLED -- Training Checkpoint Save Failure
+      # training_checkpoint_errors_total is not emitted by anything in this repo
+      # (searched configs/, scripts/, docker/, loadout-manager/, ui/: no
+      # prometheus client, pushgateway, or node-exporter textfile collector
+      # writes it) and the training containers expose no scrape target. To
+      # enable, the training job must publish this counter, e.g. via a
+      # pushgateway or a node-exporter textfile-collector .prom file, and be
+      # scraped by Prometheus.
+      # - alert: TrainingCheckpointError
+      #   expr: increase(training_checkpoint_errors_total[5m]) > 0
+      #   for: 1m
+      #   labels:
+      #     severity: critical
+      #     component: training
+      #   annotations:
+      #     summary: "Training checkpoint save failed"
+      #     description: "Training process unable to save checkpoints ({{ $value }} failures in 5m)"
 
       # GPU Pressure During Training
+      # The previous expression also required rate(DCGM_FI_DEV_PCIE_RX_THROUGHPUT[1m]) > 0.
+      # That field is an instantaneous KB/s throughput sample (the exporter's
+      # "counter" type label notwithstanding), so rate() of it is the slope of a
+      # throughput and is ~random noise around zero. Sustained >95% utilization
+      # already implies activity, so the clause is dropped.
       - alert: GPUPressure
-        expr: |
-          (DCGM_FI_DEV_GPU_UTIL > 95) and (rate(DCGM_FI_DEV_PCIE_RX_THROUGHPUT[1m]) > 0)
+        expr: DCGM_FI_DEV_GPU_UTIL > 95
         for: 10m
         labels:
           severity: info
