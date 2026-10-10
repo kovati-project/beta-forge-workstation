@@ -139,7 +139,7 @@ if ($rsyncBin) {
     if ($DryRun) {
         Write-Host "[dry-run] Would run: scp -r docker scripts configs loadout-manager ${Host_}:${RemoteDir}/"
     } else {
-        Write-Host "rsync not found — using scp..."
+        Write-Host "rsync not found - using scp..."
         & $scpBin -r docker scripts configs loadout-manager "${Host_}:${RemoteDir}/"
         if ($LASTEXITCODE -ne 0) { throw "scp failed (exit $LASTEXITCODE)" }
     }
