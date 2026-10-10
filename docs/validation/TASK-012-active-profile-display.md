@@ -49,3 +49,22 @@ contents across a process restart — the condition #48 exists to fix.
 Fails on both counts. Defect 1 is a one-line-per-field fix in the reducer and is
 independently actionable now; the banner will stay blank even after #48 lands
 unless it is fixed. Defect 2 is #48's scope.
+
+## Resolution
+
+**Defect 1 fixed** (branch `fix/ui-active-profile-state`). The `SET_GPU_STATUS`
+reducer in `ui/src/context/AppContext.jsx` now maps the snake_case `/status`
+fields (`active_profile`, `running_services`, `last_switched`) to the camelCase
+state shape (`activeProfile`, `runningServices`, `lastSwitched`; camelCase input
+is still accepted). `lastSwitched` was previously never populated from `/status`
+and now is. The `|| state.activeProfile` merge was replaced by an `undefined`
+check, so an explicit backend `null` clears the active profile instead of being
+masked by a stale value.
+
+Verified statically: reducer exercised in node with a realistic payload
+(profile set, then null) and `npm run build` succeeds. Not verified against the
+live workstation.
+
+**Defect 2** is tracked in #48 (commit 4090327); `loadout-manager/main.py` now
+calls `load_state()` at startup, restoring `active_profile`, `last_switched`
+and `running_services`. Not touched here.
