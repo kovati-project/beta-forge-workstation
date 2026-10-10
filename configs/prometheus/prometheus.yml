@@ -13,6 +13,18 @@ alerting:
     - static_configs:
         - targets: ['alertmanager:9093']
 
+# Scrape addressing
+# Prometheus runs inside a container, so targets are addressed from the
+# container's point of view (never the host's LAN/10.x address):
+#   - Services on the shared external Docker network `ai-workstation` are
+#     reached by container_name:<container-internal-port> (NOT the host-published
+#     port, which can differ, e.g. open-webui 3000->8080, vllm-pair-b 8001->8000).
+#   - loadout-manager lives only on its own `ai-loadout` network, so it is
+#     reached via host.docker.internal:<published-port>; the prometheus service
+#     in docker/compose.monitoring.yml maps that name to the host gateway.
+# Targets whose container is not running (e.g. profile-gated vllm-pair-b /
+# vllm-4gpu) will show DOWN with a DNS error; that is expected.
+
 scrape_configs:
 
   - job_name: 'gpu-dcgm'
@@ -43,9 +55,13 @@ scrape_configs:
   - job_name: 'loadout-manager'
     scrape_interval: 10s
     scrape_timeout: 5s
+    # FIXME(TASK-060): loadout-manager exposes no Prometheus-format endpoint.
+    # /health returns JSON, so this target will be reachable but still report
+    # DOWN (text format parse error) until a real /metrics endpoint exists.
+    # Address fixed here; the endpoint itself is intentionally not changed.
     metrics_path: /health
     static_configs:
-      - targets: ['10.10.10.2:8800']
+      - targets: ['host.docker.internal:8800']
         labels:
           service: gpu-orchestrator
 
@@ -53,7 +69,9 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 10s
     static_configs:
-      - targets: ['10.10.10.2:11434']
+      # NOTE: stock Ollama has no /metrics endpoint (404); needs a sidecar
+      # exporter before this target can ever be UP.
+      - targets: ['ollama:11434']
         labels:
           service: ollama
           type: inference
@@ -62,7 +80,7 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 10s
     static_configs:
-      - targets: ['10.10.10.2:8000']
+      - targets: ['vllm-pair-a:8000']
         labels:
           service: vllm
           profile: pair-a
@@ -72,7 +90,7 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 10s
     static_configs:
-      - targets: ['10.10.10.2:8001']
+      - targets: ['vllm-pair-b:8000']   # host port 8001 -> container 8000
         labels:
           service: vllm
           profile: pair-b
@@ -82,7 +100,7 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 10s
     static_configs:
-      - targets: ['10.10.10.2:8002']
+      - targets: ['vllm-4gpu:8000']     # host port 8002 -> container 8000
         labels:
           service: vllm
           profile: 4gpu
@@ -92,7 +110,9 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 10s
     static_configs:
-      - targets: ['10.10.10.2:8188']
+      # NOTE: stock ComfyUI has no /metrics endpoint (404); needs a custom
+      # node/exporter before this target can ever be UP.
+      - targets: ['comfyui:8188']
         labels:
           service: comfyui
           type: image-gen
@@ -101,7 +121,10 @@ scrape_configs:
     scrape_interval: 20s
     scrape_timeout: 10s
     static_configs:
-      - targets: ['10.10.10.2:3000']
+      # NOTE: container-internal port is 8080 (host 3000 -> 8080). Open WebUI
+      # does not serve a Prometheus pull endpoint at /metrics in stock config
+      # (telemetry is OpenTelemetry/OTLP push), so this is expected DOWN.
+      - targets: ['open-webui:8080']
         labels:
           service: webui
 
