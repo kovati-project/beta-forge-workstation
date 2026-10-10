@@ -69,3 +69,20 @@ profile name — the API returns a dict, not a list, so a bare fallback still ha
 
 Fails. High severity: this is the primary control surface of the application and it
 is empty. Fix is small and well understood.
+
+## Resolution
+
+Fixed on branch `fix/ui-profiles-render`.
+
+- `ui/src/hooks/useLoadouts.js`: added `normalizeLoadouts()`, which converts the
+  `/loadouts` dict into an array of profiles with `name` set from the key. It also
+  derives `gpus` (numeric) from `exclusive_gpus` (strings), because `ProfileCard`
+  reads `profile.gpus` for the GPU diagram and VRAM check.
+- `ui/src/pages/Loadout.jsx`: `loading` is now `profiles === null && !error`, so the
+  initial `null` state shows skeletons, `[]` shows the "No profiles found" message,
+  and a fetch failure shows the error state.
+
+Verified: `npm run build` succeeds; the normaliser was run under node against a
+sample payload. Not verified: rendering against the live workstation.
+Not addressed: `ProfileCard` also reads `accent` and `nvlink_pairs`, which
+`/loadouts` does not return (defaults to cyan / no bridge indicator).

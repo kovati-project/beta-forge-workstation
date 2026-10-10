@@ -11,7 +11,7 @@ export function Loadout() {
     <div className="loadout-page">
       <NVLinkTopology />
       <SwitchingBanner />
-      <ProfileGrid profiles={profiles} loading={!profiles} error={error} />
+      <ProfileGrid profiles={profiles} loading={profiles === null && !error} error={error} />
     </div>
   );
 }
