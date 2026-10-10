@@ -55,3 +55,48 @@ at all. That is a plausible cause worth checking first.
 
 Fails, blocked. Fix the 443 handshake before this validation can proceed. Start with
 #62, since a config that was never deployed is the cheapest explanation.
+
+## Resolution
+
+**Root cause (reproduced):** SNI mismatch, not a missing or undeployed config. The
+`301 ... Location: https://localhost/` in the evidence is the `permanent` redirect
+from the `:80` block of `Caddyfile.security`, so the hardened config *was* the one
+running (this also rules out #62 as the cause of the handshake failure). That
+config declared a single TLS site, `ai.local` with `tls internal`, so Caddy held a
+certificate for that name only. A client connecting to `localhost` (as the
+validation did) or to a bare IP asks for a name Caddy has no certificate for, and
+Caddy aborts the handshake with TLS alert 80 `internal_error`.
+
+Reproduced with `caddy:2-alpine` running the pre-fix Caddyfile: the cert for
+`ai.local` was issued normally and `https://ai.local/.health` returned 200, while
+`https://localhost/` and `https://127.0.0.1/` failed with
+`error:0A000438:SSL routines::tlsv1 alert internal error` -- the same error
+signature as the evidence.
+
+**Fix (`configs/caddy/Caddyfile.security`):**
+
+- Site address is now `ai.local, localhost`, so the name the validation probes use
+  gets an internal-CA certificate and the full forward-auth route set.
+- Global `default_sni ai.local` and `fallback_sni ai.local`, so SNI-less (IP) and
+  unknown-SNI connections complete the handshake instead of aborting.
+- New `https://` catch-all that answers `404`, so a Host header that matches no
+  site is refused explicitly instead of getting Caddy's default empty `200`.
+
+Post-fix results in the same harness: `https://localhost/.health` 200,
+`https://ai.local/` 302 to `/webui`, `https://127.0.0.1/` and unknown names 404,
+and a protected path was not served unauthenticated (502 there because Authentik
+was not reachable in the harness, i.e. forward-auth fails closed).
+`http://localhost/` now answers `308` (automatic HTTPS redirect) rather than `301`;
+the `:80` block remains for other hostnames.
+
+`scripts/deploy-phase13.sh` now also deploys the Caddyfile (#62) and starts
+`compose.caddy.yml`, so a clean host gets the hardened config without a manual `cp`.
+
+**Not verified (host state, not visible from the repo):** the live workstation's
+Caddy version and the writability of `/data/caddy/certs`; and the real 302-to-
+Authentik behaviour, since no Authentik was behind Caddy in the harness. Re-run this
+task on the host after `bash scripts/deploy-phase13.sh`. If the handshake still
+fails, in order of likelihood: (1) the running container still holds the old config
+(`docker restart caddy`); (2) `/data/caddy/certs` is not writable by the container,
+so issuance fails (look for `tls.obtain` errors in `docker logs caddy`); (3) clients
+use a hostname not in the site address list (add it to the Caddyfile).
