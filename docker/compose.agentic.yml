@@ -122,26 +122,6 @@ services:
       sh -c "npm install -g @modelcontextprotocol/server-code-executor &&
              npx @modelcontextprotocol/server-code-executor --port 3102"
 
-  # ── JupyterLab: interactive notebook environment ───────────────────────────
-  # Start with: docker compose --profile notebook up jupyterlab
-  # Access at http://10.10.10.2:8888 — token set via JUPYTER_TOKEN in .env
-  jupyterlab:
-    image: quay.io/jupyter/scipy-notebook:latest
-    container_name: jupyterlab
-    restart: unless-stopped
-    ports:
-      - "8888:8888"
-    volumes:
-      - /data:/home/jovyan/work
-      - /data/models:/home/jovyan/models:ro
-    environment:
-      - JUPYTER_ENABLE_LAB=yes
-      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-changeme}
-      - GRANT_SUDO=yes
-    user: root
-    profiles:
-      - notebook
-
 volumes:
   dify-storage:
   dify-db-data:
