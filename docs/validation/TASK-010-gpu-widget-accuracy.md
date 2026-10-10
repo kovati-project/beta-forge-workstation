@@ -73,3 +73,22 @@ Deferred rather than assumed.
 TASK-010 fails. Fix the telemetry path before this validation can be re-run; the
 widget-accuracy question is not answerable while the backend reports nothing.
 Finding 4 is independent and actionable now.
+
+## Resolution (metrics API)
+
+Addresses finding 2 and the import-time latch behind finding 3, in
+`loadout-manager/api/metrics.py` only:
+
+- NVML is now initialised lazily per request (`nvmlInit` ... `nvmlShutdown` in
+  `finally`) with a 15 s retry backoff after a failure, so a driver that becomes
+  healthy is picked up without restarting the container.
+- `/api/metrics/gpu` adds top-level `available` (bool) and, when telemetry is
+  missing or partial, `error` (`"<ExceptionType>: <msg>"`). The `GPU0..GPU3`
+  keys are unchanged; unreadable GPUs report `null` metrics instead of zeros.
+- `/api/metrics/system` returns `vram_used_gb: null` when NVML is unavailable.
+- Failures are logged once per distinct error (repeated every ~5 min); recovery
+  is logged at INFO.
+
+Verified only against a mocked `pynvml`; not yet re-checked on the live
+workstation. Finding 4 and the root cause of the in-container pynvml failure are
+not addressed here.
