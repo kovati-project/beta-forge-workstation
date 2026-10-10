@@ -14,12 +14,16 @@ services:
       - /data/audio:/audio:ro
     environment:
       - NVIDIA_VISIBLE_DEVICES=0
-      - WHISPER_MODEL=large-v3
-      - WHISPER_INFERENCE_DEVICE=cuda
-      - WHISPER_COMPUTE_TYPE=float16
-      - WHISPER_BEAM_SIZE=5
-      - WHISPER_LANGUAGE=en
-      - WHISPER_VAD_FILTER=true
+      # faster-whisper-server (latest-cuda == v0.5.0) reads nested settings with a
+      # DOUBLE underscore (pydantic env_nested_delimiter="__"). The previous
+      # single-underscore WHISPER_* names were silently ignored. The model must be
+      # the Hugging Face repo id. whisper-1 requests resolve to this model.
+      - WHISPER__MODEL=Systran/faster-whisper-large-v3
+      - WHISPER__INFERENCE_DEVICE=cuda
+      - WHISPER__COMPUTE_TYPE=float16
+      - DEFAULT_LANGUAGE=en
+      # beam size and VAD are not server-level settings in this image version;
+      # VAD is a per-request `vad_filter` form field on /v1/audio/transcriptions.
     deploy:
       resources:
         reservations:
@@ -28,7 +32,11 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/models"]
+      # /health is local and cheap. /v1/models in this image version queries the
+      # Hugging Face Hub, so it needs outbound internet and is slow. python3.12 is
+      # installed explicitly by the image; curl is not guaranteed (the nvidia/cuda
+      # base purges it).
+      test: ["CMD", "python3.12", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -46,15 +54,21 @@ services:
       - /data/audio:/audio
     environment:
       - PIPER_VOICE=en_US-lessac-high
-      - PIPER_LENGTH_SCALE=1.0
-      - PIPER_NOISE_SCALE=0.667
-      - PIPER_NOISE_W=0.8
+      # linuxserver/piper variable names (the previous PIPER_*_SCALE / PIPER_NOISE_W
+      # names are not read by the image and were silently ignored).
+      - PIPER_LENGTH=1.0
+      - PIPER_NOISE=0.667
+      - PIPER_NOISEW=0.8
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:10200/api/voices"]
+      # Piper speaks the Wyoming protocol (raw TCP on 10200), not HTTP, so an HTTP
+      # probe can never succeed. A TCP connect is the same readiness check the
+      # image's own s6 service uses; netcat-openbsd ships in the baseimage.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 10200"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      # First start downloads the voice model from Hugging Face before listening.
+      start_period: 120s
 
 networks:
   default:
