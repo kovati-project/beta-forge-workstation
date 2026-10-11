@@ -100,7 +100,35 @@ sleep 3
 
 # 3. Authentication (before user-facing services)
 start_service "Authentication (Authentik, Caddy)" "compose.auth.yml" || exit 1
-sleep 5
+
+# Wait for Authentik to be healthy (replaces a blind sleep; cold start can take ~60s).
+# Uses the container healthcheck from compose.auth.yml when present, otherwise
+# falls back to an HTTP probe on the published port (9080 -> 9000).
+# Override the timeout with AUTHENTIK_WAIT_TIMEOUT (seconds, default 180).
+AUTHENTIK_WAIT_TIMEOUT="${AUTHENTIK_WAIT_TIMEOUT:-180}"
+AUTHENTIK_WAIT_INTERVAL=5
+log_step "Waiting for Authentik to be healthy (timeout ${AUTHENTIK_WAIT_TIMEOUT}s)..."
+authentik_waited=0
+authentik_ready=false
+while [ "$authentik_waited" -lt "$AUTHENTIK_WAIT_TIMEOUT" ]; do
+    health=$(docker inspect authentik --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 2>/dev/null || echo "missing")
+    if [ "$health" = "healthy" ]; then
+        authentik_ready=true
+        break
+    elif [ "$health" = "none" ] && curl -sf http://localhost:9080/-/health/ready/ &>/dev/null; then
+        authentik_ready=true
+        break
+    fi
+    log_step "  Authentik not ready yet (status: $health, ${authentik_waited}/${AUTHENTIK_WAIT_TIMEOUT}s)..."
+    sleep "$AUTHENTIK_WAIT_INTERVAL"
+    authentik_waited=$((authentik_waited + AUTHENTIK_WAIT_INTERVAL))
+done
+if [ "$authentik_ready" != "true" ]; then
+    log_error "Authentik did not become healthy within ${AUTHENTIK_WAIT_TIMEOUT}s (last status: $health)"
+    log_error "  Inspect with: docker logs authentik --tail 100  (and: docker logs authentik-worker)"
+    exit 1
+fi
+log_step "Authentik is ready"
 
 # 4. Loadout Manager (GPU orchestrator)
 log_step "Starting Loadout Manager (GPU orchestrator)..."
