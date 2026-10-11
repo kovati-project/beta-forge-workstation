@@ -1,0 +1,136 @@
+# Unit tests for ../alerts.yml
+#
+# Run from configs/prometheus/ (promtool resolves rule_files relative to this file):
+#   docker run --rm --entrypoint promtool \
+#     -v "$PWD":/work:ro prom/prometheus test rules /work/tests/alerts_test.yml
+# Input series use the REAL metric names/labels of vLLM, dcgm-exporter and
+# node-exporter, so these also guard against rules drifting back to metrics
+# that no exporter emits.
+
+rule_files:
+  - ../alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # vLLM p95 e2e latency: every request lands in the (30s, 60s] bucket -> p95 > 30s.
+  - name: vllm_high_latency_fires
+    interval: 1m
+    input_series:
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="30.0", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '0+0x20'
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="60.0", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '0+10x20'
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="+Inf", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 3m   # before `for: 5m` has elapsed
+        alertname: vLLMHighLatency
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: vLLMHighLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: inference
+              job: vllm-pair-a
+              instance: "host:8000"
+              model_name: current-model
+            exp_annotations:
+              summary: "vLLM p95 latency high"
+              description: "vLLM p95 request latency 58.5s on vllm-pair-a (host:8000, model current-model)"
+
+  # Fast server: every request lands in the le=30 bucket -> p95 < 30s -> silent.
+  - name: vllm_high_latency_quiet_when_fast
+    interval: 1m
+    input_series:
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="30.0", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '0+10x20'
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="60.0", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '0+10x20'
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="+Inf", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: vLLMHighLatency
+        exp_alerts: []
+
+  # Idle server: no new observations -> histogram_quantile is NaN -> silent.
+  - name: vllm_high_latency_quiet_when_idle
+    interval: 1m
+    input_series:
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="30.0", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '5+0x20'
+      - series: 'vllm:e2e_request_latency_seconds_bucket{le="+Inf", job="vllm-pair-a", instance="host:8000", model_name="current-model", engine="0"}'
+        values: '5+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: vLLMHighLatency
+        exp_alerts: []
+
+  # CPU temperature: selected by hwmon driver name via node_hwmon_chip_names,
+  # so the AMD k10temp chip matches while an NVMe sensor with the same temp does not.
+  - name: cpu_high_temperature_matches_k10temp_only
+    interval: 1m
+    input_series:
+      - series: 'node_hwmon_temp_celsius{chip="pci0000:00_0000:00_18_3", sensor="temp1"}'
+        values: '90+0x10'
+      - series: 'node_hwmon_chip_names{chip="pci0000:00_0000:00_18_3", chip_name="k10temp"}'
+        values: '1+0x10'
+      - series: 'node_hwmon_temp_celsius{chip="nvme_nvme0", sensor="temp1"}'
+        values: '90+0x10'
+      - series: 'node_hwmon_chip_names{chip="nvme_nvme0", chip_name="nvme"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: CPUHighTemperature
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: system
+              chip: "pci0000:00_0000:00_18_3"
+              chip_name: k10temp
+              sensor: temp1
+            exp_annotations:
+              summary: "CPU temperature high"
+              description: "CPU sensor temp1 (k10temp) temperature 90°C exceeds 85°C for 5 minutes"
+
+  # FilesystemCritical must now include the root filesystem.
+  - name: filesystem_critical_includes_root
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_size_bytes{device="/dev/nvme0n1p2", fstype="ext4", mountpoint="/"}'
+        values: '1000+0x10'
+      - series: 'node_filesystem_free_bytes{device="/dev/nvme0n1p2", fstype="ext4", mountpoint="/"}'
+        values: '50+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FilesystemCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              component: system
+              device: /dev/nvme0n1p2
+              fstype: ext4
+              mountpoint: /
+            exp_annotations:
+              summary: "Filesystem /dev/nvme0n1p2 nearly full"
+              description: "Filesystem / is 95% full"
+
+  # NVLink rule uses the real DCGM field name (..._ERROR_COUNT_TOTAL).
+  - name: nvlink_errors_real_metric_name
+    interval: 1m
+    input_series:
+      - series: 'DCGM_FI_DEV_NVLINK_CRC_FLIT_ERROR_COUNT_TOTAL{gpu="0"}'
+        values: '3+0x5'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: NVLinkErrors
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              component: gpu
+              gpu: "0"
+            exp_annotations:
+              summary: "NVLink errors on GPU 0"
+              description: "NVLink CRC/FLIT errors detected — interconnect degradation"
