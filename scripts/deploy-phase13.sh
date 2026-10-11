@@ -74,8 +74,82 @@ fi
 echo ""
 
 # Caddy forward auth config (Phase 01 — optional)
-if [ -f "configs/caddy/Caddyfile.security" ]; then
+# Deploys configs/caddy/Caddyfile.security to /data/caddy/Caddyfile, which is the
+# path docker/compose.caddy.yml bind-mounts (see issue #62).
+CADDY_SRC="$REPO_ROOT/configs/caddy/Caddyfile.security"
+CADDY_DEST="/data/caddy/Caddyfile"
+CADDY_CHANGED=0
+if [ -f "$CADDY_SRC" ]; then
     echo "✓ Caddy security configuration present"
+
+    echo "Creating Caddy storage..."
+    sudo mkdir -p /data/caddy/certs /data/caddy/config /var/log/caddy
+    echo "✓ Caddy directories created"
+
+    # If compose.caddy.yml was ever started before the Caddyfile existed, Docker
+    # creates a *directory* at the bind-mount source. cp would then drop the file
+    # inside it and Caddy would still fail to start.
+    if [ -d "$CADDY_DEST" ]; then
+        if sudo rmdir "$CADDY_DEST" 2>/dev/null; then
+            echo "  [idempotency] Removed empty directory at $CADDY_DEST (left by a bind mount of a missing file)"
+        else
+            echo "ERROR: $CADDY_DEST is a non-empty directory, expected a file — remove it and re-run"
+            exit 1
+        fi
+    fi
+
+    # Refuse to deploy a config Caddy would reject (only when the image is already local)
+    if docker image inspect caddy:2-alpine &> /dev/null; then
+        if docker run --rm -v "$CADDY_SRC:/etc/caddy/Caddyfile:ro" caddy:2-alpine             caddy validate --config /etc/caddy/Caddyfile > /dev/null 2>&1; then
+            echo "✓ Caddyfile.security validates"
+        else
+            echo "ERROR: Caddyfile.security failed 'caddy validate' — not deploying"
+            exit 1
+        fi
+    else
+        echo "NOTE: caddy:2-alpine image not present locally — skipping Caddyfile validation"
+    fi
+
+    if [ -f "$CADDY_DEST" ] && sudo cmp -s "$CADDY_SRC" "$CADDY_DEST"; then
+        echo "✓ $CADDY_DEST already up to date"
+    else
+        if [ -f "$CADDY_DEST" ]; then
+            CADDY_BACKUP="$CADDY_DEST.bak.$(date +%Y%m%d-%H%M%S)"
+            sudo cp -p "$CADDY_DEST" "$CADDY_BACKUP"
+            echo "  Existing Caddyfile differs — backed up to $CADDY_BACKUP"
+        fi
+        # cp (not install/mv) overwrites in place so a running container's
+        # single-file bind mount keeps pointing at the same inode.
+        sudo cp "$CADDY_SRC" "$CADDY_DEST"
+        sudo chmod 644 "$CADDY_DEST"
+        CADDY_CHANGED=1
+        echo "✓ Caddyfile deployed to $CADDY_DEST"
+    fi
+
+    # Start (or refresh) Caddy. compose.caddy.yml joins the ai-auth network that
+    # the Authentik stack above just created. Non-fatal: Authentik is the core of
+    # this phase and a 80/443 port clash should not abort the deploy.
+    if [ -f "docker/compose.caddy.yml" ]; then
+        CADDY_WAS_RUNNING=""
+        if docker ps --format '{{.Names}}' | grep -qx "caddy"; then
+            CADDY_WAS_RUNNING=1
+        fi
+        remove_orphan caddy ai-caddy
+        if docker compose -f docker/compose.caddy.yml up -d; then
+            echo "✓ Caddy started"
+            if [ -n "$CADDY_WAS_RUNNING" ] && [ "$CADDY_CHANGED" -eq 1 ]; then
+                if docker exec caddy caddy reload --config /etc/caddy/Caddyfile > /dev/null 2>&1; then
+                    echo "✓ Caddy configuration reloaded"
+                else
+                    echo "⚠ Caddy reload failed — run: docker restart caddy"
+                fi
+            fi
+        else
+            echo "⚠ Caddy failed to start — check: docker logs caddy"
+        fi
+    else
+        echo "NOTE: docker/compose.caddy.yml not found — Caddyfile deployed but Caddy not started"
+    fi
 else
     echo "NOTE: Caddyfile.security not found — Caddy (Phase 01) not yet deployed, skipping"
 fi
@@ -105,11 +179,10 @@ echo ""
 # Apply security hardening to existing services
 echo "Security hardening recommendations:"
 echo ""
-echo "1. Update Caddy configuration to use Authentik:"
-echo "   Replace compose.caddy.yml with:"
-echo "   - Change ports mapping if needed"
-echo "   - Mount configs/caddy/Caddyfile.security"
-echo "   - Ensure Caddy can reach Authentik service"
+echo "1. Caddy configuration (deployed above):"
+echo "   - configs/caddy/Caddyfile.security -> /data/caddy/Caddyfile"
+echo "   - docker/compose.caddy.yml mounts it and joins the ai-auth network"
+echo "   - After editing Caddyfile.security, re-run this script (backs up + reloads)"
 echo ""
 echo "2. Audit existing services for security:"
 echo "   bash scripts/security-hardening-audit.sh"
@@ -163,10 +236,9 @@ echo "4. Enable MFA for Admin Group:"
 echo "   Admin → Groups → admins → Edit"
 echo "   Add TOTP MFA policy"
 echo ""
-echo "5. Update Caddy to use security configuration:"
-echo "   Edit docker/compose.caddy.yml to mount:"
-echo "   - configs/caddy/Caddyfile.security"
-echo "   - Restart Caddy"
+echo "5. Verify Caddy is serving the security configuration:"
+echo "   docker ps --filter name=caddy"
+echo "   curl -k https://localhost/.health   (should print OK)"
 echo ""
 echo "6. Test Forward Auth:"
 echo "   curl https://ai.local/webui (should redirect to Authentik login)"

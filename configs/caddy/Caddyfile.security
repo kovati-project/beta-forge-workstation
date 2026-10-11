@@ -2,6 +2,20 @@
 # Deployed to /data/caddy/Caddyfile
 # Serves all AI workstation services with centralized authentication
 
+# Global options
+{
+	# TLS handshake fix (TASK-114 / #50): with `tls internal` Caddy only holds
+	# certificates for the hostnames listed in site addresses below. A client
+	# that connects with any other SNI (or none, e.g. https://<ip>/) used to get
+	# TLS alert 80 "internal error" instead of a response.
+	#   default_sni  - used when the client sends no SNI (https://<ip>/)
+	#   fallback_sni - used when the SNI matches no certificate
+	# Both hand back the ai.local certificate so the handshake completes; the
+	# HTTPS catch-all site below then answers 404 for unknown Host headers.
+	default_sni ai.local
+	fallback_sni ai.local
+}
+
 (authentik_forward_auth) {
 	# Forward auth to Authentik
 	forward_auth authentik:9000 {
@@ -14,7 +28,11 @@
 }
 
 # AI Workstation service discovery
-ai.local {
+# `localhost` is listed so local health/validation probes
+# (curl https://localhost/, openssl s_client -connect localhost:443) complete the
+# handshake with an internal-CA certificate. Add any extra hostname that clients
+# use to reach this box here; Caddy only serves names it has a certificate for.
+ai.local, localhost {
 	tls internal
 
 	# ────── Root UI ──────────────────────────────────────────────────
@@ -145,6 +163,14 @@ ai.local {
 			roll_keep 5
 		}
 	}
+}
+
+# HTTPS catch-all: a request whose Host header matches none of the names above
+# (e.g. https://<ip>/ -- it still completes the handshake thanks to default_sni)
+# gets an explicit 404 rather than Caddy's default empty 200.
+https:// {
+	tls internal
+	respond 404
 }
 
 # HTTP redirect to HTTPS
