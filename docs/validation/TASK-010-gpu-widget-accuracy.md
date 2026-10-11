@@ -73,3 +73,51 @@ Deferred rather than assumed.
 TASK-010 fails. Fix the telemetry path before this validation can be re-run; the
 widget-accuracy question is not answerable while the backend reports nothing.
 Finding 4 is independent and actionable now.
+
+## Resolution
+
+Branch `fix/gpu-telemetry-honesty`. Verified statically and with pynvml mocked; **not
+verified against the live workstation**, so this doc's FAIL verdict stands until
+TASK-010 is re-run on the host.
+
+| Finding | Change |
+| --- | --- |
+| 1. Failure swallowed as `[]` | `get_gpu_telemetry()` in `loadout-manager/main.py` returns `available` / `gpus` / `error`. `/status` and `/health` keep `gpus` (always a list) and add `gpu_telemetry: {available, error}`. The error is `stage: ExceptionType: message` and is logged with a traceback on first occurrence and on change (repeats are re-logged every 5 min, recovery is logged). Zero visible devices is reported as unavailable, not as "no GPUs". `GpuStatusRow` / `GpuCard` render a distinct "Telemetry unavailable" card with the error instead of the skeleton. |
+| 2. Fields the backend never emitted | Each GPU now carries `nvlink_bridge` (derived from the `inference-pair-a/b` profiles' `exclusive_gpus`, giving Bridge A = 0+3, Bridge B = 1+2), and `claimed_by_profile`, `active_service`, `service_type` from the active profile's `exclusive_gpus` / `gpu_assignment`. |
+| 3. Container pynvml failure | Nothing in the Dockerfile, `requirements.txt` or `compose.loadout.yml` is evidently wrong (see hypotheses below), so none were changed. The `error` string is now readable via `curl /status`, which removes the need for `docker logs` access to root-cause it. |
+
+### Not fixed here
+
+- **`/api/metrics/gpu` still returns structural zeros.** It lives in
+  `loadout-manager/api/metrics.py`, outside this change's scope. It also calls
+  `nvmlInit()` once at import and latches `_NVML_OK`, so a container that started
+  before NVML was usable stays "unavailable" until restarted. Needs its own fix.
+- Claims describe the manager's own profile state, not observed processes. A GPU
+  holding a model the manager does not know about (state lost, or a model started
+  outside a profile switch, as in the observation above) shows VRAM but no claim.
+
+### Remaining hypotheses for the container-side failure, most likely first
+
+Both `/status` (per-call init) and `/api/metrics/gpu` (import-time init) failed
+together, which points at NVML initialisation rather than a per-metric error. The
+new `gpu_telemetry.error` will say which of these it is.
+
+1. NVML not injected into the running container (`NVMLError_LibraryNotFound`): the
+   container was created without the NVIDIA runtime taking effect, e.g. after a
+   Docker or nvidia-container-toolkit change. Check
+   `docker inspect loadout-manager --format '{{json .HostConfig.DeviceRequests}}'`
+   and `docker exec loadout-manager ls /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1`.
+   Fix: `docker compose -f docker/compose.loadout.yml up -d --force-recreate`.
+2. Driver/library mismatch after a host driver update (`NVMLError_LibraryNotFound`
+   or "Driver/library version mismatch"). Same remedy: recreate the container.
+3. Stale or conflicting image: built before `nvidia-ml-py` replaced `pynvml==11.5.0`
+   (`plan/steps/06-loadout-manager.md`), leaving both packages providing `pynvml`.
+   Check `docker exec loadout-manager pip list | grep -i nvml`; rebuild the image.
+4. Device cgroup / permission restriction on `/dev/nvidiactl` (`NVMLError_NoPermission`),
+   e.g. rootless Docker or `no-cgroups = true` in the toolkit config.
+5. A Python-level error inside the per-GPU query loop rather than at init. Unlikely
+   given the above, and now reported as `query GPU <n>: <Type>: <message>`.
+
+Unrelated defect noticed: the Dockerfile does not `COPY config.py`, which `api/*`
+imports; the container only works because `compose.loadout.yml` bind-mounts
+`../loadout-manager` over `/app`.

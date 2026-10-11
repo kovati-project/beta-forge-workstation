@@ -4,7 +4,30 @@ import { Tag } from './Tag';
 import { VBar } from './VBar';
 import './GpuCard.css';
 
-function GpuCardContent({ gpu, activeProfile }) {
+function GpuCardContent({ gpu, activeProfile, telemetryError, index }) {
+  // The backend answered but could not read NVML. This is not "loading" (skeleton)
+  // and not "idle" (zeros): the hardware state is simply unknown.
+  if (!gpu && telemetryError) {
+    return (
+      <div className="gpu-card gpu-card-warning" role="status" title={telemetryError}>
+        <div className="gpu-card-header">
+          <div className="gpu-card-label">
+            {index !== undefined ? `GPU ${index}` : 'GPU'}
+          </div>
+        </div>
+        <div style={{ color: 'var(--amber)', fontSize: '11px', fontWeight: 600 }}>
+          Telemetry unavailable
+        </div>
+        <div
+          className="gpu-card-metric-label"
+          style={{ textTransform: 'none', wordBreak: 'break-word' }}
+        >
+          {telemetryError}
+        </div>
+      </div>
+    );
+  }
+
   if (!gpu) {
     return (
       <div className="gpu-card skeleton">
@@ -99,6 +122,11 @@ function GpuCardContent({ gpu, activeProfile }) {
   );
 }
 
-export const GpuCard = React.memo(({ gpu, activeProfile }) => (
-  <GpuCardContent gpu={gpu} activeProfile={activeProfile} />
+export const GpuCard = React.memo(({ gpu, activeProfile, telemetryError, index }) => (
+  <GpuCardContent
+    gpu={gpu}
+    activeProfile={activeProfile}
+    telemetryError={telemetryError}
+    index={index}
+  />
 ));

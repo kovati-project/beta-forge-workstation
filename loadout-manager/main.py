@@ -13,6 +13,7 @@ import subprocess
 import yaml
 import asyncio
 import json
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -127,12 +128,87 @@ def load_profiles() -> Dict:
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)["profiles"]
 
-def get_gpu_info() -> List[Dict]:
-    """Get current GPU VRAM, utilization, and temperature."""
+# ── GPU telemetry ────────────────────────────────────────────────────────────
+# NVML failure used to be swallowed and reported as an empty GPU list, which the
+# UI could not tell apart from "no GPUs" (TASK-010 / #5). The reader below returns
+# an explicit availability flag and error string instead. `gpus` is still always a
+# list, so consumers written against the old shape keep working.
+
+# Workload kind per service name; drives the colour of the per-GPU service tag.
+# Services not listed here render with the neutral tag colour.
+SERVICE_TYPES = {
+    "ollama": "inference",
+    "vllm-pair-a": "inference",
+    "vllm-pair-b": "inference",
+    "vllm-4gpu": "inference",
+    "axolotl": "training",
+    "kohya": "training",
+    "unsloth": "training",
+    "comfyui": "image",
+    "invokeai": "image",
+    "realesrgan": "image",
+    "real-esrgan": "image",
+    "rembg": "image",
+}
+
+# NVLink bridges are derived from the `inference-pair-<letter>` profiles: each
+# one's two exclusive GPUs are the GPUs joined by that bridge. This matches the
+# physical topology (`nvidia-smi topo -m` shows NV4 only between 0-3 and 1-2).
+_PAIR_PROFILE_RE = re.compile(r"^inference-pair-([a-z])$")
+
+# Repeated polls must not flood the log with an identical failure every 3s.
+_GPU_ERROR_RELOG_SECS = 300
+_gpu_last_error: Optional[str] = None
+_gpu_last_error_logged = 0.0
+
+
+def _log_gpu_telemetry(error: Optional[str], exc: Optional[BaseException] = None) -> None:
+    """Log availability transitions; re-log a persisting failure only occasionally."""
+    global _gpu_last_error, _gpu_last_error_logged
+    if error is None:
+        if _gpu_last_error is not None:
+            logger.info(f"GPU telemetry recovered (was: {_gpu_last_error})")
+            _gpu_last_error = None
+        return
+    now = time.monotonic()
+    if error != _gpu_last_error or now - _gpu_last_error_logged >= _GPU_ERROR_RELOG_SECS:
+        logger.error(f"GPU telemetry unavailable: {error}", exc_info=exc)
+        _gpu_last_error = error
+        _gpu_last_error_logged = now
+
+
+def _gpu_unavailable(stage: str, exc: Optional[BaseException] = None,
+                     message: Optional[str] = None) -> Dict:
+    if message is None:
+        message = f"{type(exc).__name__}: {exc}"
+    error = f"{stage}: {message}"[:300]
+    _log_gpu_telemetry(error, exc)
+    return {"available": False, "gpus": [], "error": error}
+
+
+def read_gpu_telemetry() -> Dict:
+    """Read raw per-GPU metrics from NVML.
+
+    Returns {"available": bool, "gpus": [...], "error": str | None}. When NVML
+    cannot be initialised, enumerated or queried, `available` is False, `gpus`
+    is [] and `error` says why. Zero visible devices is also reported as
+    unavailable: on this workstation it means the container cannot see the GPUs.
+    """
     try:
         pynvml.nvmlInit()
+    except Exception as e:
+        return _gpu_unavailable("nvmlInit", e)
+
+    stage = "enumerate devices"
+    try:
+        count = pynvml.nvmlDeviceGetCount()
+        if count == 0:
+            return _gpu_unavailable(
+                stage, message="NVML initialised but reports 0 GPU devices "
+                               "(check NVIDIA_VISIBLE_DEVICES and the device reservation)")
         gpus = []
-        for i in range(pynvml.nvmlDeviceGetCount()):
+        for i in range(count):
+            stage = f"query GPU {i}"
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
             mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
             util = pynvml.nvmlDeviceGetUtilizationRates(handle)
@@ -156,11 +232,108 @@ def get_gpu_info() -> List[Dict]:
                 "power_w": power_w,
                 "bus_id": bus_id,
             })
-        pynvml.nvmlShutdown()
-        return gpus
     except Exception as e:
-        logger.error(f"GPU info fetch failed: {e}")
-        return []
+        return _gpu_unavailable(stage, e)
+    finally:
+        try:
+            pynvml.nvmlShutdown()
+        except Exception:
+            pass
+
+    _log_gpu_telemetry(None)
+    return {"available": True, "gpus": gpus, "error": None}
+
+
+def _nvlink_bridge_labels(profiles: Dict) -> Dict[int, str]:
+    """Map GPU index -> "Bridge X" from the inference-pair-X profiles."""
+    labels: Dict[int, str] = {}
+    for name, p in profiles.items():
+        m = _PAIR_PROFILE_RE.match(name)
+        if not m:
+            continue
+        try:
+            pair = sorted({int(g) for g in (p.get("exclusive_gpus") or [])})
+        except (TypeError, ValueError):
+            continue
+        if len(pair) != 2:
+            continue
+        for idx in pair:
+            labels[idx] = f"Bridge {m.group(1).upper()}"
+    return labels
+
+
+def _annotate_gpus(gpus: List[Dict]) -> None:
+    """Add topology and profile-claim fields to each GPU dict, in place.
+
+    nvlink_bridge        "Bridge A" / "Bridge B" / None
+    claimed_by_profile   active profile name if it assigns or reserves this GPU
+    active_service       service(s) the active profile runs on this GPU
+    service_type         inference / training / image / None
+
+    Claims reflect the manager's own profile state, not an observed process
+    list: VRAM held by something the manager did not start shows no claim.
+    While a switch is in flight the previous profile is being torn down, so no
+    claim is asserted. Never raises; /status must not 500 on a bad profiles.yaml.
+    """
+    for g in gpus:
+        g.update(nvlink_bridge=None, claimed_by_profile=None,
+                 active_service=None, service_type=None)
+    if not gpus:
+        return
+    try:
+        profiles = load_profiles()
+    except Exception as e:
+        logger.warning(f"Could not load profiles for GPU annotation: {e}")
+        return
+
+    bridges = _nvlink_bridge_labels(profiles)
+    active = state["active_profile"]
+    profile = None if state["switching"] else profiles.get(active)
+
+    claimed = set()
+    services_by_gpu: Dict[int, List[str]] = {}
+    if profile:
+        try:
+            for idx in profile.get("exclusive_gpus") or []:
+                claimed.add(int(idx))
+            for svc, idxs in (profile.get("gpu_assignment") or {}).items():
+                for idx in idxs or []:
+                    claimed.add(int(idx))
+                    services_by_gpu.setdefault(int(idx), []).append(svc)
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Malformed GPU assignment in profile {active}: {e}")
+            claimed, services_by_gpu = set(), {}
+
+    for g in gpus:
+        idx = g["index"]
+        g["nvlink_bridge"] = bridges.get(idx)
+        if idx not in claimed:
+            continue
+        g["claimed_by_profile"] = active
+        svcs = services_by_gpu.get(idx, [])
+        if svcs:
+            g["active_service"] = " + ".join(svcs)
+            types = {SERVICE_TYPES.get(s) for s in svcs}
+            g["service_type"] = types.pop() if len(types) == 1 else None
+
+
+def get_gpu_telemetry() -> Dict:
+    """read_gpu_telemetry() plus topology/claim annotations on each GPU."""
+    telemetry = read_gpu_telemetry()
+    _annotate_gpus(telemetry["gpus"])
+    return telemetry
+
+
+def _telemetry_summary(telemetry: Dict) -> Dict:
+    return {"available": telemetry["available"], "error": telemetry["error"]}
+
+
+def get_gpu_info() -> List[Dict]:
+    """GPU list only, for callers that do not need the availability signal.
+
+    An empty list means telemetry is unavailable (or zero devices); use
+    get_gpu_telemetry() when the reason matters."""
+    return get_gpu_telemetry()["gpus"]
 
 def stop_all_services():
     """Stop all managed Docker Compose stacks."""
@@ -292,13 +465,20 @@ def list_loadouts():
 
 @app.get("/status")
 def get_status():
-    """Get current system and profile status."""
+    """Get current system and profile status.
+
+    `gpus` is always a list. `gpu_telemetry.available` is false (with `error`)
+    when NVML could not be read; `gpus` is then [] because there is no data,
+    not because the hardware is idle.
+    """
+    telemetry = get_gpu_telemetry()
     return {
         "active_profile": state["active_profile"],
         "switching": state["switching"],
         "last_switched": state["last_switched"],
         "running_services": state["running_services"],
-        "gpus": get_gpu_info()
+        "gpus": telemetry["gpus"],
+        "gpu_telemetry": _telemetry_summary(telemetry),
     }
 
 @app.post("/activate/{profile_name}")
@@ -315,8 +495,14 @@ async def activate_profile(profile_name: str, background_tasks: BackgroundTasks)
     
     # Check VRAM requirement
     if "vram_required_gb" in profile:
-        gpus = get_gpu_info()
-        total_free = sum(g["vram_free_gb"] for g in gpus)
+        telemetry = get_gpu_telemetry()
+        if not telemetry["available"]:
+            # Fail closed, but say why: "0.0GB free" would be a false reading.
+            raise HTTPException(
+                409,
+                f"Cannot verify VRAM requirement: GPU telemetry unavailable ({telemetry['error']})"
+            )
+        total_free = sum(g["vram_free_gb"] for g in telemetry["gpus"])
         if total_free < profile["vram_required_gb"]:
             raise HTTPException(
                 409,
@@ -340,8 +526,11 @@ async def stop_all():
 
 @app.get("/health")
 def health():
-    """Health check with GPU info."""
-    return {"status": "ok", "gpus": get_gpu_info()}
+    """Health check with GPU info. `status` reflects the API process only;
+    GPU availability is reported separately in `gpu_telemetry`."""
+    telemetry = get_gpu_telemetry()
+    return {"status": "ok", "gpus": telemetry["gpus"],
+            "gpu_telemetry": _telemetry_summary(telemetry)}
 
 # ── Static Files (React Build) ───────────────────────────────────────────────
 
