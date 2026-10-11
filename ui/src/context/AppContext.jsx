@@ -19,13 +19,22 @@ const initialState = {
 function appReducer(state, action) {
   switch (action.type) {
     case 'SET_GPU_STATUS': {
-      const { activeProfile, switching, gpus, runningServices } = action.payload;
+      // /status sends snake_case; map it to the camelCase state shape here.
+      // A field that is absent (undefined) keeps the previous value, but an
+      // explicit null from the backend (e.g. no active profile) is authoritative.
+      const p = action.payload || {};
+      const pick = (snake, camel) => (p[snake] !== undefined ? p[snake] : p[camel]);
+      const activeProfile = pick('active_profile', 'activeProfile');
+      const switching = p.switching;
+      const lastSwitched = pick('last_switched', 'lastSwitched');
+      const runningServices = pick('running_services', 'runningServices');
       return {
         ...state,
-        activeProfile: activeProfile || state.activeProfile,
+        activeProfile: activeProfile !== undefined ? activeProfile : state.activeProfile,
         switching: switching !== undefined ? switching : state.switching,
-        gpus: gpus || state.gpus,
-        runningServices: runningServices || state.runningServices,
+        lastSwitched: lastSwitched !== undefined ? lastSwitched : state.lastSwitched,
+        gpus: p.gpus || state.gpus,
+        runningServices: Array.isArray(runningServices) ? runningServices : state.runningServices,
       };
     }
     case 'SET_SERVICES': {
