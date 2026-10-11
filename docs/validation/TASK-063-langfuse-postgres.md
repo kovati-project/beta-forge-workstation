@@ -43,3 +43,26 @@ group. Account creation is a write and out of remit. Both deferred.
 
 Reachability passes on 3003; configuration fails. Fix `NEXTAUTH_URL` to a resolvable
 host and the correct port as part of #51.
+
+## Resolution
+
+**Correction to the findings above: Langfuse is not on 3003.** The compose files
+publish Langfuse on host port **3002** (`docker/compose.storage.yml`,
+`"3002:3000"`, container-internal port 3000). Port **3003** is published by
+OpenHands (`docker/compose.codegen.yml`, `"3003:3000"`). No other
+`docker/compose.*.yml` maps 3002 or 3003, so there is no port conflict, and the
+README and `plan/PROJECT_PLAN.md` port tables agree (Langfuse 3002, OpenHands 3003).
+The HTTP 200 on 3003 was therefore almost certainly OpenHands. "3002 refused" most
+likely means the Langfuse container was not running at validation time, not that
+it had moved to another port. The "Langfuse is running and reachable" verdict is
+unsupported by the evidence.
+
+**Fix (issue #31):** `NEXTAUTH_URL` in `docker/compose.storage.yml` is now
+`${LANGFUSE_URL:-http://localhost:3002}` instead of the hardcoded, unroutable
+`http://10.10.10.2:3002`. The port was already correct; the host was the defect.
+`LANGFUSE_URL` is documented (commented out) in `docker/.env.example`. The
+`10.10.10.2` references elsewhere in the repo are out of scope (#51).
+
+**Still open (needs live host):** why the Langfuse container was not listening on
+3002 (`docker ps -a`, `docker logs langfuse`) and the Postgres connection check
+deferred under "Not covered".

@@ -62,7 +62,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@postgres:5432/langfuse
       - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
-      - NEXTAUTH_URL=http://10.10.10.2:3002
+      # Must be the URL the *browser* uses to reach Langfuse (NextAuth builds
+      # sign-in callback URLs from it). Host port 3002 is published above; set
+      # LANGFUSE_URL in docker/.env when browsing from another machine/proxy.
+      - NEXTAUTH_URL=${LANGFUSE_URL:-http://localhost:3002}
       - LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=true
     depends_on:
       - postgres
