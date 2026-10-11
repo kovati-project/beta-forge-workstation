@@ -24,3 +24,8 @@ out
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Secrets (generated on the host by scripts/init-secrets.sh - never commit)
+.env
+configs/postgres/init.sql
+configs/postgres/.init.sql.*

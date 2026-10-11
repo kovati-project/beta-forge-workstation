@@ -33,10 +33,26 @@ if [ ! -f "docker/compose.storage.yml" ]; then
     exit 1
 fi
 
-# Verify postgres init script exists
+# Verify postgres init script exists. configs/postgres/init.sql holds real role
+# passwords, so it is gitignored and rendered from init.sql.template by
+# scripts/init-secrets.sh (using the values in docker/.env).
 if [ ! -f "configs/postgres/init.sql" ]; then
-    echo "ERROR: configs/postgres/init.sql not found"
-    exit 1
+    if [ -f "configs/postgres/init.sql.template" ] && [ -f "docker/.env" ]; then
+        echo "configs/postgres/init.sql not found — rendering from template..."
+        if ! bash "$REPO_ROOT/scripts/init-secrets.sh" --render-postgres-init; then
+            echo "ERROR: could not render configs/postgres/init.sql"
+            echo "       Run: bash scripts/init-secrets.sh"
+            exit 1
+        fi
+    else
+        echo "ERROR: configs/postgres/init.sql not found"
+        echo "       It holds database passwords, is not stored in git, and must be"
+        echo "       generated on this host. Run:"
+        echo "         bash scripts/init-secrets.sh"
+        echo "       (creates docker/.env and renders configs/postgres/init.sql from"
+        echo "       configs/postgres/init.sql.template)"
+        exit 1
+    fi
 fi
 
 # Create storage directories
@@ -52,9 +68,43 @@ echo "Starting services..."
 for _c in minio qdrant postgres langfuse; do
     remove_orphan "$_c" ai-storage
 done
+
+# init.sql is rendered mode 600 (it holds passwords) but the postgres image reads it
+# as the in-container "postgres" user, which cannot open a 600 file owned by the
+# host user ("Permission denied" -> roles/databases silently never created). It is
+# only read when the data volume is first created, so open it for that window and
+# tighten it again once postgres is serving.
+PG_INIT="configs/postgres/init.sql"
+PG_FIRST_INIT=0
+if ! docker volume inspect ai-storage_postgres-data > /dev/null 2>&1; then
+    PG_FIRST_INIT=1
+    chmod 644 "$PG_INIT"
+fi
+
 docker compose -f docker/compose.storage.yml up -d minio qdrant postgres langfuse
 echo "✓ Containers started"
 echo ""
+
+if [ "$PG_FIRST_INIT" -eq 1 ]; then
+    echo "First PostgreSQL initialisation — waiting for init.sql to be applied..."
+    PG_READY=0
+    for _ in {1..60}; do
+        # TCP check: the temporary server that runs init scripts does not listen on TCP.
+        if docker exec postgres pg_isready -h 127.0.0.1 -U admin > /dev/null 2>&1; then
+            PG_READY=1
+            break
+        fi
+        sleep 1
+    done
+    if [ "$PG_READY" -eq 1 ]; then
+        chmod 600 "$PG_INIT"
+        echo "✓ PostgreSQL initialised; $PG_INIT restored to mode 600"
+    else
+        echo "WARNING: PostgreSQL not ready after 60s; $PG_INIT left at mode 644."
+        echo "         Once it is up: chmod 600 $PG_INIT"
+    fi
+    echo ""
+fi
 
 # Wait for services to be ready
 echo "Waiting for services to initialize..."
