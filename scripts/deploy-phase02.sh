@@ -274,33 +274,62 @@ sudo cp "$REPO_ROOT/configs/drivers/validate-nvlink.py" /opt/scripts/validate-nv
   2>/dev/null || \
   sudo tee /opt/scripts/validate-nvlink.py > /dev/null <<'PYEOF'
 #!/usr/bin/env python3
-"""NVLink bandwidth validation for 4x RTX A5500. Expected pairs: GPU0<->GPU3, GPU1<->GPU2."""
-import torch, time, sys
+"""NVLink bandwidth validation for 4x RTX A5500. Expected pairs: GPU0<->GPU3, GPU1<->GPU2.
+
+Measures one-directional device-to-device copy bandwidth. One A5500 bridge is
+4 links x 14.062 GB/s = 56.25 GB/s per direction (112.5 GB/s bidirectional),
+so a healthy NVLink pair reads roughly 45-55 GB/s here, while PCIe 4.0 x16
+peer copies top out near 25-31 GB/s. NVLINK_MIN_GBPS (default 35) sits between.
+Stop GPU workloads first: each probe allocates 2 x 4 GB on the pair under test.
+
+Exit: 0 all NVLink pairs healthy, 1 a pair is below threshold, 2 cannot run.
+"""
+import os, sys, time
+import torch
+
+MIN_GBPS = float(os.environ.get("NVLINK_MIN_GBPS", "35"))
 
 def measure_bw(a, b, gb=4):
-    n = int(gb * 1024**3 / 4)
+    n = int(gb * 1000**3 / 4)   # decimal GB, float32 elements
     src = torch.zeros(n, dtype=torch.float32, device=f'cuda:{a}')
     dst = torch.zeros_like(src, device=f'cuda:{b}')
+    def sync():
+        # The copy is enqueued on the source device's stream; synchronize()
+        # without an argument only waits on the *current* device (cuda:0).
+        torch.cuda.synchronize(a)
+        torch.cuda.synchronize(b)
     for _ in range(3): dst.copy_(src)
-    torch.cuda.synchronize()
+    sync()
     t = time.perf_counter()
     for _ in range(10): dst.copy_(src)
-    torch.cuda.synchronize()
+    sync()
     return gb / ((time.perf_counter() - t) / 10)
 
 NVLINK_PAIRS = [(0, 3), (3, 0), (1, 2), (2, 1)]
 PCIE_PAIRS   = [(0, 1), (1, 0), (2, 3), (3, 2)]
-print(f"GPU count: {torch.cuda.device_count()}\n")
+if not torch.cuda.is_available() or torch.cuda.device_count() < 4:
+    found = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    print(f"ERROR: expected 4 CUDA GPUs, found {found}", file=sys.stderr)
+    sys.exit(2)
+print(f"GPU count: {torch.cuda.device_count()}  (NVLink threshold {MIN_GBPS:g} GB/s)\n")
 all_pass = True
-for a, b in NVLINK_PAIRS:
-    bw = measure_bw(a, b)
-    ok = bw > 100.0
-    print(f"GPU{a}→GPU{b}: {bw:6.1f} GB/s  {'✓ NVLINK' if ok else '✗ PCIe (check bridge!)'}")
-    if not ok: all_pass = False
-print()
-for a, b in PCIE_PAIRS:
-    bw = measure_bw(a, b)
-    print(f"GPU{a}→GPU{b}: {bw:6.1f} GB/s  (PCIe expected)")
+try:
+    for a, b in NVLINK_PAIRS:
+        if not torch.cuda.can_device_access_peer(a, b):
+            print(f"GPU{a}→GPU{b}: peer access unavailable  ✗ (check bridge / P2P)")
+            all_pass = False
+            continue
+        bw = measure_bw(a, b)
+        ok = bw > MIN_GBPS
+        print(f"GPU{a}→GPU{b}: {bw:6.1f} GB/s  {'✓ NVLINK' if ok else '✗ PCIe (check bridge!)'}")
+        if not ok: all_pass = False
+    print()
+    for a, b in PCIE_PAIRS:
+        bw = measure_bw(a, b)
+        print(f"GPU{a}→GPU{b}: {bw:6.1f} GB/s  (PCIe expected)")
+except RuntimeError as e:   # e.g. CUDA OOM because a loadout still holds the GPUs
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(2)
 print(f"\nResult: {'ALL NVLINK PAIRS HEALTHY' if all_pass else 'WARNING: CHECK NVLINK BRIDGES'}")
 sys.exit(0 if all_pass else 1)
 PYEOF
@@ -339,7 +368,7 @@ echo ""
 echo "  Validation checklist:"
 echo "    nvidia-smi                          → 4x RTX A5500, driver 560+"
 echo "    nvidia-smi topo -m                  → NV4 on GPU0↔GPU3, GPU1↔GPU2"
-echo "    python3 /opt/scripts/validate-nvlink.py  → all NVLink pairs > 100 GB/s"
+echo "    python3 /opt/scripts/validate-nvlink.py  → all NVLink pairs > 35 GB/s (bridge = 56.25 GB/s per direction)"
 echo "    docker run --gpus all nvidia/cuda:... nvidia-smi"
 echo "    node --version                      → v22+"
 echo "    npm --version                       → 10+"
