@@ -493,8 +493,9 @@ async def activate_profile(profile_name: str, background_tasks: BackgroundTasks)
     
     profile = profiles[profile_name]
     
-    # Check VRAM requirement
-    if "vram_required_gb" in profile:
+    # Check VRAM requirement. A requirement of 0 (e.g. idle) needs no telemetry,
+    # so it must stay reachable while NVML is down.
+    if (profile.get("vram_required_gb") or 0) > 0:
         telemetry = get_gpu_telemetry()
         if not telemetry["available"]:
             # Fail closed, but say why: "0.0GB free" would be a false reading.
