@@ -5,13 +5,36 @@ Endpoints for speech-to-text and text-to-speech
 
 from fastapi import APIRouter, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse
+import asyncio
 import httpx
 import os
+from urllib.parse import urlparse
 
 router = APIRouter(tags=["voice"])
 
 WHISPER_URL = os.getenv("WHISPER_URL", "http://localhost:9099")
 PIPER_URL = os.getenv("PIPER_URL", "http://localhost:5000")
+
+# Piper (ghcr.io/linuxserver/piper) serves the Wyoming protocol over raw TCP,
+# not HTTP. Liveness is a TCP connect to host:port. Host/port default to the
+# ones in PIPER_URL so existing deployments keep working; override with
+# PIPER_HOST / PIPER_PORT if needed.
+_piper_parsed = urlparse(PIPER_URL if "//" in PIPER_URL else f"//{PIPER_URL}")
+PIPER_HOST = os.getenv("PIPER_HOST") or _piper_parsed.hostname or "localhost"
+PIPER_PORT = int(os.getenv("PIPER_PORT") or _piper_parsed.port or 5000)
+
+
+async def _tcp_alive(host: str, port: int, timeout: float = 3.0) -> None:
+    """Open and immediately close a TCP connection; raise on failure/timeout."""
+    _, writer = await asyncio.wait_for(
+        asyncio.open_connection(host, port), timeout=timeout
+    )
+    writer.close()
+    try:
+        await writer.wait_closed()
+    except Exception:
+        pass
+
 
 @router.get("/voice/status")
 async def get_voice_status():
@@ -20,23 +43,23 @@ async def get_voice_status():
         "whisper": None,
         "piper": None,
     }
-    
+
     try:
+        # /health is local to the server; /v1/models queries the Hugging Face
+        # Hub in faster-whisper-server and can exceed the 3s timeout.
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{WHISPER_URL}/v1/models")
+            resp = await client.get(f"{WHISPER_URL}/health")
             if resp.status_code == 200:
                 results["whisper"] = "ready"
     except Exception as e:
-        results["whisper"] = f"error: {str(e)}"
-    
+        results["whisper"] = f"error: {str(e) or type(e).__name__}"
+
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{PIPER_URL}/api/voices")
-            if resp.status_code == 200:
-                results["piper"] = "ready"
+        await _tcp_alive(PIPER_HOST, PIPER_PORT)
+        results["piper"] = "ready"
     except Exception as e:
-        results["piper"] = f"error: {str(e)}"
-    
+        results["piper"] = f"error: {str(e) or type(e).__name__}"
+
     if results["whisper"] != "ready" or results["piper"] != "ready":
         raise HTTPException(status_code=503, detail="Voice services not ready")
     
@@ -67,7 +90,12 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
 @router.post("/voice/synthesize")
 async def synthesize_speech(text: str, voice: str = "en_US-lessac-high"):
-    """Synthesize speech using Piper TTS."""
+    """Synthesize speech using Piper TTS.
+
+    NOTE: known broken. Piper speaks Wyoming (raw TCP), so this HTTP call to
+    /api/tts cannot succeed. Needs a Wyoming client or a different TTS backend
+    (see issue #38).
+    """
     try:
         payload = {
             "text": text,
@@ -93,7 +121,11 @@ async def synthesize_speech(text: str, voice: str = "en_US-lessac-high"):
 
 @router.get("/voice/voices")
 async def list_voices():
-    """List available Piper voices."""
+    """List available Piper voices.
+
+    NOTE: known broken for the same reason as /voice/synthesize: Piper has no
+    HTTP /api/voices endpoint (Wyoming `describe` returns the voice list).
+    """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{PIPER_URL}/api/voices")

@@ -41,3 +41,24 @@ voice output cannot work as currently wired — relevant to #38.
 Fails as specified, but the finding is a protocol mismatch rather than a dead service.
 Either front Piper with an HTTP shim exposing an OpenAI-compatible speech endpoint, or
 repoint the healthcheck and Open WebUI at something that speaks Wyoming.
+
+## Resolution
+
+Static analysis only; the live host was not reachable.
+
+- `docker/compose.voice.yml`: the Piper healthcheck is now `nc -z 127.0.0.1 10200`.
+  This is the same readiness probe the image's own s6 service runs
+  (`nc -z localhost 10200`), and `netcat-openbsd` is installed in the
+  linuxserver baseimage. `start_period` raised to 120 s because first start downloads
+  the voice before listening.
+- `loadout-manager/api/voice.py`: `/voice/status` now checks Piper with a TCP connect
+  (`asyncio.open_connection`, 3 s timeout) to the host/port parsed from `PIPER_URL`
+  (overridable with `PIPER_HOST` / `PIPER_PORT`).
+- Also in `compose.voice.yml`: the tuning variables were not the names the image
+  reads (`PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W` were ignored).
+  Renamed to `PIPER_LENGTH`, `PIPER_NOISE`, `PIPER_NOISEW`. Note this makes
+  `PIPER_NOISEW=0.8` take effect for the first time (image default is 0.333).
+
+**Not fixed here:** `/voice/synthesize` and `/voice/voices` in `voice.py` still call
+HTTP routes (`/api/tts`, `/api/voices`) that Piper does not have; they are marked as
+known-broken in code. Open WebUI TTS (#38) is unchanged and still cannot reach Piper.
