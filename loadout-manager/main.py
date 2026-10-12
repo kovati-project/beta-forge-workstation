@@ -536,7 +536,7 @@ def health():
 # ── Static Files (React Build) ───────────────────────────────────────────────
 
 STATIC_DIR = Path(__file__).parent / "static"
-if STATIC_DIR.exists():
+if (STATIC_DIR / "index.html").exists():
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
     logger.info(f"Serving React UI from {STATIC_DIR}")
 else:

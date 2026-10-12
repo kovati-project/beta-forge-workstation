@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Phase 14 — Operations Runbook: Backup Script
 # Backs up critical Docker volumes and configurations
 # Usage: bash scripts/backup.sh [all|volumes|configs|models]

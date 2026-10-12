@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Phase 12 deployment: Voice I/O Stack
 # Deploys Whisper STT and Piper TTS with OpenAI-compatible APIs
 

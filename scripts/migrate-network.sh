@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Migrate workstation containers from docker_default to ai-workstation.
 #
 # Run this once after updating compose files to add the named network, or any

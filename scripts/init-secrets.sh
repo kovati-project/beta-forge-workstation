@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Generate secrets for a fresh deployment.
 # Run once on the workstation BEFORE deploy-all.sh.
 #
@@ -14,7 +15,7 @@
 #          configs/authentik/.env  (legacy path — Authentik deploy script reads it)
 #          configs/postgres/init.sql  (rendered from init.sql.template; gitignored,
 #                                      mode 600 — SQL needs literal values)
-#          configs/searxng/settings.yml  (patched once; not a compose env var)
+#          configs/searxng/settings.yml  (rendered from settings.yml.template; not a compose env var)
 #
 # configs/postgres/init.sql is NEVER committed. The tracked source of truth is
 # configs/postgres/init.sql.template, which holds @..._DB_PASSWORD@ placeholders.
@@ -45,10 +46,12 @@ ENV_FILE="docker/.env"
 # ── Arguments ─────────────────────────────────────────────────────────────────
 FORCE=0
 RENDER_ONLY=0
+RENDER_SEARXNG=0
 for arg in "$@"; do
     case "$arg" in
         --force)                FORCE=1 ;;
         --render-postgres-init) RENDER_ONLY=1 ;;
+        --render-searxng)       RENDER_SEARXNG=1 ;;
         -h|--help)
             sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0 ;;
@@ -179,7 +182,38 @@ render_postgres_init() {
     log "$PG_INIT_OUT rendered from template (mode $mode)"
 }
 
-# Render-only mode: no prompts, no secret generation (used by deploy-phase09.sh).
+# ── Render configs/searxng/settings.yml from its template ────────────────────
+# SearXNG's settings.yml has no env interpolation, so the key is rendered into an
+# untracked file. An existing file holding a real key is left alone unless --force
+# (so a host's private key survives re-runs and `git pull`).
+render_searxng_settings() {
+    local tpl="configs/searxng/settings.yml.template" dst="configs/searxng/settings.yml"
+    if [[ ! -f "$tpl" ]]; then
+        warn "$tpl not found - skipping SearXNG settings"
+        return 0
+    fi
+    if [[ -f "$dst" && $FORCE -eq 0 ]] && ! grep -qE '@SEARXNG_SECRET_KEY@|change-this-to-a-random-32-char-string' "$dst"; then
+        log "$dst already has a secret_key - left alone (use --force to regenerate)"
+        return 0
+    fi
+    local secret tmp="$dst.tmp.$$"
+    secret="$(openssl rand -hex 16)"
+    if ! sed "s|@SEARXNG_SECRET_KEY@|${secret}|" "$tpl" > "$tmp" 2>/dev/null \
+       || ! mv -f "$tmp" "$dst" 2>/dev/null; then
+        rm -f "$tmp" 2>/dev/null || true
+        err "cannot write $dst - the directory is owned by the SearXNG container user."
+        err "  fix: sudo chown \"\$USER\" configs/searxng   (re-chown to the container user afterwards)"
+        return 1
+    fi
+    chmod 664 "$dst" 2>/dev/null || true
+    log "$dst rendered from template"
+}
+
+# Render-only modes: no prompts, no secret generation (used by deploy scripts).
+if (( RENDER_SEARXNG )); then
+    render_searxng_settings
+    exit $?
+fi
 if (( RENDER_ONLY )); then
     render_postgres_init
     exit $?
@@ -321,23 +355,11 @@ log "configs/authentik/.env written"
 # ── Render configs/postgres/init.sql (SQL needs literal passwords) ────────────
 render_postgres_init || { err "init.sql was not rendered"; exit 1; }
 
-# ── Patch configs/searxng/settings.yml ───────────────────────────────────────
-if [[ -f configs/searxng/settings.yml ]]; then
-    python3 - configs/searxng/settings.yml "$(gen32)" <<'PYEOF'
-import re, sys
-path, secret = sys.argv[1], sys.argv[2]
-with open(path, 'r') as f:
-    content = f.read()
-content = re.sub(r'(?m)^(\s*secret_key:\s*")([^"]+)(")',
-                 r'\g<1>' + secret + r'\g<3>', content)
-with open(path, 'w') as f:
-    f.write(content)
-PYEOF
-    log "configs/searxng/settings.yml: secret_key"
-fi
+# ── Render configs/searxng/settings.yml ──────────────────────────────────────
+render_searxng_settings || warn "SearXNG settings.yml was not rendered (see above)"
 
 # ── Gitignore ─────────────────────────────────────────────────────────────────
-for entry in "docker/.env" "configs/authentik/.env" "configs/postgres/init.sql"; do
+for entry in "docker/.env" "configs/authentik/.env" "configs/postgres/init.sql" "configs/searxng/settings.yml"; do
     grep -qF "$entry" .gitignore 2>/dev/null || echo "$entry" >> .gitignore
 done
 log ".gitignore updated"

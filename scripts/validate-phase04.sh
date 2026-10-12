@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Validate Phase 04: Image Inference Stack
 # Run on the workstation after deploy-phase04.sh and at least one model download.
 set -euo pipefail

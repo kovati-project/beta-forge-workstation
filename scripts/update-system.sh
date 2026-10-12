@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Phase 14 — Operations Runbook: Update System Script
 # Manages NVIDIA driver, Docker image, and model updates
 # Usage: bash scripts/update-system.sh [driver|images|model-add] [args]

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # deploy-ui.sh — Build the React UI and redeploy the loadout-manager container.
 #
 # Usage:

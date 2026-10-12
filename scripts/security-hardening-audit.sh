@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Security hardening audit for Phase 13
 # Checks Docker configurations, network segmentation, secrets management
 

@@ -16,6 +16,8 @@ services:
       - ./:/compose:ro
       - ../loadout-manager:/app:ro
       - /data/models/vllm:/data/models/vllm
+      # persisted active-profile state (LOADOUT_STATE_PATH default); lost on recreate without this
+      - /data/loadout-manager:/data/loadout-manager
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - COMPOSE_DIR=/compose

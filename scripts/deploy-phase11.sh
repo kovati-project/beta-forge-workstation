@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Phase 11 deployment: Code Generation Stack
 # Deploys OpenHands autonomous agent, configures Continue.dev IDE integration, model routing
 

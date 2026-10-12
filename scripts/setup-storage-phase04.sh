@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Creates /data/ directories for image inference stack (Phase 04).
 # Safe to re-run.
 set -euo pipefail

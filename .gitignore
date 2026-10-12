@@ -29,3 +29,8 @@ yarn-error.log*
 .env
 configs/postgres/init.sql
 configs/postgres/.init.sql.*
+configs/searxng/settings.yml
+
+# UI build output - built on the host by scripts/deploy-ui.sh (keep the dir via .gitkeep)
+loadout-manager/static/*
+!loadout-manager/static/.gitkeep

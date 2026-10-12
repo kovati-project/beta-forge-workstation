@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Sync training checkpoints to MinIO after each training run
 # Usage: ./sync-checkpoints.sh [optional: profile name]
 

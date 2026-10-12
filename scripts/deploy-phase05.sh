@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Deploy Phase 05: Open WebUI + SearXNG
 # Run on the workstation as kasemo.
 set -euo pipefail
@@ -32,15 +33,20 @@ echo "  ✓ nomic-embed-text present (required for RAG)"
 
 # ── 2. Check SearXNG config ───────────────────────────────────────────────────
 echo "[2/3] Checking SearXNG config..."
-if [[ ! -f "$REPO_ROOT/configs/searxng/settings.yml" ]]; then
-    echo "  ✗ configs/searxng/settings.yml not found"
-    exit 1
+SEARXNG_CFG="$REPO_ROOT/configs/searxng/settings.yml"
+if [[ ! -f "$SEARXNG_CFG" ]]; then
+    if [[ -f "$SEARXNG_CFG.template" ]]; then
+        echo "  settings.yml missing - rendering from template..."
+        (cd "$REPO_ROOT" && bash scripts/init-secrets.sh --render-searxng) \
+            || { echo "  ✗ could not render configs/searxng/settings.yml"; exit 1; }
+    else
+        echo "  ✗ configs/searxng/settings.yml (and its .template) not found"
+        exit 1
+    fi
 fi
-if grep -q "change-this-to-a-random-32-char-string" "$REPO_ROOT/configs/searxng/settings.yml"; then
-    echo "  ⚠  SearXNG secret_key is still the placeholder value."
-    echo "     Update configs/searxng/settings.yml before proceeding? (y/N)"
-    read -r confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || echo "  Continuing with placeholder — update before production use."
+if grep -qE "change-this-to-a-random-32-char-string|@SEARXNG_SECRET_KEY@" "$SEARXNG_CFG"; then
+    echo "  ⚠  SearXNG secret_key is still a placeholder."
+    echo "     Run: bash scripts/init-secrets.sh --render-searxng --force"
 fi
 
 # ── 3. Start services ─────────────────────────────────────────────────────────

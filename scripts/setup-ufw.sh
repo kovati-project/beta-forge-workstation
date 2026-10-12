@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # ============================================================================
 # setup-ufw.sh - configure the host firewall (UFW) for the beta workstation
 #

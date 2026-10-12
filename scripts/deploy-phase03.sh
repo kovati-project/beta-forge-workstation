@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Deploy Phase 03: Text Inference Stack
 # Run on the workstation as kasemo.
 set -euo pipefail

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Deploy Phase 06: Loadout Manager
 set -euo pipefail
 
@@ -30,6 +31,9 @@ for cf in compose.inference.yml compose.training.yml compose.studio.yml; do
     fi
 done
 echo "  ✓ All compose files present"
+
+# State dir for the persisted active profile (bind-mounted by compose.loadout.yml)
+sudo mkdir -p /data/loadout-manager
 
 # ── 3. Build and start ────────────────────────────────────────────────────────
 echo "[3/4] Building loadout manager image..."

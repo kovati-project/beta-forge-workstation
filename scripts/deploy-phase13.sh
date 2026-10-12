@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Phase 13 deployment: Security Hardening Stack
 # Deploys Authentik IdP, configures network segmentation, secrets management
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # update.sh — Pull latest code and apply changes to the running system.
 #
 # Detects what changed and only rebuilds what's necessary:

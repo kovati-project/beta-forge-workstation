@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Validate Phase 05: Open WebUI + SearXNG
 # Run on the workstation after deploy-phase05.sh completes.
 set -euo pipefail

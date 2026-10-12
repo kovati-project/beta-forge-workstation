@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Undo init-secrets.sh — restore all placeholder values so init can re-run cleanly.
 #
 # Use this when:
@@ -89,20 +90,10 @@ with open(path, 'w') as f:
 PYEOF
 log "configs/postgres/init.sql restored"
 
-echo "Restoring configs/searxng/settings.yml placeholder..."
-python3 - configs/searxng/settings.yml <<'PYEOF'
-import re, sys, os
-path = sys.argv[1]
-if not os.path.exists(path):
-    sys.exit(0)
-with open(path, 'r') as f:
-    content = f.read()
-content = re.sub(r'(?m)^(\s*secret_key:\s*")([^"]+)(")',
-                 r'\g<1>change-this-to-a-random-32-char-string\g<3>', content)
-with open(path, 'w') as f:
-    f.write(content)
-PYEOF
-log "configs/searxng/settings.yml restored"
+echo "Removing generated configs/searxng/settings.yml..."
+rm -f configs/searxng/settings.yml 2>/dev/null \
+    || echo "  (could not remove - owned by the container user; delete it with sudo)"
+log "configs/searxng/settings.yml removed (re-render: bash scripts/init-secrets.sh --render-searxng)"
 
 # ── 3. Done ───────────────────────────────────────────────────────────────────
 echo ""

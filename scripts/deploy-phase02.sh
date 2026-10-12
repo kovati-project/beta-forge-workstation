@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Deploy Phase 02: Host OS & Driver Baseline
 # Run on the WORKSTATION (adapress) as kasemo.
 # Requires physical/BMC console or SSH from jumpbox.

@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Phase 09 deployment: Storage stack (MinIO, Qdrant, PostgreSQL, Langfuse)
 # Deploys S3-compatible artifact storage, vector database, and prompt tracking
 
