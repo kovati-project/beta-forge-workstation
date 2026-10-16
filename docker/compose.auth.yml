@@ -65,7 +65,8 @@ services:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/-/health/live/"]
+      # the authentik image ships no curl; ak healthcheck is its built-in probe
+      test: ["CMD", "ak", "healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
