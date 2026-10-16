@@ -23,12 +23,19 @@ export function SecretsSection({ isAppliance }) {
     loadSecrets();
   }, []);
 
+  const failedServices = (result) =>
+    (result.services || []).filter((s) => s.status === 'error').map((s) => s.service);
+
   const handleRotate = async (key) => {
-    if (!window.confirm(`Rotate ${key}? Affected services will restart.`)) return;
+    if (!window.confirm(`Rotate ${key}? Running services that use it will be recreated.`)) return;
 
     setRotating(key);
+    setError(null);
     try {
-      await rotateSecret(key);
+      const result = await rotateSecret(key);
+      if (result.status !== 'rotated') {
+        setError(`${key} was rotated, but recreating ${failedServices(result).join(', ')} failed. Recreate them manually.`);
+      }
       // Reload secrets after rotation
       const data = await getSecrets();
       setSecrets(data.secrets || []);
@@ -40,16 +47,25 @@ export function SecretsSection({ isAppliance }) {
   };
 
   const handleRotateAll = async () => {
-    if (!window.confirm(`Rotate all ${secrets.length} secrets? All services will restart.`)) return;
+    const rotatable = secrets.filter((s) => s.rotatable);
+    if (!window.confirm(`Rotate ${rotatable.length} secrets? Running services that use them will be recreated.`)) return;
 
     const confirmation = prompt(
-      'This will temporarily restart all services. Type "rotate all" to confirm:'
+      'This will temporarily restart the affected services. Type "rotate all" to confirm:'
     );
     if (confirmation !== 'rotate all') return;
 
     setRotating('all');
+    setError(null);
     try {
-      await rotateAllSecrets();
+      const result = await rotateAllSecrets();
+      if (result.status !== 'rotated') {
+        const failedKeys = (result.failed || []).map((f) => f.key);
+        const parts = [];
+        if (failedKeys.length) parts.push(`not rotated: ${failedKeys.join(', ')}`);
+        if (failedServices(result).length) parts.push(`recreate failed: ${failedServices(result).join(', ')}`);
+        setError(`Rotation incomplete (${parts.join('; ')}).`);
+      }
       const data = await getSecrets();
       setSecrets(data.secrets || []);
     } catch (err) {
@@ -98,7 +114,7 @@ export function SecretsSection({ isAppliance }) {
             displayedSecrets.map((secret) => (
               <tr key={secret.key}>
                 <td className="key-name">{secret.key}</td>
-                <td className="last-rotated">{secret.last_rotated}</td>
+                <td className="last-rotated">{secret.last_rotated || '—'}</td>
                 <td className="affects">
                   {secret.affects?.join(', ') || '—'}
                 </td>
@@ -106,7 +122,8 @@ export function SecretsSection({ isAppliance }) {
                   <button
                     className="rotate-btn"
                     onClick={() => handleRotate(secret.key)}
-                    disabled={rotating !== null}
+                    disabled={rotating !== null || !secret.rotatable}
+                    title={secret.rotatable ? undefined : secret.note}
                   >
                     {rotating === secret.key ? (
                       <>

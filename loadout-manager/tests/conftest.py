@@ -374,6 +374,14 @@ class FakeProc:
         self.returncode = self._rc
         return self._rc
 
+    async def communicate(self, input=None):
+        self.input = input.decode() if input else None
+        self.returncode = self._rc
+        return b"\n".join(self._lines), None
+
+    def kill(self):
+        pass
+
 
 class FakeExec:
     """Replacement for asyncio.create_subprocess_exec. Records argv, never executes
@@ -382,6 +390,7 @@ class FakeExec:
     def __init__(self, real):
         self._real = real
         self.calls = []
+        self.procs = []   # (argv, FakeProc); FakeProc.input is what went to stdin
         self.rules = []   # callables(argv) -> None | (rc, lines)
 
     async def __call__(self, *argv, **kwargs):
@@ -392,8 +401,13 @@ class FakeExec:
             if out == "passthrough":
                 return await self._real(*argv, **kwargs)
             if out is not None:
-                return FakeProc(*out)
-        return FakeProc(0, [])
+                return self._keep(argv, FakeProc(*out))
+        return self._keep(argv, FakeProc(0, []))
+
+    def _keep(self, argv, proc):
+        proc.input = None
+        self.procs.append((argv, proc))
+        return proc
 
     def on(self, predicate, rc=0, lines=(), effect=None):
         def rule(argv):
@@ -419,7 +433,9 @@ WANDB_API_KEY=wandb0000000000000000000000000000000000
 POSTGRES_ADMIN_PASSWORD=pg-admin-old
 LANGFUSE_DB_PASSWORD=langfuse-db-old
 LANGFUSE_NEXTAUTH_SECRET=nextauth-old
+DIFY_DB_PASSWORD=dify-db-old
 MINIO_ROOT_PASSWORD=minio-old
+AUTHENTIK_SECRET_KEY=authentik-secret-old
 KOVATI_OS_MODE=workstation
 """
 

@@ -195,5 +195,5 @@ def test_backup_then_restore_round_trips(api):
 def test_deployed_container_mounts_backup_dir_and_restore_target():
     svc = yaml.safe_load((REPO / "docker" / "compose.loadout.yml").read_text())
     vols = svc["services"]["loadout-manager"]["volumes"]
-    targets = {v.split(":")[1] for v in vols}
+    targets = {v["target"] if isinstance(v, dict) else v.split(":")[1] for v in vols}
     assert "/data" in targets

@@ -1,137 +1,203 @@
-"""Secrets management API endpoints."""
+"""Secrets management API endpoints.
 
+Only the platform-managed secrets in config.MANAGED_SECRETS are listed or
+rotated; third-party credentials in docker/.env are left alone. Rotation follows
+docs/runbooks/rotate-postgres-passwords.md: change the live credential first
+(ALTER ROLE for database passwords), then docker/.env, then RECREATE the
+consumers that are running (`docker compose restart` does not re-read .env).
+"""
+
+import asyncio
+import logging
 import os
-import re
 import secrets
 from pathlib import Path
-from typing import Dict, List
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from typing import Dict, List, Optional, Tuple
+
+from fastapi import APIRouter, HTTPException
 
 try:
-    from config import AFFECTS_MAP
+    from config import MANAGED_SECRETS
 except ImportError:
-    from ..config import AFFECTS_MAP
+    from ..config import MANAGED_SECRETS
+from .envfile import read_env, set_env_values
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
-ENV_FILE = Path(os.getenv("ENV_FILE", "/home/kasemo/ai-workstation/docker/.env"))
+# docker/.env, bind-mounted read-write at /compose/.env (docker/compose.loadout.yml).
+ENV_FILE = Path(os.getenv("ENV_FILE", "/compose/.env"))
+COMPOSE_DIR = Path(os.getenv("COMPOSE_DIR", "/compose"))
+if not COMPOSE_DIR.exists():
+    COMPOSE_DIR = Path(__file__).parent.parent.parent / "docker"
+# Real host path of docker/, so relative paths in compose files resolve on the host.
+HOST_COMPOSE_DIR = os.getenv("HOST_COMPOSE_DIR", "")
+
+COMMAND_TIMEOUT = 180  # seconds; `up --force-recreate` of one service
+_rotation_lock = asyncio.Lock()
 
 
-def _read_env_file() -> Dict[str, str]:
-    """Read .env file safely."""
+class RotationError(Exception):
+    pass
+
+
+async def _run(argv: List[str], stdin: Optional[str] = None) -> Tuple[int, str]:
+    """Run a command, return (exit code, combined output). Never raises."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+    except OSError as e:
+        return 127, str(e)
+    try:
+        out, _ = await asyncio.wait_for(
+            proc.communicate(stdin.encode() if stdin is not None else None), COMMAND_TIMEOUT)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return 124, f"timed out after {COMMAND_TIMEOUT}s"
+    return proc.returncode, (out or b"").decode(errors="replace").strip()
+
+
+async def _set_role_password(container: str, user: str, db: str, role: str, value: str):
+    """ALTER ROLE inside the database container. The statement goes in on stdin
+    so the password never appears in argv (`ps`, docker events, logs)."""
+    literal = value.replace("'", "''")
+    sql = f"ALTER ROLE \"{role}\" WITH PASSWORD '{literal}';\n"
+    return await _run(
+        ["docker", "exec", "-i", container, "psql", "-U", user, "-d", db,
+         "-v", "ON_ERROR_STOP=1", "-q"],
+        stdin=sql)
+
+
+def _compose(compose_file: str) -> List[str]:
+    cmd = ["docker", "compose", "--ansi", "never"]
+    if HOST_COMPOSE_DIR:
+        cmd += ["--project-directory", HOST_COMPOSE_DIR]
+    return cmd + ["--env-file", str(ENV_FILE), "-f", str(COMPOSE_DIR / compose_file)]
+
+
+async def _recreate_if_running(compose_file: str, service: str) -> Dict:
+    """Recreate a running consumer so it picks up the new value. A stopped one is
+    left stopped; it reads the new value whenever it is next started."""
+    rc, out = await _run(_compose(compose_file) + ["ps", "-q", "--status", "running", service])
+    if rc != 0:
+        return {"service": service, "status": "error", "detail": out[-500:]}
+    if not out:
+        return {"service": service, "status": "not running"}
+    rc, out = await _run(_compose(compose_file) + ["up", "-d", "--no-deps", "--force-recreate", service])
+    if rc != 0:
+        logger.error("recreate %s failed: %s", service, out[-500:])
+        return {"service": service, "status": "error", "detail": out[-500:]}
+    return {"service": service, "status": "recreated"}
+
+
+async def _rotate_value(key: str, env: Dict[str, str]) -> None:
+    """Change the live credential(s), then docker/.env. On failure everything
+    already changed is put back, so docker/.env stays the source of truth."""
+    spec = MANAGED_SECRETS[key]
+    old = env.get(key) or None
+    new = secrets.token_urlsafe(32)
+    changed = []
+    for role in spec["db_roles"]:
+        rc, out = await _set_role_password(*role, new)
+        if rc != 0:
+            msg = f"ALTER ROLE {role[3]} in {role[0]} failed: {out[-300:]}"
+            for done in changed:
+                if old is None or (await _set_role_password(*done, old))[0] != 0:
+                    msg += (f"; could NOT restore role {done[3]} in {done[0]}, its password "
+                            f"no longer matches docker/.env (see "
+                            f"docs/runbooks/rotate-postgres-passwords.md, Rollback)")
+            raise RotationError(msg)
+        changed.append(role)
+    set_env_values(ENV_FILE, {key: new})
+
+
+def _consumers(keys: List[str]) -> List[Tuple[str, str]]:
+    seen = []
+    for k in keys:
+        for pair in MANAGED_SECRETS[k]["recreate"]:
+            if pair not in seen:
+                seen.append(pair)
+    return seen
+
+
+def _require_env_file():
     if not ENV_FILE.exists():
-        return {}
-    
-    env_vars = {}
-    try:
-        with open(ENV_FILE, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and '=' in line and not line.startswith('#'):
-                    key, value = line.split('=', 1)
-                    env_vars[key] = value
-    except Exception as e:
-        print(f"Error reading ENV file: {e}")
-    
-    return env_vars
-
-
-def _write_env_file(key: str, value: str):
-    """Update or add key in .env file."""
-    try:
-        if not ENV_FILE.exists():
-            ENV_FILE.touch()
-        
-        content = ENV_FILE.read_text()
-        pattern = rf"^{re.escape(key)}=.*$"
-        
-        if re.search(pattern, content, re.MULTILINE):
-            # Replace existing
-            new_content = re.sub(pattern, f"{key}={value}", content, flags=re.MULTILINE)
-        else:
-            # Append new
-            new_content = content.rstrip() + f"\n{key}={value}\n"
-        
-        ENV_FILE.write_text(new_content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update .env: {e}")
-
-
-async def _restart_services(service_names: List[str]):
-    """Restart affected services."""
-    import asyncio
-    import subprocess
-    
-    for svc in service_names:
-        try:
-            await asyncio.create_subprocess_exec(
-                "docker", "compose", "restart", svc,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL
-            )
-        except Exception as e:
-            print(f"Failed to restart {svc}: {e}")
+        raise HTTPException(status_code=503, detail=f"{ENV_FILE} not found")
 
 
 @router.get("/secrets")
 async def list_secrets() -> Dict:
-    """List secret key names (never values)."""
-    env_vars = _read_env_file()
-    
-    secrets_list = []
-    for key in env_vars.keys():
-        # Skip non-secret keys
-        if any(x in key for x in ['PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'SALT']):
-            affects = AFFECTS_MAP.get(key, [])
-            secrets_list.append({
-                "key": key,
-                "last_rotated": "60d ago",  # Placeholder
-                "affects": affects,
-            })
-    
-    return {"secrets": secrets_list}
+    """Platform-managed secrets present in docker/.env (names only, never values)."""
+    env = read_env(ENV_FILE)
+    return {"secrets": [
+        {
+            "key": key,
+            "last_rotated": None,  # not tracked
+            "affects": [svc for _, svc in spec["recreate"]],
+            "rotatable": spec["rotate"] is None,
+            "note": spec["rotate"],
+        }
+        for key, spec in MANAGED_SECRETS.items() if key in env
+    ]}
 
 
 @router.post("/secrets/{key}/rotate")
-async def rotate_secret(key: str, background_tasks: BackgroundTasks) -> Dict:
-    """Rotate a secret key."""
-    if key not in AFFECTS_MAP:
-        raise HTTPException(status_code=400, detail=f"Unknown secret key: {key}")
-    
-    new_value = secrets.token_urlsafe(32)
-    
-    # Update .env file
-    _write_env_file(key, new_value)
-    
-    # Restart affected services
-    affected = AFFECTS_MAP.get(key, [])
-    background_tasks.add_task(_restart_services, affected)
-    
+async def rotate_secret(key: str) -> Dict:
+    """Rotate one platform-managed secret and recreate its running consumers."""
+    spec = MANAGED_SECRETS.get(key)
+    if spec is None:
+        raise HTTPException(status_code=400, detail=f"{key} is not a platform-managed secret")
+    if spec["rotate"] is not None:
+        raise HTTPException(status_code=409, detail=f"{key} cannot be rotated: {spec['rotate']}")
+    _require_env_file()
+
+    async with _rotation_lock:
+        try:
+            await _rotate_value(key, read_env(ENV_FILE))
+        except RotationError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        services = [await _recreate_if_running(f, s) for f, s in _consumers([key])]
+
+    ok = all(s["status"] != "error" for s in services)
     return {
-        "status": "rotating",
+        "status": "rotated" if ok else "partial",
         "key": key,
-        "affects": affected,
+        "affects": [s["service"] for s in services],
+        "services": services,
     }
 
 
 @router.post("/secrets/rotate-all")
-async def rotate_all_secrets(background_tasks: BackgroundTasks) -> Dict:
-    """Rotate all secrets."""
-    env_vars = _read_env_file()
-    affected_services = set()
-    
-    rotated = 0
-    for key in env_vars.keys():
-        if any(x in key for x in ['PASSWORD', 'SECRET', 'KEY', 'TOKEN', 'SALT']):
-            new_value = secrets.token_urlsafe(32)
-            _write_env_file(key, new_value)
-            affected_services.update(AFFECTS_MAP.get(key, []))
-            rotated += 1
+async def rotate_all_secrets() -> Dict:
+    """Rotate every rotatable platform-managed secret present in docker/.env."""
+    _require_env_file()
+    async with _rotation_lock:
+        env = read_env(ENV_FILE)
+        rotated, failed, skipped = [], [], []
+        for key, spec in MANAGED_SECRETS.items():
+            if key not in env:
+                continue
+            if spec["rotate"] is not None:
+                skipped.append({"key": key, "reason": spec["rotate"]})
+                continue
+            try:
+                await _rotate_value(key, env)
+                rotated.append(key)
+            except RotationError as e:
+                failed.append({"key": key, "detail": str(e)})
+        services = [await _recreate_if_running(f, s) for f, s in _consumers(rotated)]
 
-    background_tasks.add_task(_restart_services, list(affected_services))
-
+    ok = not failed and all(s["status"] != "error" for s in services)
     return {
-        "status": "rotating",
-        "total": rotated,
-        "affects": list(affected_services),
+        "status": "rotated" if ok else "partial",
+        "total": len(rotated),
+        "rotated": rotated,
+        "failed": failed,
+        "skipped": skipped,
+        "affects": [s["service"] for s in services],
+        "services": services,
     }

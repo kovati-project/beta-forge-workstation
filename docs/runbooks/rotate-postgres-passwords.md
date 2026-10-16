@@ -9,6 +9,15 @@ three role passwords below were committed in plain text to a public repository a
 still present in git history. Treat them as compromised. Rewriting history does not
 un-leak them; only rotating them on the live host does.
 
+**From the UI:** Settings → Secrets → Rotate (`POST /api/secrets/<KEY>/rotate`) now
+follows this same procedure for `POSTGRES_ADMIN_PASSWORD`, `LANGFUSE_DB_PASSWORD`,
+`N8N_DB_PASSWORD`, `DIFY_DB_PASSWORD` (both instances) and `AUTHENTIK_PG_PASSWORD`:
+`ALTER ROLE` first (SQL on stdin, never in argv), then `docker/.env`, then
+`up -d --force-recreate` of the consumers that are running. If an `ALTER ROLE` fails,
+roles already changed are put back and `docker/.env` is not touched. It does **not**
+take the backups in step 3 or re-render `init.sql` (step 6); do both yourself. The
+steps below remain the manual path and the reference for what the API does.
+
 All values in this document are placeholders. Never paste a real password into a
 ticket, a commit message, a chat, or a shell command line that ends up in history.
 

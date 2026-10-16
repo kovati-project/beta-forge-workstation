@@ -49,7 +49,9 @@ export default function Step3Secrets({ onComplete, onData }) {
       ) : (
         <>
           <p className="step-description">
-            14 cryptographic secrets will be generated and written to docker/.env
+            {Object.keys(secrets || {}).length > 0
+              ? `${Object.keys(secrets).length} new secrets were generated and written to docker/.env. Secrets already in the file were kept.`
+              : 'Every platform secret already exists in docker/.env; nothing was changed.'}
           </p>
 
           <div className="secrets-list">
