@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: loadout-manager (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # matches loadout-manager/Dockerfile
+          cache: pip
+          cache-dependency-path: loadout-manager/requirements*.txt
+      - run: pip install -r loadout-manager/requirements-dev.txt
+      # Strict xfails document known bugs; a fix makes its test XPASS and fails
+      # the run until the marker is removed.
+      - run: python -m pytest -q -rxXs
+        working-directory: loadout-manager
+
+  promtool:
+    name: prometheus alert rules (promtool)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: check and unit-test alert rules
+        run: |
+          docker run --rm --entrypoint sh -v "$PWD/configs/prometheus:/work:ro" \
+            prom/prometheus:v3.15.0 -c \
+            'promtool check rules /work/alerts.yml && promtool test rules /work/tests/alerts_test.yml'
+
+  ui:
+    name: ui (vite build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui

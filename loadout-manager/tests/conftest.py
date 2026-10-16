@@ -1,5 +1,5 @@
 """
-Shared fixtures for the Loadout Manager gating/switching tests.
+Shared fixtures for the Loadout Manager tests (gating/switching and api/*).
 
 Nothing here talks to a GPU, a Docker daemon, or the live workstation:
 
@@ -350,6 +350,114 @@ def lm(main_module, monkeypatch, tmp_path):
     NVML.reset()
     main.state.update(active_profile=None, switching=False,
                       last_switched=None, running_services=[])
+
+
+# ── api/* router harness ─────────────────────────────────────────────────────
+
+class FakeProc:
+    """What a faked ``asyncio.create_subprocess_exec`` returns."""
+
+    def __init__(self, rc, lines):
+        self._rc = rc
+        self._lines = [l if isinstance(l, bytes) else l.encode() for l in lines]
+        self.returncode = None
+        self.stdout = self
+
+    def __aiter__(self):
+        return self._iter()
+
+    async def _iter(self):
+        for line in self._lines:
+            yield line + b"\n"
+
+    async def wait(self):
+        self.returncode = self._rc
+        return self._rc
+
+
+class FakeExec:
+    """Replacement for asyncio.create_subprocess_exec. Records argv, never executes
+    unless a test opts a command in with ``passthrough``."""
+
+    def __init__(self, real):
+        self._real = real
+        self.calls = []
+        self.rules = []   # callables(argv) -> None | (rc, lines)
+
+    async def __call__(self, *argv, **kwargs):
+        argv = [str(a) for a in argv]
+        self.calls.append(argv)
+        for rule in self.rules:
+            out = rule(argv)
+            if out == "passthrough":
+                return await self._real(*argv, **kwargs)
+            if out is not None:
+                return FakeProc(*out)
+        return FakeProc(0, [])
+
+    def on(self, predicate, rc=0, lines=(), effect=None):
+        def rule(argv):
+            if predicate(argv):
+                if effect:
+                    effect(argv)
+                return rc, list(lines)
+        self.rules.append(rule)
+
+    def passthrough(self, predicate):
+        self.rules.append(lambda argv: "passthrough" if predicate(argv) else None)
+
+    def find(self, *words):
+        return [c for c in self.calls if all(w in c for w in words)]
+
+
+ENV_SAMPLE = """\
+# Kovati docker/.env (test fixture)
+GHCR_USER=octocat
+GHCR_TOKEN=ghp_realtoken0000000000000000000000
+HUGGINGFACE_TOKEN=hf_realtoken000000000000000000000000
+WANDB_API_KEY=wandb0000000000000000000000000000000000
+POSTGRES_ADMIN_PASSWORD=pg-admin-old
+LANGFUSE_DB_PASSWORD=langfuse-db-old
+LANGFUSE_NEXTAUTH_SECRET=nextauth-old
+MINIO_ROOT_PASSWORD=minio-old
+KOVATI_OS_MODE=workstation
+"""
+
+
+@pytest.fixture
+def api(lm, monkeypatch, tmp_path):
+    """The api/* routers with every filesystem/process side effect redirected.
+
+    * subprocess.run is already FakeDocker (via ``lm``; it patches the global).
+    * asyncio.create_subprocess_exec is FakeExec (``api.exec``).
+    * .env, the setup flag, BACKUP_DIR and RESTORE_TARGET live under tmp_path.
+    * The in-memory backup history starts EMPTY; tests seed what they need.
+    """
+    from api import backup, secrets, setup
+
+    env_file = tmp_path / "docker" / ".env"
+    env_file.parent.mkdir()
+    for mod in (secrets, setup):
+        monkeypatch.setattr(mod, "ENV_FILE", env_file)
+    monkeypatch.setattr(setup, "SETUP_COMPLETE_FLAG", tmp_path / "data" / ".kovati-setup-complete")
+
+    data = tmp_path / "data"
+    backups = data / "backups"
+    backups.mkdir(parents=True)
+    monkeypatch.setattr(backup, "BACKUP_DIR", str(backups))
+    monkeypatch.setattr(backup, "RESTORE_TARGET", str(data))
+    shipped_history = list(backup.BACKUP_HISTORY)  # module default, as deployed
+    monkeypatch.setattr(backup, "BACKUP_HISTORY", [])
+    monkeypatch.setattr(backup, "BACKUP_CONFIG", {
+        "schedule": "0 6 * * *", "destination": str(backups), "last_backup": None})
+
+    fake_exec = FakeExec(asyncio.create_subprocess_exec)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    return SimpleNamespace(
+        client=lm.client, docker=lm.docker, exec=fake_exec,
+        env_file=env_file, data=data, shipped_history=shipped_history, backups=backups, tmp=tmp_path,
+        backup=backup, secrets=secrets, setup=setup)
 
 
 @pytest.fixture
