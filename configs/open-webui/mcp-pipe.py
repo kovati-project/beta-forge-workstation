@@ -11,10 +11,10 @@ from typing import Optional, Generator
 
 # MCP server endpoints
 MCP_ENDPOINTS = {
-    "filesystem": "http://10.10.10.2:3100",
-    "fetch":      "http://10.10.10.2:3103",
-    "code_exec":  "http://10.10.10.2:3102",
-    "browser":    "http://10.10.10.2:3101",
+    "filesystem": "http://mcp-filesystem:3100",
+    "fetch":      "http://mcp-fetch:3103",
+    "code_exec":  "http://mcp-code-exec:3102",
+    "browser":    "http://mcp-browser:3101",
 }
 
 
