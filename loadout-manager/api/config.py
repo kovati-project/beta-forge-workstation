@@ -13,10 +13,8 @@ try:
 except ImportError:
     from ..config import CONFIG_SCHEMA, CONFIG_SCHEMA_MAP
 
-try:
-    from api.secrets import _read_env_file, _write_env_file
-except ImportError:
-    from .secrets import _read_env_file, _write_env_file
+from . import secrets as secrets_api  # owns ENV_FILE
+from .envfile import read_env, set_env_values
 
 router = APIRouter()
 
@@ -42,7 +40,7 @@ async def _restart_services(service_names: List[str]):
 @router.get("/config")
 async def get_config() -> Dict:
     """Return all user-configurable settings (sensitive values masked)."""
-    env_vars = _read_env_file()
+    env_vars = read_env(secrets_api.ENV_FILE)
     result = []
     for category, key, description, sensitive, affects in CONFIG_SCHEMA:
         raw = env_vars.get(key, "")
@@ -68,7 +66,12 @@ async def update_config(
     if key not in CONFIG_SCHEMA_MAP:
         raise HTTPException(status_code=400, detail=f"Unknown config key: {key}")
 
-    _write_env_file(key, body.value)
+    if "\n" in body.value or "\r" in body.value:
+        raise HTTPException(status_code=400, detail="Value must be a single line")
+    try:
+        set_env_values(secrets_api.ENV_FILE, {key: body.value})
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update .env: {e}")
 
     affects = CONFIG_SCHEMA_MAP[key]["affects"]
     if affects:

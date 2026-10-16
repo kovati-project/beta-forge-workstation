@@ -126,17 +126,66 @@ GPU_ASSIGNMENT = {
     "ollama": [0],
 }
 
-AFFECTS_MAP = {
-    "POSTGRES_ADMIN_PASSWORD":  ["postgres", "langfuse", "n8n"],
-    "LANGFUSE_DB_PASSWORD":     ["langfuse"],
-    "LANGFUSE_NEXTAUTH_SECRET": ["langfuse"],
-    "MINIO_ROOT_PASSWORD":      ["minio"],
-    "AUTHENTIK_SECRET_KEY":     ["authentik"],
-    "AUTHENTIK_REDIS_PASSWORD": ["authentik"],
-    "N8N_ENCRYPTION_KEY":       ["n8n"],
-    "DIFY_SECRET_KEY":          ["dify"],
-    "GF_ADMIN_PASSWORD":        ["grafana"],
+# Secrets the platform generates and owns. scripts/init-secrets.sh is the
+# reference generator; keep the two in step. Everything else in docker/.env
+# (GHCR_TOKEN, HUGGINGFACE_TOKEN, WANDB_API_KEY, ...) is a credential the user
+# brings and is never generated or rotated by the API. N8N_ENCRYPTION_KEY is
+# deliberately absent: n8n generates and persists its own, and injecting one
+# later breaks every stored credential.
+#
+#   db_roles  (container, admin user, database, role) whose password IS the
+#             value. Postgres reads POSTGRES_PASSWORD only on first init, so
+#             rotation runs ALTER ROLE there before docker/.env is touched.
+#   recreate  (compose file, service) that read the value from the environment.
+#             They are recreated, not restarted: `restart` does not re-read .env.
+#   rotate    None when rotatable; otherwise why it must not be rotated here.
+# See docs/runbooks/rotate-postgres-passwords.md.
+MANAGED_SECRETS = {
+    "POSTGRES_ADMIN_PASSWORD": {
+        "db_roles": [("postgres", "admin", "postgres", "admin")],
+        "recreate": [], "rotate": None},
+    "LANGFUSE_DB_PASSWORD": {
+        "db_roles": [("postgres", "admin", "postgres", "langfuse")],
+        "recreate": [("compose.storage.yml", "langfuse")], "rotate": None},
+    "N8N_DB_PASSWORD": {
+        # n8n runs on SQLite; only the unused shared-postgres role holds it.
+        "db_roles": [("postgres", "admin", "postgres", "n8n")],
+        "recreate": [], "rotate": None},
+    "DIFY_DB_PASSWORD": {
+        # Same value is the shared-postgres `dify` role AND the dify-db superuser.
+        "db_roles": [("postgres", "admin", "postgres", "dify"),
+                     ("dify-db", "dify", "dify", "dify")],
+        "recreate": [("compose.agentic.yml", "dify-api")], "rotate": None},
+    "AUTHENTIK_PG_PASSWORD": {
+        "db_roles": [("authentik-postgres", "authentik", "authentik", "authentik")],
+        "recreate": [("compose.auth.yml", "authentik"),
+                     ("compose.auth.yml", "authentik-worker")], "rotate": None},
+    "AUTHENTIK_REDIS_PASSWORD": {
+        "db_roles": [],
+        "recreate": [("compose.auth.yml", "redis"),
+                     ("compose.auth.yml", "authentik"),
+                     ("compose.auth.yml", "authentik-worker")], "rotate": None},
+    "MINIO_ROOT_PASSWORD": {
+        "db_roles": [], "recreate": [("compose.storage.yml", "minio")], "rotate": None},
+    "LANGFUSE_NEXTAUTH_SECRET": {
+        "db_roles": [], "recreate": [("compose.storage.yml", "langfuse")], "rotate": None},
+    "WEBUI_SECRET_KEY": {
+        "db_roles": [], "recreate": [("compose.webui.yml", "open-webui")], "rotate": None},
+    "AUTHENTIK_SECRET_KEY": {
+        "db_roles": [], "recreate": [],
+        "rotate": "Authentik must keep the secret key it was installed with."},
+    "DIFY_SECRET_KEY": {
+        "db_roles": [], "recreate": [],
+        "rotate": "Dify encrypts stored credentials with this key; changing it loses them."},
+    "GF_ADMIN_PASSWORD": {
+        "db_roles": [], "recreate": [],
+        "rotate": "Grafana applies this only on first start; change the password in "
+                  "Grafana (grafana cli admin reset-admin-password) instead."},
 }
+
+# Generated once by the setup wizard alongside MANAGED_SECRETS. These two are
+# user-editable afterwards via the Settings page (CONFIG_SCHEMA), not rotated.
+GENERATED_SECRETS = list(MANAGED_SECRETS) + ["JUPYTER_TOKEN", "LABEL_STUDIO_PASSWORD"]
 
 # Secrets that must be non-empty in docker/.env before a service can start.
 SECRETS_REQUIRED = {

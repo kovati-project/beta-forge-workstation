@@ -109,42 +109,58 @@ def test_network_keeps_existing_entries_and_stores_pubkey(api):
     assert env["HUGGINGFACE_TOKEN"].startswith("hf_")
 
 
-# ── defects ─────────────────────────────────────────────────────────────────
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-1: generate-secrets writes key names nothing reads "
-           "(POSTGRES_PASSWORD, LANGFUSE_SECRET_KEY, GRAFANA_ADMIN_PASSWORD, ...), "
-           "while docker/.env.example, compose and config.SECRETS_REQUIRED use "
-           "POSTGRES_ADMIN_PASSWORD, LANGFUSE_DB_PASSWORD, GF_ADMIN_PASSWORD, ... "
-           "A wizard-provisioned box starts with every required secret missing.")
-def test_generated_secrets_cover_every_required_secret(api):
-    from config import SECRETS_REQUIRED
+def test_generated_secrets_cover_every_required_secret():
+    from config import GENERATED_SECRETS, SECRETS_REQUIRED
     required = {k for keys in SECRETS_REQUIRED.values() for k in keys}
-    assert required - set(api.setup.SECRET_KEYS) == set()
+    assert required - set(GENERATED_SECRETS) == set()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-2: generate-secrets replaces the whole .env, discarding every "
-           "other entry (GHCR_*, HUGGINGFACE_TOKEN, WANDB_API_KEY, KOVATI_OS_MODE).")
+def test_generated_secrets_match_init_secrets_sh():
+    """The wizard and scripts/init-secrets.sh must produce the same key set."""
+    from config import GENERATED_SECRETS
+    script = (REPO / "scripts" / "init-secrets.sh").read_text(encoding="utf-8")
+    generated_by_script = set(re.findall(r"^([A-Z0-9_]+)=\$\(gen", script, re.MULTILINE))
+    assert generated_by_script == set(GENERATED_SECRETS)
+    assert "N8N_ENCRYPTION_KEY" not in GENERATED_SECRETS  # n8n owns its own key
+
+
 def test_generate_secrets_preserves_other_entries(api):
     api.env_file.write_text(ENV_SAMPLE)
     api.client.post("/api/setup/generate-secrets")
+    text = api.env_file.read_text()
+    assert text.startswith(ENV_SAMPLE)          # untouched, comments included
     env = _env(api)
-    assert env.get("HUGGINGFACE_TOKEN", "").startswith("hf_")
-    assert env.get("GHCR_USER") == "octocat"
+    assert env["HUGGINGFACE_TOKEN"].startswith("hf_") and env["GHCR_USER"] == "octocat"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-3: generate-secrets has no guard. After setup is complete it still "
-           "replaces every live secret (databases keep the old ones), and the new "
-           "values are returned in the response body.")
-def test_generate_secrets_is_refused_after_setup_completes(api):
+def test_generate_secrets_never_replaces_an_existing_value(api):
+    api.env_file.write_text(ENV_SAMPLE)
+    body = api.client.post("/api/setup/generate-secrets").json()
+    env = _env(api)
+    assert env["POSTGRES_ADMIN_PASSWORD"] == "pg-admin-old"
+    assert "POSTGRES_ADMIN_PASSWORD" in body["kept"]
+    assert "POSTGRES_ADMIN_PASSWORD" not in body["secrets"]
+    assert "pg-admin-old" not in str(body)
+
+
+def test_generate_secrets_is_idempotent(api):
     api.client.post("/api/setup/complete")
-    assert api.client.post("/api/setup/generate-secrets").status_code == 409
+    first = api.client.post("/api/setup/generate-secrets").json()
+    snapshot = api.env_file.read_text()
+    second = api.client.post("/api/setup/generate-secrets").json()
+    assert first["keys"] and second["keys"] == [] and second["secrets"] == {}
+    assert api.env_file.read_text() == snapshot
 
+
+def test_generate_secrets_fills_empty_values(api):
+    api.env_file.write_text("LANGFUSE_DB_PASSWORD=\nGHCR_USER=octocat\n")
+    body = api.client.post("/api/setup/generate-secrets").json()
+    assert "LANGFUSE_DB_PASSWORD" in body["keys"]
+    assert re.fullmatch(r"[A-Za-z0-9_-]{43}", _env(api)["LANGFUSE_DB_PASSWORD"])
+    assert api.env_file.read_text().count("LANGFUSE_DB_PASSWORD=") == 1
+
+
+# ── defects ─────────────────────────────────────────────────────────────────
 
 @pytest.mark.xfail(
     strict=True,
