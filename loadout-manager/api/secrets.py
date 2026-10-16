@@ -94,14 +94,37 @@ async def _recreate_if_running(compose_file: str, service: str) -> Dict:
     return {"service": service, "status": "recreated"}
 
 
-async def _rotate_value(key: str, env: Dict[str, str]) -> None:
+async def _db_container_state(container: str) -> str:
+    """'running', 'stopped', or 'absent' (never created on this host)."""
+    rc, out = await _run(["docker", "container", "inspect", "-f", "{{.State.Running}}", container])
+    if rc != 0:
+        return "absent"
+    return "running" if out.strip() == "true" else "stopped"
+
+
+async def _rotate_value(key: str, env: Dict[str, str]) -> List[str]:
     """Change the live credential(s), then docker/.env. On failure everything
-    already changed is put back, so docker/.env stays the source of truth."""
+    already changed is put back, so docker/.env stays the source of truth.
+
+    A database container that does not exist holds no copy of the password and
+    is skipped (it is created from docker/.env when first deployed). A stopped
+    one does hold a copy, so rotation refuses rather than leave it behind.
+    Returns the skipped containers."""
     spec = MANAGED_SECRETS[key]
     old = env.get(key) or None
     new = secrets.token_urlsafe(32)
-    changed = []
+    roles, skipped = [], []
     for role in spec["db_roles"]:
+        container_state = await _db_container_state(role[0])
+        if container_state == "absent":
+            skipped.append(role[0])
+        elif container_state == "stopped":
+            raise RotationError(f"{role[0]} is stopped; start it so its {role[3]} role can "
+                                f"be changed, then rotate again")
+        else:
+            roles.append(role)
+    changed = []
+    for role in roles:
         rc, out = await _set_role_password(*role, new)
         if rc != 0:
             msg = f"ALTER ROLE {role[3]} in {role[0]} failed: {out[-300:]}"
@@ -113,6 +136,7 @@ async def _rotate_value(key: str, env: Dict[str, str]) -> None:
             raise RotationError(msg)
         changed.append(role)
     set_env_values(ENV_FILE, {key: new})
+    return skipped
 
 
 def _consumers(keys: List[str]) -> List[Tuple[str, str]]:
@@ -157,7 +181,7 @@ async def rotate_secret(key: str) -> Dict:
 
     async with _rotation_lock:
         try:
-            await _rotate_value(key, read_env(ENV_FILE))
+            not_deployed = await _rotate_value(key, read_env(ENV_FILE))
         except RotationError as e:
             raise HTTPException(status_code=502, detail=str(e))
         services = [await _recreate_if_running(f, s) for f, s in _consumers([key])]
@@ -168,6 +192,7 @@ async def rotate_secret(key: str) -> Dict:
         "key": key,
         "affects": [s["service"] for s in services],
         "services": services,
+        "not_deployed": not_deployed,
     }
 
 
@@ -177,7 +202,7 @@ async def rotate_all_secrets() -> Dict:
     _require_env_file()
     async with _rotation_lock:
         env = read_env(ENV_FILE)
-        rotated, failed, skipped = [], [], []
+        rotated, failed, skipped, not_deployed = [], [], [], []
         for key, spec in MANAGED_SECRETS.items():
             if key not in env:
                 continue
@@ -185,7 +210,9 @@ async def rotate_all_secrets() -> Dict:
                 skipped.append({"key": key, "reason": spec["rotate"]})
                 continue
             try:
-                await _rotate_value(key, env)
+                for container in await _rotate_value(key, env):
+                    if container not in not_deployed:
+                        not_deployed.append(container)
                 rotated.append(key)
             except RotationError as e:
                 failed.append({"key": key, "detail": str(e)})
@@ -200,4 +227,5 @@ async def rotate_all_secrets() -> Dict:
         "skipped": skipped,
         "affects": [s["service"] for s in services],
         "services": services,
+        "not_deployed": not_deployed,
     }

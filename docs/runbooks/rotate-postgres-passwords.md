@@ -14,9 +14,13 @@ follows this same procedure for `POSTGRES_ADMIN_PASSWORD`, `LANGFUSE_DB_PASSWORD
 `N8N_DB_PASSWORD`, `DIFY_DB_PASSWORD` (both instances) and `AUTHENTIK_PG_PASSWORD`:
 `ALTER ROLE` first (SQL on stdin, never in argv), then `docker/.env`, then
 `up -d --force-recreate` of the consumers that are running. If an `ALTER ROLE` fails,
-roles already changed are put back and `docker/.env` is not touched. It does **not**
-take the backups in step 3 or re-render `init.sql` (step 6); do both yourself. The
-steps below remain the manual path and the reference for what the API does.
+roles already changed are put back and `docker/.env` is not touched. A database
+container that was never created (e.g. `dify-db` on a host without Dify) is skipped and
+reported as `not_deployed`; a stopped one blocks the rotation until it is started.
+Consumers that are not running (e.g. an exited `langfuse`) are not started: start them
+yourself afterwards. It does **not** take the backups in step 3 or re-render `init.sql`
+(step 6); do both yourself. The steps below remain the manual path and the reference
+for what the API does.
 
 All values in this document are placeholders. Never paste a real password into a
 ticket, a commit message, a chat, or a shell command line that ends up in history.

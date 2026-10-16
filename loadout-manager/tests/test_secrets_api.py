@@ -46,10 +46,22 @@ def _alters(api):
     return [(argv, proc.input) for argv, proc in api.exec.procs if "psql" in argv]
 
 
+def _inspect(container=None):
+    return lambda a: a[:3] == ["docker", "container", "inspect"] and (
+        container is None or a[-1] == container)
+
+
 @pytest.fixture
 def seeded(api):
     api.env_file.write_text(ENV_SAMPLE)
     return api
+
+
+@pytest.fixture(autouse=True)
+def _db_containers_running(api):
+    """Every database container exists and is running unless a test says otherwise.
+    Rules are checked in order, so a test's own inspect rule must be inserted first."""
+    api.exec.on(_inspect(), lines=["true"])
 
 
 # ── listing ─────────────────────────────────────────────────────────────────
@@ -203,6 +215,36 @@ def test_failed_revert_is_reported(seeded):
     seeded.exec.on(second_shared_call_fails, rc=2, lines=["server closed the connection"])
     detail = seeded.client.post("/api/secrets/DIFY_DB_PASSWORD/rotate").json()["detail"]
     assert "could NOT restore role dify in postgres" in detail
+
+
+def _container(api, name, rc, lines):
+    """Override the autouse 'everything is running' rule for one container."""
+    api.exec.rules.insert(0, lambda a: (rc, list(lines)) if _inspect(name)(a) else None)
+
+
+def test_database_container_that_was_never_deployed_is_skipped(seeded):
+    """The host runs no Dify: dify-db does not exist, so only the shared role changes."""
+    _container(seeded, "dify-db", 1, ["Error: No such container: dify-db"])
+    r = seeded.client.post("/api/secrets/DIFY_DB_PASSWORD/rotate")
+    assert r.status_code == 200, r.text
+    assert r.json()["not_deployed"] == ["dify-db"]
+    assert [a[3] for a, _ in _alters(seeded)] == ["postgres"]
+    assert _env(seeded)["DIFY_DB_PASSWORD"] != "dify-db-old"
+
+
+def test_stopped_database_container_blocks_rotation(seeded):
+    _container(seeded, "dify-db", 0, ["false"])
+    before = seeded.env_file.read_text()
+    r = seeded.client.post("/api/secrets/DIFY_DB_PASSWORD/rotate")
+    assert r.status_code == 502 and "dify-db is stopped" in r.json()["detail"]
+    assert seeded.env_file.read_text() == before
+    assert _alters(seeded) == []                  # nothing changed anywhere
+
+
+def test_rotate_all_reports_not_deployed_containers(seeded):
+    _container(seeded, "dify-db", 1, ["Error: No such container: dify-db"])
+    body = seeded.client.post("/api/secrets/rotate-all").json()
+    assert body["status"] == "rotated" and body["not_deployed"] == ["dify-db"]
 
 
 # ── rotate-all ──────────────────────────────────────────────────────────────
