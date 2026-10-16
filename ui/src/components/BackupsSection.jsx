@@ -143,7 +143,10 @@ export function BackupsSection({ isAppliance }) {
           ) : (
             <div className="schedule-view">
               <code>{config.schedule}</code>
-              {!isAppliance && (
+              {config.schedule_source && (
+                <span className="value"> · {config.schedule_source}</span>
+              )}
+              {!isAppliance && config.schedule_editable !== false && (
                 <button className="edit-btn" onClick={handleEditSchedule}>
                   Edit Schedule
                 </button>
@@ -202,7 +205,10 @@ export function BackupsSection({ isAppliance }) {
                 <tr key={backup.id} className={backup.status === 'fail' ? 'fail' : ''}>
                   <td className="date">{backup.date}</td>
                   <td className="size">{backup.size}</td>
-                  <td className={`status status-${backup.status}`}>
+                  <td
+                    className={`status status-${backup.status}`}
+                    title={backup.failed?.length ? `Failed: ${backup.failed.join(', ')}` : undefined}
+                  >
                     {backup.status === 'success' ? '✓ ok' : `✗ ${backup.status}`}
                   </td>
                   <td className="actions">
@@ -212,8 +218,10 @@ export function BackupsSection({ isAppliance }) {
                     >
                       Delete
                     </button>
-                    {backup.status === 'fail' && (
-                      <button className="retry-btn">Retry</button>
+                    {backup.status === 'fail' && !isAppliance && (
+                      <button className="retry-btn" onClick={handleRunBackup} disabled={backingUp}>
+                        Retry
+                      </button>
                     )}
                   </td>
                 </tr>

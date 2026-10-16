@@ -26,6 +26,9 @@ services:
       - /data/models/vllm:/data/models/vllm
       # persisted active-profile state (LOADOUT_STATE_PATH default); lost on recreate without this
       - /data/loadout-manager:/data/loadout-manager
+      # scripts/backup.sh runs (read-only: the backup API runs and deletes them
+      # through helper containers, see api/backup.py)
+      - /data/backups:/data/backups:ro
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - COMPOSE_DIR=/compose

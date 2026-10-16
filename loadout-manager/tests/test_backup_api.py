@@ -1,14 +1,12 @@
 """
-/api/backup/* — what the backup and restore endpoints actually do.
+/api/backup/* — runs scripts/backup.sh in a helper container and reports the
+runs it leaves under BACKUP_ROOT/<YYYYmmdd-HHMMSS>/.
 
-tar and docker are faked (``api.exec``) except in the round-trip test, which runs
-real GNU tar on a temp tree. Nothing here touches /data or a Docker daemon.
-
-Defects are xfail(strict=True) so a fix fails the run until the marker goes.
+docker is faked (``api.exec``); runs on disk are built by ``_make_run`` the way
+backup.sh lays them out. What this can NOT prove: that backup.sh succeeds on
+the host, or that the helper's mounts match the host's paths.
 """
 
-import shutil
-import sys
 from pathlib import Path
 
 import pytest
@@ -17,183 +15,166 @@ import yaml
 REPO = Path(__file__).resolve().parents[2]
 
 
-def _seed(api, archive=True, status="success"):
-    path = api.backups / "backup-20261001-0600.tar.gz"
-    if archive:
-        path.write_bytes(b"not really gzip")
-    entry = {"id": "1", "date": "2026-10-01 06:00", "size": "0.0 GB", "status": status,
-             "archive": str(path) if status == "success" else None}
-    api.backup.BACKUP_HISTORY.append(entry)
-    return entry
-
-
-def _is_tar(verb):
-    return lambda argv: argv[0] == "tar" and f"--{verb}" in argv
+def _make_run(api, run_id, files=("open-webui.tar.gz", "postgres-dump.sql.gz"),
+              failed=None, manifest=True):
+    run = api.backups / run_id
+    run.mkdir()
+    for name in files:
+        (run / name).write_bytes(b"x" * 1024)
+    if manifest:
+        text = "# Backup Manifest\nMode: all\n\n## Files\n"
+        if failed:
+            text += "\n## FAILED\n" + "\n".join(failed) + "\n"
+        text += "\n## Restore Instructions\n# ...\n"
+        (run / "MANIFEST.txt").write_text(text)
+    return run
 
 
 def _sse(resp):
     return [l[len("data: "):] for l in resp.text.splitlines() if l.startswith("data: ")]
 
 
-# ── behaviour that is correct today ─────────────────────────────────────────
+def _helper(api):
+    (cmd,) = [c for c in api.exec.calls if c[:2] == ["docker", "run"] and "backup.sh" in c[-2]]
+    return cmd
 
-def test_run_archives_restore_target_into_backup_dir(api):
+
+# ── history and config come from disk ───────────────────────────────────────
+
+def test_history_is_empty_when_no_backup_ever_ran(api):
+    assert api.client.get("/api/backup/history").json() == {"backups": []}
+    assert api.client.get("/api/backup/config").json()["last_backup"] is None
+
+
+def test_history_lists_runs_on_disk_newest_first(api):
+    _make_run(api, "20261001-020000")
+    _make_run(api, "20261002-020000", failed=["qdrant"])
+    _make_run(api, "20261003-020000", manifest=False)
+    (api.backups / "not-a-run").mkdir()          # ignored: not a timestamped run
+    (api.backups / "stray.tar.gz").write_bytes(b"x")
+
+    backups = api.client.get("/api/backup/history").json()["backups"]
+    assert [b["id"] for b in backups] == ["20261003-020000", "20261002-020000", "20261001-020000"]
+    by_id = {b["id"]: b for b in backups}
+    assert by_id["20261001-020000"]["status"] == "success"
+    assert by_id["20261002-020000"]["status"] == "fail"
+    assert by_id["20261002-020000"]["failed"] == ["qdrant"]
+    assert by_id["20261003-020000"]["status"] == "incomplete"
+    assert by_id["20261001-020000"]["files"] == 2
+    assert by_id["20261001-020000"]["date"] == "2026-10-01 02:00"
+    assert all(b["restorable"] is False for b in backups)
+
+
+def test_history_honours_n(api):
+    for day in range(1, 6):
+        _make_run(api, f"202610{day:02d}-020000")
+    assert len(api.client.get("/api/backup/history", params={"n": 2}).json()["backups"]) == 2
+
+
+def test_config_reports_the_real_schedule_and_last_run(api):
+    _make_run(api, "20261002-020000")
+    cfg = api.client.get("/api/backup/config").json()
+    assert cfg["schedule_editable"] is False and "systemd" in cfg["schedule_source"]
+    assert cfg["destination"] == str(api.backups)
+    assert cfg["last_backup"]["status"] == "success"
+
+
+def test_schedule_cannot_be_changed_from_the_api(api):
+    r = api.client.patch("/api/backup/config", params={"schedule": "0 3 * * *"})
+    assert r.status_code == 501 and "systemctl" in r.json()["detail"]
+
+
+# ── running a backup ────────────────────────────────────────────────────────
+
+def test_run_executes_backup_sh_in_a_helper_with_host_paths(api):
     r = api.client.post("/api/backup/run")
     assert r.status_code == 200
-    (tar,) = [c for c in api.exec.calls if c[0] == "tar"]
-    assert "--create" in tar and tar[-1] == str(api.data)
-    target = next(a for a in tar if a.startswith("--file=")).split("=", 1)[1]
-    assert Path(target).parent == api.backups and Path(target).name.startswith("backup-")
-    assert api.backup.BACKUP_HISTORY[0]["archive"] == target
-    assert api.backup.BACKUP_CONFIG["last_backup"]["status"] == "success"
+    cmd = _helper(api)
+    repo = "/srv/beta-workstation"
+    assert cmd[-2:] == [f"{repo}/scripts/backup.sh", "all"]
+    assert f"{repo}:{repo}:ro" in cmd                  # repo at its host path
+    assert "/data:/data" in cmd                        # data at its host path
+    assert "/var/run/docker.sock:/var/run/docker.sock" in cmd
+    assert f"BACKUP_ROOT={api.backups.as_posix()}" in cmd
+    assert cmd[cmd.index("--name") + 1] == "loadout-backup"
+    assert _sse(r)[-1] == "✓ Backup complete"
 
 
-def test_failed_tar_is_reported_and_not_recorded(api):
-    api.exec.on(_is_tar("create"), rc=2, lines=["tar: /data/x: Cannot stat"])
-    r = api.client.post("/api/backup/run")
-    assert any("Backup failed (exit 2)" in l for l in _sse(r))
-    assert api.backup.BACKUP_HISTORY == []
-    assert api.backup.BACKUP_CONFIG["last_backup"] is None
+def test_run_streams_script_output_without_colour_codes(api):
+    api.exec.on(lambda a: "backup.sh" in " ".join(a),
+                lines=["\x1b[0;32m[02:00:01]\x1b[0m Backing up: open-webui..."])
+    lines = _sse(api.client.post("/api/backup/run"))
+    assert "[02:00:01] Backing up: open-webui..." in lines
 
 
-def test_restore_unknown_backup_is_404_and_runs_nothing(api):
-    assert api.client.post("/api/backup/restore/nope").status_code == 404
+def test_failed_run_is_reported(api):
+    api.exec.on(lambda a: "backup.sh" in " ".join(a), rc=1, lines=["=== Backup FAILED ==="])
+    lines = _sse(api.client.post("/api/backup/run"))
+    assert lines[-1].startswith("✗ Backup failed (exit 1)")
+
+
+def test_run_without_host_compose_dir_is_503(api, monkeypatch):
+    monkeypatch.setattr(api.backup, "HOST_COMPOSE_DIR", "")
+    assert api.client.post("/api/backup/run").status_code == 503
     assert api.exec.calls == []
 
 
-def test_restore_of_a_failed_backup_is_refused(api):
-    _seed(api, archive=False, status="fail")
-    assert api.client.post("/api/backup/restore/1").status_code == 400
+@pytest.mark.anyio
+async def test_second_run_while_one_is_running_is_refused(api):
+    await api.backup._run_lock.acquire()
+    try:
+        assert api.client.post("/api/backup/run").status_code == 409
+    finally:
+        api.backup._run_lock.release()
     assert api.exec.calls == []
 
 
-def test_restore_with_archive_missing_on_disk_is_404(api):
-    _seed(api, archive=False)
-    assert api.client.post("/api/backup/restore/1").status_code == 404
+def test_lock_is_released_after_a_run(api):
+    api.client.post("/api/backup/run")
+    assert not api.backup._run_lock.locked()
+    assert api.client.post("/api/backup/run").status_code == 200
+
+
+# ── restore and delete ──────────────────────────────────────────────────────
+
+def test_restore_is_not_offered(api):
+    _make_run(api, "20261001-020000")
+    r = api.client.post("/api/backup/restore/20261001-020000")
+    assert r.status_code == 501 and "MANIFEST.txt" in r.json()["detail"]
     assert api.exec.calls == []
 
 
-def test_restore_stops_services_before_extracting(api):
-    _seed(api)
-    api.client.post("/api/backup/restore/1")
-    verbs = ["stop" if "stop" in c else "extract" if "--extract" in c else c[0]
-             for c in api.exec.calls]
-    assert verbs == ["stop", "extract"]
+def test_delete_removes_the_run_via_a_root_helper(api):
+    _make_run(api, "20261001-020000")
+    assert api.client.delete("/api/backup/20261001-020000").status_code == 200
+    (cmd,) = api.exec.calls
+    root = api.backups.as_posix()
+    assert cmd[-3:] == ["rm", "-rf", f"{root}/20261001-020000"]
 
 
-def test_delete_removes_entry_and_archive(api):
-    entry = _seed(api)
-    assert api.client.delete("/api/backup/1").status_code == 200
-    assert not Path(entry["archive"]).exists()
-    assert api.backup.BACKUP_HISTORY == []
+@pytest.mark.parametrize("bad", ["..", "20261001", "20261001-020000;rm", "x"])
+def test_delete_rejects_anything_but_a_run_id(api, bad):
+    assert api.client.delete(f"/api/backup/{bad}").status_code in (400, 404, 405)
+    assert api.exec.calls == []
 
 
-# ── defects ─────────────────────────────────────────────────────────────────
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-1: BACKUP_HISTORY ships with three hard-coded June 2026 entries "
-           "(42 GB, 41 GB, a failure) that never happened; a fresh install shows them "
-           "as real history.")
-def test_history_is_empty_when_no_backup_ever_ran(api):
-    assert api.shipped_history == []
+def test_delete_unknown_run_is_404(api):
+    assert api.client.delete("/api/backup/20261001-020000").status_code == 404
+    assert api.exec.calls == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-2: history lives only in memory; archives on disk are globbed into "
-           "an unused variable and never listed, so every restart loses all history "
-           "and makes every real archive unrestorable from the UI.")
-def test_history_lists_archives_present_on_disk(api):
-    (api.backups / "backup-20261002-0600.tar.gz").write_bytes(b"x")
-    backups = api.client.get("/api/backup/history").json()["backups"]
-    assert any(b["archive"].endswith("backup-20261002-0600.tar.gz") for b in backups)
+def test_failed_delete_is_reported(api):
+    _make_run(api, "20261001-020000")
+    api.exec.on(lambda a: "rm" in a, rc=1, lines=["rm: can't remove: Read-only file system"])
+    r = api.client.delete("/api/backup/20261001-020000")
+    assert r.status_code == 500 and "Read-only" in r.json()["detail"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-3: the tar excludes a hard-coded '/data/backups', not BACKUP_DIR. "
-           "With any other BACKUP_DIR under RESTORE_TARGET each backup contains every "
-           "previous backup (and the archive being written).")
-def test_backup_excludes_the_configured_backup_dir(api):
-    api.client.post("/api/backup/run")
-    (tar,) = [c for c in api.exec.calls if c[0] == "tar"]
-    assert f"--exclude={api.backups}" in tar
+# ── deployment ──────────────────────────────────────────────────────────────
 
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-4: a failed tar leaves its partial archive in BACKUP_DIR, where it "
-           "looks like a real backup-*.tar.gz.")
-def test_failed_backup_removes_partial_archive(api):
-    def write_partial(argv):
-        target = next(a for a in argv if a.startswith("--file=")).split("=", 1)[1]
-        Path(target).write_bytes(b"truncated")
-    api.exec.on(_is_tar("create"), rc=2, effect=write_partial)
-    api.client.post("/api/backup/run")
-    assert list(api.backups.glob("backup-*.tar.gz")) == []
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-5: restore ignores the return code of `docker compose stop` and "
-           "extracts over the live data of services that are still running.")
-def test_restore_aborts_if_services_did_not_stop(api):
-    _seed(api)
-    api.exec.on(lambda a: "stop" in a, rc=1, lines=["no configuration file provided"])
-    api.client.post("/api/backup/restore/1")
-    assert api.exec.find("--extract") == []
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-6: restore stops `--project-directory /opt/loadout`, a path that "
-           "exists nowhere in this repo or the loadout-manager container (compose "
-           "files are at /compose), so the stop step stops nothing.")
-def test_restore_stops_the_real_compose_project(api):
-    _seed(api)
-    api.client.post("/api/backup/restore/1")
-    (stop,) = api.exec.find("stop")
-    assert "/opt/loadout" not in stop
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-7: DELETE of an unknown id reports success instead of 404.")
-def test_delete_unknown_backup_is_404(api):
-    assert api.client.delete("/api/backup/nope").status_code == 404
-
-
-@pytest.mark.skipif(sys.platform == "win32" or shutil.which("tar") is None,
-                    reason="needs GNU tar (runs in CI on Linux)")
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-8: backup stores RESTORE_TARGET by its absolute path, restore "
-           "extracts with --strip-components=1. That only round-trips when "
-           "RESTORE_TARGET is exactly one level deep (/data); anything deeper is "
-           "restored into a nested copy and the originals are not restored.")
-def test_backup_then_restore_round_trips(api):
-    api.exec.passthrough(lambda a: a[0] == "tar")
-    victim = api.data / "n8n" / "workflow.json"
-    victim.parent.mkdir()
-    victim.write_text('{"v": 1}')
-
-    api.client.post("/api/backup/run")
-    assert api.backup.BACKUP_HISTORY, "backup did not complete"
-    victim.write_text('{"v": "corrupted"}')
-
-    api.client.post(f"/api/backup/restore/{api.backup.BACKUP_HISTORY[0]['id']}")
-    assert victim.read_text() == '{"v": 1}'
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="BKP-9: in the deployed container BACKUP_DIR (/data/backups) and "
-           "RESTORE_TARGET (/data) are not mounted (only /data/models/vllm and "
-           "/data/loadout-manager are), so backups are written to the container's "
-           "ephemeral layer and contain almost nothing.")
-def test_deployed_container_mounts_backup_dir_and_restore_target():
-    svc = yaml.safe_load((REPO / "docker" / "compose.loadout.yml").read_text())
+def test_deployed_container_can_read_the_backup_root():
+    svc = yaml.safe_load((REPO / "docker" / "compose.loadout.yml").read_text(encoding="utf-8"))
     vols = svc["services"]["loadout-manager"]["volumes"]
-    targets = {v["target"] if isinstance(v, dict) else v.split(":")[1] for v in vols}
-    assert "/data" in targets
+    mounts = {(v["source"], v["target"]) if isinstance(v, dict) else tuple(v.split(":")[:2])
+              for v in vols}
+    assert ("/data/backups", "/data/backups") in mounts
