@@ -5,10 +5,14 @@ server:
   # fills in a generated key. Do NOT put a real key in this file.
   secret_key: "@SEARXNG_SECRET_KEY@"
   bind_address: "0.0.0.0:8080"
-  base_url: "http://10.10.10.2:8080/"
+  base_url: "http://192.168.1.103:8080/"
 
 search:
   safe_search: 0
+  # json is required by Open WebUI web search (SEARXNG_QUERY_URL ...&format=json)
+  formats:
+    - html
+    - json
   default_lang: "en"
 
 engines:
