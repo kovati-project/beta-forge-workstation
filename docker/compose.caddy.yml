@@ -11,8 +11,10 @@ services:
   #   mkdir -p /data/caddy/certs /data/caddy/config /var/log/caddy
   #   cp configs/caddy/Caddyfile.security /data/caddy/Caddyfile
   #
-  # Caddy resolves `authentik:9000` via the shared ai-auth bridge network.
-  # compose.auth.yml must be up before starting caddy.
+  # Caddy resolves `authentik:9000` via the shared ai-auth bridge network, and
+  # the proxied services by container name via ai-workstation / ai-loadout.
+  # All three networks must exist before starting caddy: ai-auth (compose.auth.yml),
+  # ai-workstation (scripts/migrate-network.sh), ai-loadout (compose.loadout.yml).
   caddy:
     image: caddy:2-alpine
     container_name: caddy
@@ -27,6 +29,8 @@ services:
       - /var/log/caddy:/var/log/caddy
     networks:
       - ai-auth
+      - ai-workstation
+      - ai-loadout
     healthcheck:
       # :80 redirects to HTTPS and there is no cert for localhost, so probe the admin API
       # (bound to 127.0.0.1 only; busybox resolves localhost to ::1 first)
@@ -40,6 +44,12 @@ networks:
   ai-auth:
     external: true
     name: ai-auth
+  ai-workstation:
+    external: true
+    name: ai-workstation
+  ai-loadout:
+    external: true
+    name: ai-loadout
 
 volumes:
   caddy-config:

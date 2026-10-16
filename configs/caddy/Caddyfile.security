@@ -1,6 +1,10 @@
 # Caddyfile with Authentik SSO forward auth
 # Deployed to /data/caddy/Caddyfile
 # Serves all AI workstation services with centralized authentication
+#
+# Upstreams are addressed by container name and *internal* port over the Docker
+# networks caddy joins (ai-workstation, ai-loadout; see docker/compose.caddy.yml),
+# so they do not depend on the host's IP (10.10.10.2 never existed here, #51).
 
 # Global options
 {
@@ -45,14 +49,14 @@ ai.local, localhost {
 	handle /webui/* {
 		import authentik_forward_auth
 		uri strip_prefix /webui
-		reverse_proxy 10.10.10.2:3000
+		reverse_proxy open-webui:8080
 	}
 
 	# ────── Loadout Manager (GPU Orchestrator) ──────────────────────
 	handle /loadout/* {
 		import authentik_forward_auth
 		uri strip_prefix /loadout
-		reverse_proxy 10.10.10.2:8800 {
+		reverse_proxy loadout-manager:8800 {
 			header_up -Upgrade
 		}
 	}
@@ -61,7 +65,7 @@ ai.local, localhost {
 	handle /grafana/* {
 		import authentik_forward_auth
 		uri strip_prefix /grafana
-		reverse_proxy 10.10.10.2:3001 {
+		reverse_proxy grafana:3000 {
 			header_up X-Script-Name /grafana
 		}
 	}
@@ -70,14 +74,14 @@ ai.local, localhost {
 	handle /prometheus/* {
 		import authentik_forward_auth
 		uri strip_prefix /prometheus
-		reverse_proxy 10.10.10.2:9091
+		reverse_proxy prometheus:9090
 	}
 
 	# ────── n8n (Workflow Automation) ──────────────────────────────
 	handle /n8n/* {
 		import authentik_forward_auth
 		uri strip_prefix /n8n
-		reverse_proxy 10.10.10.2:5678 {
+		reverse_proxy n8n:5678 {
 			header_up -Upgrade
 		}
 	}
@@ -86,14 +90,14 @@ ai.local, localhost {
 	handle /label-studio/* {
 		import authentik_forward_auth
 		uri strip_prefix /label-studio
-		reverse_proxy 10.10.10.2:8081
+		reverse_proxy label-studio:8080
 	}
 
 	# ────── JupyterLab (Code & Analysis) ───────────────────────────
 	handle /jupyter/* {
 		import authentik_forward_auth
 		uri strip_prefix /jupyter
-		reverse_proxy 10.10.10.2:8888 {
+		reverse_proxy jupyterlab:8888 {
 			header_up -Upgrade
 			# WebSocket support for Jupyter
 			transport http {
@@ -108,21 +112,21 @@ ai.local, localhost {
 	handle /openhands/* {
 		import authentik_forward_auth
 		uri strip_prefix /openhands
-		reverse_proxy 10.10.10.2:3003
+		reverse_proxy openhands:3000
 	}
 
 	# ────── Langfuse (LLM Observability) ───────────────────────────
 	handle /langfuse/* {
 		import authentik_forward_auth
 		uri strip_prefix /langfuse
-		reverse_proxy 10.10.10.2:3002
+		reverse_proxy langfuse:3000
 	}
 
 	# ────── Dify (No-Code AI Application) ──────────────────────────
 	handle /dify/* {
 		import authentik_forward_auth
 		uri strip_prefix /dify
-		reverse_proxy 10.10.10.2:3010 {
+		reverse_proxy dify-web:3000 {
 			header_up -Upgrade
 		}
 	}
@@ -131,7 +135,7 @@ ai.local, localhost {
 	handle /minio/* {
 		import authentik_forward_auth
 		uri strip_prefix /minio
-		reverse_proxy 10.10.10.2:9001
+		reverse_proxy minio:9001
 	}
 
 	# ────── unauthenticated: Authentik admin setup ─────────────────
