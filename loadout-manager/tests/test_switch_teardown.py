@@ -205,12 +205,6 @@ def test_switch_does_not_start_new_profile_if_teardown_failed(lm, how):
 
 # ── Event loop ───────────────────────────────────────────────────────────────
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-10: do_switch() calls the blocking subprocess.run (4 calls, up to "
-           "60 s x3 + 120 s) directly on the event loop. During a switch /status, "
-           "/ws and /health stall, so the `switching` flag is not observable by "
-           "polling clients for the whole transition.")
 @pytest.mark.anyio
 async def test_event_loop_stays_responsive_during_switch(lm, async_client):
     lm.docker.delay = 0.15  # each fake docker call blocks for 150 ms
@@ -272,15 +266,6 @@ async def test_activation_and_stop_are_rejected_while_switching(lm, async_client
     assert len(lm.docker.starts) == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-11: `switching` is raised by do_switch() inside the background "
-           "task, not when POST /activate accepts the request, so two requests "
-           "arriving back-to-back are both accepted (observed: [200, 200], first "
-           "switch is wasted, second wins). Today the two switches are only "
-           "serialised by accident because BUG-10 blocks the event loop; once the "
-           "docker calls move off-loop they will interleave and the second `down` "
-           "will kill the first `up`.")
 @pytest.mark.anyio
 async def test_two_back_to_back_activations_cannot_both_be_accepted(lm, async_client):
     r1, r2 = await asyncio.gather(
@@ -294,6 +279,35 @@ async def test_two_back_to_back_activations_cannot_both_be_accepted(lm, async_cl
 
 def is_4xx_code(code):
     return 400 <= code < 500
+
+
+def test_no_docker_call_runs_on_the_event_loop(lm):
+    lm.make_active("inference-small")
+    assert lm.activate("training-lora-image").status_code == 200
+    lm.client.post("/stop")
+    assert lm.docker.calls, "expected docker calls"
+    assert [c for c in lm.docker.calls if c.on_loop] == []
+
+
+@pytest.mark.anyio
+async def test_stop_and_activate_cannot_both_be_accepted(lm, async_client):
+    lm.make_active("inference-small")
+    r_stop, r_act = await asyncio.gather(
+        async_client.post("/stop"),
+        async_client.post("/activate/training-lora-image"),
+    )
+    codes = sorted([r_stop.status_code, r_act.status_code])
+    assert codes[0] == 200 and is_4xx_code(codes[1]), codes
+    assert lm.state["switching"] is False
+
+
+def test_stop_releases_the_switch_slot_even_if_stopping_fails(lm, monkeypatch):
+    async def boom():
+        raise RuntimeError("docker socket gone")
+    monkeypatch.setattr(lm.main, "stop_all_services", boom)
+    with pytest.raises(RuntimeError):
+        lm.client.post("/stop")
+    assert lm.state["switching"] is False
 
 
 # ── Edge cases ───────────────────────────────────────────────────────────────

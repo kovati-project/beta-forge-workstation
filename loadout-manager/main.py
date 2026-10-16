@@ -335,12 +335,29 @@ def get_gpu_info() -> List[Dict]:
     get_gpu_telemetry() when the reason matters."""
     return get_gpu_telemetry()["gpus"]
 
-def stop_all_services():
+def _claim_switch() -> bool:
+    """Atomically take the single switch slot. Callers must not await between
+    checking and claiming, so the flag is raised the moment a request is
+    accepted rather than when its background task happens to start; a second
+    request arriving meanwhile then sees it and is refused."""
+    if state["switching"]:
+        return False
+    state["switching"] = True
+    return True
+
+
+async def _run_blocking(*args, **kwargs):
+    """subprocess.run in a worker thread. docker compose calls take up to
+    minutes; on the event loop they would stall /status, /health and /ws."""
+    return await asyncio.to_thread(subprocess.run, *args, **kwargs)
+
+
+async def stop_all_services():
     """Stop all managed Docker Compose stacks."""
     compose_files = ["compose.inference.yml", "compose.training.yml", "compose.studio.yml"]
     for cf in compose_files:
         try:
-            subprocess.run(
+            await _run_blocking(
                 ["docker", "compose", "-f", str(COMPOSE_BASE / cf), "down"],
                 capture_output=True,
                 timeout=60
@@ -352,29 +369,28 @@ def stop_all_services():
             logger.error(f"Error stopping {cf}: {e}")
 
 async def do_switch(profile_name: str):
-    """Background task: switch to new profile."""
-    profiles = load_profiles()
-    profile = profiles[profile_name]
-    
+    """Background task: switch to new profile. The caller has already claimed
+    the switch slot with _claim_switch(); this releases it when done."""
     state["switching"] = True
     await broadcast_state()
     try:
+        profile = load_profiles()[profile_name]
         logger.info(f"Switching to profile: {profile_name}")
-        
+
         # Stop all existing services
-        stop_all_services()
+        await stop_all_services()
         await asyncio.sleep(3)  # Allow GPU memory to release
-        
+
         # Build docker compose command
         cmd = ["docker", "compose"]
         for cf in profile["compose_files"]:
             cf_name = cf.split("/")[-1]
             cmd += ["-f", str(COMPOSE_BASE / cf_name)]
-        
+
         cmd += ["up", "-d", "--remove-orphans"] + profile["services"]
-        
+
         # Execute
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = await _run_blocking(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"Docker compose failed: {result.stderr}")
         
@@ -510,18 +526,27 @@ async def activate_profile(profile_name: str, background_tasks: BackgroundTasks)
                 f"Insufficient VRAM: {total_free:.1f}GB free, {profile['vram_required_gb']}GB required"
             )
     
+    # Every check above ran without awaiting, so nothing can have claimed the
+    # slot since the `switching` test at the top.
+    if not _claim_switch():
+        raise HTTPException(409, "Profile switch already in progress")
     background_tasks.add_task(do_switch, profile_name)
     return {"message": f"Switching to '{profile_name}'", "status": "switching"}
 
 @app.post("/stop")
 async def stop_all():
     """Stop all managed services."""
-    if state["switching"]:
+    # Hold the switch slot while stopping so an activation cannot start its
+    # `up` underneath our `down`.
+    if not _claim_switch():
         raise HTTPException(409, "Profile switch in progress")
-    stop_all_services()
-    state["active_profile"] = None
-    state["running_services"] = []
-    save_state()
+    try:
+        await stop_all_services()
+        state["active_profile"] = None
+        state["running_services"] = []
+        save_state()
+    finally:
+        state["switching"] = False
     await broadcast_state()
     return {"message": "All services stopped"}
 
@@ -619,13 +644,13 @@ async def scheduler_loop() -> None:
                 if not _entry_due(entry, now):
                     continue
                 profile = entry.get("profile")
-                if state["switching"]:
-                    logger.warning(f"Schedule {entry['id']}: switch already in "
-                                   f"progress, skipping {profile}")
-                    continue
                 profiles = load_profiles()
                 if profile not in profiles:
                     logger.error(f"Schedule {entry['id']}: unknown profile {profile}")
+                    continue
+                if not _claim_switch():
+                    logger.warning(f"Schedule {entry['id']}: switch already in "
+                                   f"progress, skipping {profile}")
                     continue
                 logger.info(f"Schedule {entry['id']} firing: activating {profile}")
                 asyncio.create_task(do_switch(profile))
