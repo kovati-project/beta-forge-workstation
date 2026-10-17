@@ -10,7 +10,7 @@
 | TASK-025 VRAM conflict gate | #15 | **PARTIAL** — gate exists and fails closed for 7 of 11 profiles, but 3 profiles are ungated, it sums the wrong GPUs, and it runs before teardown |
 | TASK-026 incompatibility gate | #16 | **FAIL** — `incompatible_with` is data only; **no backend code enforces it** |
 | TASK-027 teardown on switch | #17 | **PASS with defects** — order and state are right on the happy path; failed stop/start handling is not |
-| TASK-013 `switching` flag (backend) | #8 | **PASS** for flag logic (never stuck); **but** not observable by polling during a switch (BUG-10) |
+| TASK-013 `switching` flag (backend) | #8 | **PASS** for flag logic (never stuck); was not observable by polling during a switch (BUG-10, fixed 2026-10-16 with BUG-11) |
 
 ## How this was tested
 
@@ -179,10 +179,14 @@ reports the *outgoing* profile, even though its stacks were already stopped. A U
 4. `profiles.yaml` has 8 one-way incompatibility declarations and one compatible pair that
    shares an exclusive GPU.
 5. BUG-10 and BUG-11 must be fixed together or the second makes the first worse.
+   **Fixed together (2026-10-16, branch `fix/switch-off-event-loop`):** docker calls run via
+   `asyncio.to_thread`; `/activate`, `/stop` and the scheduler claim the `switching` slot
+   synchronously (`_claim_switch()`) before any await. Their tests are now plain tests, plus
+   `test_no_docker_call_runs_on_the_event_loop` and `test_stop_and_activate_cannot_both_be_accepted`.
 
 Test-to-source coupling (so a refactor knows what these tests depend on): routes `/activate`,
 `/stop`, `/status`, `/loadouts`; `state` dict keys; `main.subprocess.run`; `main.asyncio.sleep`
-/ `create_task`; `main.STATE_PATH`, `load_state`, `scheduler_loop`, `schedule`, `_last_fired`,
+/ `create_task` / `to_thread`; `main.stop_all_services`; `main.STATE_PATH`, `load_state`, `scheduler_loop`, `schedule`, `_last_fired`,
 `datetime`, `_ws_clients`. Message strings are deliberately not asserted.
 
 ## Verdict
