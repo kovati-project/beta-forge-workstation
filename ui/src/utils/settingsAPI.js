@@ -6,13 +6,22 @@ export async function getSecrets() {
   return response.json();
 }
 
+async function errorDetail(response, fallback) {
+  try {
+    const body = await response.json();
+    return body.detail || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function rotateSecret(key) {
   try {
     const response = await fetch(`/api/secrets/${key}/rotate`, {
       method: 'POST',
     });
     if (response.ok) return await response.json();
-    throw new Error('Failed to rotate secret');
+    throw new Error(await errorDetail(response, `HTTP ${response.status}`));
   } catch (error) {
     console.error('Failed to rotate secret:', error);
     throw error;
@@ -25,7 +34,7 @@ export async function rotateAllSecrets() {
       method: 'POST',
     });
     if (response.ok) return await response.json();
-    throw new Error('Failed to rotate all secrets');
+    throw new Error(await errorDetail(response, `HTTP ${response.status}`));
   } catch (error) {
     console.error('Failed to rotate all secrets:', error);
     throw error;

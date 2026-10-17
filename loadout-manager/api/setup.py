@@ -12,31 +12,16 @@ from fastapi.responses import StreamingResponse
 import asyncio
 
 try:
-    from config import DATA_DIR, DOCKER_DIR, AFFECTS_MAP
+    from config import DATA_DIR, DOCKER_DIR, GENERATED_SECRETS
 except ImportError:
-    from ..config import DATA_DIR, DOCKER_DIR, AFFECTS_MAP
+    from ..config import DATA_DIR, DOCKER_DIR, GENERATED_SECRETS
+from .envfile import read_env, set_env_values
 
 router = APIRouter()
 
-ENV_FILE = Path(os.getenv("ENV_FILE", "/home/kasemo/ai-workstation/docker/.env"))
+# docker/.env, bind-mounted read-write at /compose/.env (docker/compose.loadout.yml).
+ENV_FILE = Path(os.getenv("ENV_FILE", "/compose/.env"))
 SETUP_COMPLETE_FLAG = DATA_DIR / ".kovati-setup-complete"
-
-SECRET_KEYS = [
-    "POSTGRES_PASSWORD",
-    "LANGFUSE_SECRET_KEY",
-    "LANGFUSE_SALT",
-    "MINIO_ROOT_PASSWORD",
-    "MINIO_SECRET_KEY",
-    "AUTHENTIK_SECRET_KEY",
-    "AUTHENTIK_BOOTSTRAP_PASSWORD",
-    "N8N_ENCRYPTION_KEY",
-    "DIFY_SECRET_KEY",
-    "GRAFANA_ADMIN_PASSWORD",
-    "OPEN_WEBUI_SECRET_KEY",
-    "SEARXNG_SECRET_KEY",
-    "CADDY_API_KEY",
-    "KOVATI_INTERNAL_TOKEN",
-]
 
 
 def _read_cpu_model() -> str:
@@ -163,26 +148,26 @@ async def recommend_profile(hardware: Dict) -> Dict:
 
 @router.post("/setup/generate-secrets")
 async def generate_secrets() -> Dict:
-    """Generate cryptographic secrets."""
+    """Generate every platform secret that docker/.env does not have yet.
+
+    Existing non-empty values are never replaced, so re-running is harmless
+    (a running stack's databases keep their passwords), and every other entry
+    in the file is kept. Only the newly generated values are returned, once,
+    so the wizard can show or download them.
+    """
     try:
-        secrets = {k: pysecrets.token_urlsafe(32) for k in SECRET_KEYS}
-        
-        # Write to .env file
-        env_content = ""
-        for key, value in secrets.items():
-            env_content += f"{key}={value}\n"
-        
-        if not ENV_FILE.parent.exists():
-            ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
-        
-        ENV_FILE.write_text(env_content)
-        
+        ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+        existing = read_env(ENV_FILE)
+        new = {k: pysecrets.token_urlsafe(32) for k in GENERATED_SECRETS if not existing.get(k)}
+        if new:
+            set_env_values(ENV_FILE, new)
         return {
-            "keys": list(secrets.keys()),
-            "secrets": secrets,  # Return in response only for this one-time setup step
+            "keys": list(new),
+            "secrets": new,
+            "kept": [k for k in GENERATED_SECRETS if k not in new],
             "file": str(ENV_FILE),
         }
-    except Exception as e:
+    except OSError as e:
         raise HTTPException(status_code=500, detail=f"Secret generation failed: {e}")
 
 
