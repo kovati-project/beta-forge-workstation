@@ -1,191 +1,198 @@
-"""Backup management API endpoints."""
+"""Backup API: runs scripts/backup.sh and reports the runs it left on disk.
+
+backup.sh backs up the named volumes, bind-mounted service data, Postgres dumps
+and configs (not model weights) into BACKUP_ROOT/<YYYYmmdd-HHMMSS>/ and writes
+a MANIFEST.txt listing what failed. It bind-mounts host paths into
+`docker run alpine`, so it must see the host's paths: the API runs it in a
+short-lived helper container from this image with /data and the repo mounted
+at their host paths, not inside this container.
+
+Restore is deliberately not offered here. Restoring volumes and databases means
+stopping their consumers and has never been tested end to end; each run's
+MANIFEST.txt carries the manual restore steps.
+"""
 
 import asyncio
-import glob
 import os
-import subprocess
+import re
 from datetime import datetime
-from typing import Dict, Optional
-from fastapi import APIRouter, HTTPException, Request
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 router = APIRouter()
 
-BACKUP_DIR = os.getenv("BACKUP_DIR", "/data/backups")
-RESTORE_TARGET = os.getenv("RESTORE_TARGET", "/data")
+# Same path inside this container (read-only mount) and on the host.
+BACKUP_ROOT = Path(os.getenv("BACKUP_ROOT", "/data/backups"))
+DATA_ROOT = os.getenv("DATA_ROOT", "/data")
+# Host path of the repo checkout: the parent of docker/ (HOST_COMPOSE_DIR).
+HOST_COMPOSE_DIR = os.getenv("HOST_COMPOSE_DIR", "")
+HELPER_IMAGE = os.getenv("BACKUP_HELPER_IMAGE", "loadout-manager:latest")
+HELPER_NAME = "loadout-backup"
 
-BACKUP_CONFIG = {
-    "schedule": "0 6 * * *",
-    "destination": BACKUP_DIR,
-    "last_backup": {
-        "date": "2026-06-05 06:00",
-        "size": "42 GB",
-        "status": "success",
-    }
+RUN_ID = re.compile(r"^\d{8}-\d{6}$")
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+SCHEDULE = {
+    "schedule": "daily 02:00",
+    "schedule_source": "systemd ai-workstation-backup.timer "
+                       "(installed by scripts/setup-systemd-service.sh)",
+    "schedule_editable": False,
 }
 
-BACKUP_HISTORY = [
-    {"id": "1", "date": "2026-06-05 06:00", "size": "42 GB", "status": "success",
-     "archive": f"{BACKUP_DIR}/backup-20260605-0600.tar.gz"},
-    {"id": "2", "date": "2026-06-04 06:00", "size": "41 GB", "status": "success",
-     "archive": f"{BACKUP_DIR}/backup-20260604-0600.tar.gz"},
-    {"id": "3", "date": "2026-06-03 06:00", "size": "43 GB", "status": "fail",
-     "archive": None},
-]
+_run_lock = asyncio.Lock()
 
 
-def _get_backup_by_id(backup_id: str) -> Optional[Dict]:
-    return next((b for b in BACKUP_HISTORY if b["id"] == backup_id), None)
+def _human(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
+
+
+def _describe(run: Path) -> Dict:
+    """One backup run as the UI shows it, read from what is on disk."""
+    files = [f for f in run.iterdir() if f.is_file()]
+    manifest = run / "MANIFEST.txt"
+    failed: List[str] = []
+    if not manifest.exists():
+        status = "incomplete"  # still running, or the script died before the end
+    else:
+        text = manifest.read_text(errors="replace")
+        if "## FAILED" in text:
+            failed = [l.strip() for l in text.split("## FAILED", 1)[1].split("##", 1)[0]
+                      .splitlines() if l.strip()]
+        status = "fail" if failed else "success"
+    size = sum(f.stat().st_size for f in files)
+    return {
+        "id": run.name,
+        "date": datetime.strptime(run.name, "%Y%m%d-%H%M%S").strftime("%Y-%m-%d %H:%M"),
+        "size": _human(size),
+        "size_bytes": size,
+        "files": len([f for f in files if f.name != "MANIFEST.txt"]),
+        "status": status,
+        "failed": failed,
+        "path": str(run),
+        "restorable": False,
+    }
+
+
+def _runs() -> List[Dict]:
+    if not BACKUP_ROOT.is_dir():
+        return []
+    runs = [d for d in BACKUP_ROOT.iterdir() if d.is_dir() and RUN_ID.match(d.name)]
+    return [_describe(d) for d in sorted(runs, key=lambda d: d.name, reverse=True)]
+
+
+def _host_repo() -> Optional[str]:
+    return str(Path(HOST_COMPOSE_DIR).parent.as_posix()) if HOST_COMPOSE_DIR else None
+
+
+def _helper_command(repo: str) -> List[str]:
+    return [
+        "docker", "run", "--rm", "--name", HELPER_NAME,
+        "-v", "/var/run/docker.sock:/var/run/docker.sock",
+        "-v", f"{DATA_ROOT}:{DATA_ROOT}",
+        "-v", f"{repo}:{repo}:ro",
+        "-e", f"DATA_ROOT={DATA_ROOT}",
+        "-e", f"BACKUP_ROOT={BACKUP_ROOT.as_posix()}",
+        "--entrypoint", "bash",
+        HELPER_IMAGE, f"{repo}/scripts/backup.sh", "all",
+    ]
 
 
 @router.get("/backup/config")
 async def get_backup_config() -> Dict:
-    return BACKUP_CONFIG
+    runs = _runs()
+    last = runs[0] if runs else None
+    return {
+        **SCHEDULE,
+        "destination": str(BACKUP_ROOT),
+        "last_backup": ({"date": last["date"], "size": last["size"], "status": last["status"]}
+                        if last else None),
+    }
 
 
 @router.patch("/backup/config")
-async def update_backup_config(schedule: str = None) -> Dict:
-    if schedule:
-        BACKUP_CONFIG["schedule"] = schedule
-    return BACKUP_CONFIG
+async def update_backup_config() -> Dict:
+    raise HTTPException(
+        status_code=501,
+        detail="The backup schedule is the systemd timer ai-workstation-backup.timer on the "
+               "host; change it there (systemctl edit ai-workstation-backup.timer).")
 
 
 @router.get("/backup/history")
 async def get_backup_history(n: int = 10) -> Dict:
-    # Merge in any archives actually present on disk
-    on_disk = {os.path.basename(p): p for p in glob.glob(f"{BACKUP_DIR}/backup-*.tar.gz")}
-    for entry in BACKUP_HISTORY:
-        archive = entry.get("archive")
-        if archive and os.path.exists(archive):
-            entry["size_bytes"] = os.path.getsize(archive)
-        entry["restorable"] = bool(archive and os.path.exists(archive))
-    return {"backups": BACKUP_HISTORY[:n]}
+    return {"backups": _runs()[:max(n, 0)]}
 
 
 @router.post("/backup/run")
-async def run_backup_now(request: Request):
-    """Run backup immediately (SSE stream)."""
-    async def event_generator():
+async def run_backup_now():
+    """Run scripts/backup.sh now and stream its output (SSE)."""
+    repo = _host_repo()
+    if repo is None:
+        raise HTTPException(status_code=503, detail="HOST_COMPOSE_DIR is not set; cannot "
+                                                    "locate scripts/backup.sh on the host")
+    if _run_lock.locked():
+        raise HTTPException(status_code=409, detail="A backup is already running")
+
+    async def events():
+        # Taken here, not in the handler: a client that disconnects before the
+        # body starts would otherwise leave it held forever. The fixed helper
+        # container name stops a second run that slips past the check above.
+        if _run_lock.locked():
+            yield "data: ✗ A backup is already running\n\n"
+            return
+        await _run_lock.acquire()
         try:
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M")
-            archive_path = f"{BACKUP_DIR}/backup-{timestamp}.tar.gz"
-            os.makedirs(BACKUP_DIR, exist_ok=True)
-
-            yield f"data: Starting backup at {timestamp}...\n\n"
-            yield f"data: Archive target: {archive_path}\n\n"
-
-            # Stream tar progress via --checkpoint
-            cmd = [
-                "tar", "--create", "--gzip",
-                "--checkpoint=1000", "--checkpoint-action=echo=#%{read,MiB}MiB",
-                f"--file={archive_path}",
-                "--exclude=/data/backups",
-                RESTORE_TARGET,
-            ]
+            yield "data: Running scripts/backup.sh in a helper container...\n\n"
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-
+                *_helper_command(repo),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
             async for line in proc.stdout:
-                decoded = line.decode().strip()
-                if decoded:
-                    yield f"data: {decoded}\n\n"
-
-            await proc.wait()
-
-            if proc.returncode == 0:
-                size_bytes = os.path.getsize(archive_path) if os.path.exists(archive_path) else 0
-                size_gb = round(size_bytes / (1024 ** 3), 1)
-                entry = {
-                    "id": str(len(BACKUP_HISTORY) + 1),
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "size": f"{size_gb} GB",
-                    "status": "success",
-                    "archive": archive_path,
-                }
-                BACKUP_HISTORY.insert(0, entry)
-                BACKUP_CONFIG["last_backup"] = {"date": entry["date"], "size": entry["size"], "status": "success"}
-                yield f"data: ✓ Backup complete: {size_gb} GB → {archive_path}\n\n"
+                text = ANSI.sub("", line.decode(errors="replace")).rstrip()
+                if text:
+                    yield f"data: {text}\n\n"
+            rc = await proc.wait()
+            if rc == 0:
+                yield "data: ✓ Backup complete\n\n"
             else:
-                yield f"data: ✗ Backup failed (exit {proc.returncode})\n\n"
+                yield f"data: ✗ Backup failed (exit {rc}); see the run's MANIFEST.txt\n\n"
         except Exception as e:
-            yield f"data: Error: {e}\n\n"
+            yield f"data: ✗ Error: {e}\n\n"
+        finally:
+            _run_lock.release()
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(events(), media_type="text/event-stream")
 
 
 @router.post("/backup/restore/{backup_id}")
 async def restore_backup(backup_id: str):
-    """Restore from a backup archive (SSE stream)."""
-    entry = _get_backup_by_id(backup_id)
-    if not entry:
-        raise HTTPException(status_code=404, detail=f"Backup {backup_id} not found")
-
-    archive = entry.get("archive")
-    if not archive:
-        raise HTTPException(status_code=400, detail="This backup has no archive (failed backup)")
-    if not os.path.exists(archive):
-        raise HTTPException(status_code=404, detail=f"Archive not found on disk: {archive}")
-
-    async def event_generator():
-        try:
-            yield f"data: Starting restore from {archive}...\n\n"
-            yield f"data: Target: {RESTORE_TARGET}\n\n"
-            yield f"data: ⚠ This will overwrite existing data — ensure services are stopped\n\n"
-
-            # Stop managed services before restoring
-            yield f"data: Stopping Docker services...\n\n"
-            stop_proc = await asyncio.create_subprocess_exec(
-                "docker", "compose",
-                "--project-directory", "/opt/loadout",
-                "stop",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            async for line in stop_proc.stdout:
-                decoded = line.decode().strip()
-                if decoded:
-                    yield f"data:   {decoded}\n\n"
-            await stop_proc.wait()
-            yield f"data: Services stopped.\n\n"
-
-            # Extract archive
-            yield f"data: Extracting {os.path.basename(archive)}...\n\n"
-            cmd = [
-                "tar", "--extract", "--gzip",
-                "--checkpoint=1000", "--checkpoint-action=echo=#%{read,MiB}MiB read",
-                f"--file={archive}",
-                f"--directory={RESTORE_TARGET}",
-                "--strip-components=1",
-            ]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            async for line in proc.stdout:
-                decoded = line.decode().strip()
-                if decoded:
-                    yield f"data: {decoded}\n\n"
-            await proc.wait()
-
-            if proc.returncode == 0:
-                yield f"data: ✓ Restore complete. Restart services to apply.\n\n"
-            else:
-                yield f"data: ✗ Restore failed (exit {proc.returncode}) — check data integrity\n\n"
-        except Exception as e:
-            yield f"data: Error: {e}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    raise HTTPException(
+        status_code=501,
+        detail="Restore is not available from the API. Follow the restore steps in "
+               f"{BACKUP_ROOT}/<run>/MANIFEST.txt, stopping the affected services first.")
 
 
 @router.delete("/backup/{backup_id}")
 async def delete_backup(backup_id: str) -> Dict:
-    global BACKUP_HISTORY
-    entry = _get_backup_by_id(backup_id)
-    if entry and entry.get("archive") and os.path.exists(entry["archive"]):
-        os.remove(entry["archive"])
-    BACKUP_HISTORY = [b for b in BACKUP_HISTORY if b["id"] != backup_id]
+    if not RUN_ID.match(backup_id):
+        raise HTTPException(status_code=400, detail="Invalid backup id")
+    if not (BACKUP_ROOT / backup_id).is_dir():
+        raise HTTPException(status_code=404, detail=f"Backup {backup_id} not found")
+    if _run_lock.locked():
+        raise HTTPException(status_code=409, detail="A backup is running")
+    # Run files are root-owned mode 600 and BACKUP_ROOT is read-only here, so
+    # the delete runs as root in a throwaway container.
+    root = BACKUP_ROOT.as_posix()
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "run", "--rm", "-v", f"{root}:{root}", "alpine",
+        "rm", "-rf", f"{root}/{backup_id}",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    out, _ = await proc.communicate()
+    if proc.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"Delete failed: "
+                                                    f"{(out or b'').decode(errors='replace')[-300:]}")
     return {"status": "deleted", "backup_id": backup_id}

@@ -446,8 +446,8 @@ def api(lm, monkeypatch, tmp_path):
 
     * subprocess.run is already FakeDocker (via ``lm``; it patches the global).
     * asyncio.create_subprocess_exec is FakeExec (``api.exec``).
-    * .env, the setup flag, BACKUP_DIR and RESTORE_TARGET live under tmp_path.
-    * The in-memory backup history starts EMPTY; tests seed what they need.
+    * .env, the setup flag and BACKUP_ROOT live under tmp_path.
+    * HOST_COMPOSE_DIR is set, so the backup helper has a repo path to mount.
     """
     from api import backup, secrets, setup
 
@@ -460,19 +460,15 @@ def api(lm, monkeypatch, tmp_path):
     data = tmp_path / "data"
     backups = data / "backups"
     backups.mkdir(parents=True)
-    monkeypatch.setattr(backup, "BACKUP_DIR", str(backups))
-    monkeypatch.setattr(backup, "RESTORE_TARGET", str(data))
-    shipped_history = list(backup.BACKUP_HISTORY)  # module default, as deployed
-    monkeypatch.setattr(backup, "BACKUP_HISTORY", [])
-    monkeypatch.setattr(backup, "BACKUP_CONFIG", {
-        "schedule": "0 6 * * *", "destination": str(backups), "last_backup": None})
+    monkeypatch.setattr(backup, "BACKUP_ROOT", backups)
+    monkeypatch.setattr(backup, "HOST_COMPOSE_DIR", "/srv/beta-workstation/docker")
 
     fake_exec = FakeExec(asyncio.create_subprocess_exec)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     return SimpleNamespace(
         client=lm.client, docker=lm.docker, exec=fake_exec,
-        env_file=env_file, data=data, shipped_history=shipped_history, backups=backups, tmp=tmp_path,
+        env_file=env_file, data=data, backups=backups, tmp=tmp_path,
         backup=backup, secrets=secrets, setup=setup)
 
 

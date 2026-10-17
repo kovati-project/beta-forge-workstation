@@ -211,6 +211,10 @@ bash scripts/backup.sh configs     # configs only (fast)
 
 Systemd units (installed by `deploy-all.sh` phase 14) run a daily backup automatically.
 
+The UI (Settings → Backups, Storage → Run Backup Now) runs the same `backup.sh all` in a
+short-lived helper container and lists the runs found under `/data/backups/`. Restore is
+manual: follow the steps in the run's `MANIFEST.txt`, stopping the affected services first.
+
 ---
 
 ## Manual browser steps after first deploy

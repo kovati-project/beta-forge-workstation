@@ -222,8 +222,13 @@ export async function getBackupHistory() {
 export async function runBackupNow() {
   try {
     const response = await fetch('/api/backup/run', { method: 'POST' });
-    if (response.ok) return await response.json();
-    throw new Error('Failed to start backup');
+    if (!response.ok) throw new Error(`Failed to start backup (HTTP ${response.status})`);
+    // The endpoint streams the script's output (SSE); wait for it to finish.
+    const text = await response.text();
+    const lines = text.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6));
+    const last = lines[lines.length - 1] || '';
+    if (!last.startsWith('✓')) throw new Error(last.replace(/^✗\s*/, '') || 'Backup failed');
+    return { status: 'success', log: lines };
   } catch (error) {
     console.error('Failed to start backup:', error);
     throw error;
