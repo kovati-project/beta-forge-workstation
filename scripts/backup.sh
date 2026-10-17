@@ -102,7 +102,9 @@ finish_archive() {
 
 # Resolve a compose volume to its real Docker name. Compose prefixes volumes
 # with the project name (e.g. open-webui-data -> ai-webui_open-webui-data), so
-# fall back to a unique "<project>_<name>" match.
+# fall back to a unique "<project>_<name>" match. Several matches (leftovers
+# from an older project name, e.g. docker_postgres-data) are narrowed to the
+# ones a container, running or stopped, actually mounts.
 # Prints the name; returns 1 if absent, 2 if ambiguous.
 resolve_volume() {
     local base=$1
@@ -118,7 +120,16 @@ resolve_volume() {
         return 1
     fi
     if [ "$(printf '%s\n' "$matches" | wc -l)" -gt 1 ]; then
-        return 2
+        local m in_use=""
+        for m in $matches; do
+            if [ -n "$(docker ps -aq --filter "volume=$m")" ]; then
+                in_use+="$m"$'\n'
+            fi
+        done
+        matches=${in_use%$'\n'}
+        if [ -z "$matches" ] || [ "$(printf '%s\n' "$matches" | wc -l)" -gt 1 ]; then
+            return 2
+        fi
     fi
     echo "$matches"
 }
