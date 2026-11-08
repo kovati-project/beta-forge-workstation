@@ -4,11 +4,17 @@
 #
 #   .\scripts\test-coding-agent.ps1
 #   .\scripts\test-coding-agent.ps1 -Server 192.168.1.102 -Model qwen3-coder:30b
+#
+# -Model is the OpenHands model (non-streaming requests). -CopilotModel is the
+# model selected in VS Code Copilot agent mode, which streams its requests;
+# qwen3-coder intermittently leaks its tool calls as text when streamed.
 
 param(
     [string]$Server = "192.168.1.102",
     [string]$Model = "qwen3-coder:30b",
-    [string[]]$RequiredModels = @("qwen3-coder:30b", "qwen2.5-coder:7b", "devstral:latest", "nomic-embed-text:latest"),
+    [string]$CopilotModel = "gpt-oss:20b",
+    [int]$StreamTrials = 3,
+    [string[]]$RequiredModels = @("qwen3-coder:30b", "gpt-oss:20b", "qwen2.5-coder:7b", "devstral:latest", "nomic-embed-text:latest"),
     [int]$OpenHandsPort = 3003
 )
 
@@ -67,6 +73,38 @@ try {
     }
 } catch {
     Fail "tool-call request failed: $($_.Exception.Message)"
+}
+
+# 3b. Streamed tool calling, the way Copilot agent mode calls the model.
+# A preamble sentence before the call is what triggers leaked <function=...> text.
+$streamBody = @{
+    model    = $CopilotModel
+    stream   = $true
+    messages = @(@{ role = "user"; content = "First say in one sentence what you will do, then list the files in /tmp using the tool." })
+    tools    = ($body | ConvertFrom-Json).tools
+} | ConvertTo-Json -Depth 10
+$streamOk = 0
+for ($i = 1; $i -le $StreamTrials; $i++) {
+    try {
+        $raw = (Invoke-WebRequest "$ollama/v1/chat/completions" -Method Post -ContentType "application/json" -Body $streamBody -TimeoutSec 300 -UseBasicParsing).Content
+        $hasCall = $false
+        $text = ""
+        foreach ($line in ($raw -split "`n")) {
+            $line = $line.Trim()
+            if (-not $line.StartsWith("data:") -or $line -eq "data: [DONE]") { continue }
+            $delta = ($line.Substring(5) | ConvertFrom-Json).choices[0].delta
+            if ($delta.tool_calls) { $hasCall = $true }
+            if ($delta.content) { $text += $delta.content }
+        }
+        if ($hasCall -and $text -notmatch "<function=|<tool_call>") { $streamOk++ }
+    } catch {
+        Write-Host "    stream trial $i failed: $($_.Exception.Message)"
+    }
+}
+if ($streamOk -eq $StreamTrials) {
+    Pass "streamed tool calls from ${CopilotModel}: $streamOk/$StreamTrials structured"
+} else {
+    Fail "streamed tool calls from ${CopilotModel}: only $streamOk/$StreamTrials structured (Copilot agent mode will show raw <function=...> text)"
 }
 
 # 4. Generation speed
