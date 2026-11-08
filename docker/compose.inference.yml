@@ -3,10 +3,13 @@ name: ai-inference
 services:
 
   # ── Ollama ────────────────────────────────────────────────────────────────────
-  # Lightweight model management. Hot-swap capable. Good for 7B–14B chat models.
-  # Uses GPU0 by default; loadout manager overrides CUDA_VISIBLE_DEVICES at runtime.
+  # Lightweight model management. Hot-swap capable. Serves the coding agent
+  # (OpenHands) and the VS Code copilot (Continue.dev).
+  # Runs on GPU1+GPU2 so it does not compete with vllm-pair-a on GPU0+GPU3.
+  # GPU placement comes from device_ids below; profiles.yaml gpu_assignment
+  # only labels the GPUs in the dashboard.
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.30.5
     container_name: ollama
     restart: unless-stopped
     ports:
@@ -15,14 +18,21 @@ services:
       - /data/models/ollama:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0
-      - OLLAMA_NUM_PARALLEL=4
-      - OLLAMA_MAX_LOADED_MODELS=2
+      # Agents need long context; KV cache is allocated per parallel slot,
+      # so keep NUM_PARALLEL low and quantize the cache.
+      - OLLAMA_CONTEXT_LENGTH=65536
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_KV_CACHE_TYPE=q8_0
+      # agent model + autocomplete model + embeddings stay resident
+      - OLLAMA_MAX_LOADED_MODELS=3
+      - OLLAMA_KEEP_ALIVE=24h
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
+              device_ids: ['1', '2']
               capabilities: [gpu]
 
   # ── vLLM: NVLink Pair A [GPU0, GPU3] ─────────────────────────────────────────
