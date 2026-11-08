@@ -22,7 +22,7 @@ profiles:
       - ollama
     gpu_assignment:
       vllm-pair-a: ["0", "3"]
-      ollama: ["1"]
+      ollama: ["1", "2"]
     exclusive_gpus: ["0", "3"]
     incompatible_with: [inference-small, inference-4gpu, inference-4gpu-large,
                         dual-stack, training-lora-text, training-lora-image, training-unsloth]

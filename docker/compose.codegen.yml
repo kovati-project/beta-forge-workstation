@@ -3,22 +3,30 @@ name: ai-codegen
 services:
 
   # ── OpenHands: Autonomous coding agent ────────────────────────────────────
+  # Uses Ollama (compose.inference.yml) over the shared ai-workstation network,
+  # so no host IP is hardcoded. Each conversation runs in a separate sandbox
+  # container started through the Docker socket; the server reaches it via
+  # host.docker.internal.
   openhands:
-    image: ghcr.io/all-hands-ai/openhands:latest
+    image: ghcr.io/all-hands-ai/openhands:0.59
     container_name: openhands
     restart: unless-stopped
     ports:
       - "3003:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - /data/openhands:/opt/openhands/workspace
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      # settings, secrets and conversation history survive restarts
+      - /data/openhands/state:/.openhands
     environment:
-      - OPENAI_API_BASE=http://10.10.10.2:8000/v1
-      - OPENAI_API_KEY=EMPTY
-      - OPENAI_MODEL=current-model
-      - SANDBOX_TYPE=local
-      - WORKSPACE_MOUNT_PATH=/data/openhands
-      - LLM_BACKEND_TIMEOUT=120
+      - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:0.59-nikolaik
+      - SANDBOX_VOLUMES=/data/openhands/workspace:/workspace:rw
+      - LLM_MODEL=openai/qwen3-coder:30b
+      - LLM_BASE_URL=http://ollama:11434/v1
+      - LLM_API_KEY=local-llm
+      - LLM_TIMEOUT=600
+      - LOG_ALL_EVENTS=true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
