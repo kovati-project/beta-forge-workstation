@@ -1,0 +1,52 @@
+# Continue.dev (v1+ YAML format) — copy to ~/.continue/config.yaml on the client.
+# Same models as config.json, which older Continue releases read instead.
+# All models are served by Ollama on the workstation (GPU1+GPU2).
+name: Kovati Workstation
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Qwen3-Coder 30B [Primary]
+    provider: ollama
+    model: qwen3-coder:30b
+    apiBase: http://192.168.1.102:11434
+    roles: [chat, edit, apply]
+    capabilities: [tool_use]
+    defaultCompletionOptions:
+      contextLength: 65536
+      temperature: 0.1
+      maxTokens: 4096
+
+  - name: Devstral 24B [Agent alt]
+    provider: ollama
+    model: devstral
+    apiBase: http://192.168.1.102:11434
+    roles: [chat, edit, apply]
+    capabilities: [tool_use]
+    defaultCompletionOptions:
+      contextLength: 65536
+      temperature: 0.15
+
+  - name: Qwen2.5-Coder 7B [Autocomplete]
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://192.168.1.102:11434
+    roles: [autocomplete]
+    defaultCompletionOptions:
+      contextLength: 4096
+      temperature: 0.05
+
+  - name: Nomic Embed
+    provider: ollama
+    model: nomic-embed-text
+    apiBase: http://192.168.1.102:11434
+    roles: [embed]
+
+context:
+  - provider: code
+  - provider: docs
+  - provider: diff
+  - provider: terminal
+  - provider: problems
+  - provider: folder
+  - provider: codebase
