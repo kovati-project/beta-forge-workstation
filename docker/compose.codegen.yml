@@ -22,8 +22,15 @@ services:
     environment:
       - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:0.59-nikolaik
       - SANDBOX_VOLUMES=/data/openhands/workspace:/workspace:rw
-      - LLM_MODEL=openai/qwen3-coder:30b
+      # 128k tag from scripts/create-ollama-variants.sh. /v1 requests carry no
+      # num_ctx, so the window comes from the tag. Keep input below it with
+      # room for output; past num_ctx Ollama silently drops the oldest tokens.
+      # These env values seed OpenHands' saved settings only on first start;
+      # deploy-phase11.sh syncs llm_model into the saved settings afterwards.
+      - LLM_MODEL=openai/qwen3-coder:30b-128k
       - LLM_BASE_URL=http://ollama:11434/v1
+      - LLM_MAX_INPUT_TOKENS=122880
+      - LLM_MAX_OUTPUT_TOKENS=8192
       - LLM_API_KEY=local-llm
       - LLM_TIMEOUT=600
       - LOG_ALL_EVENTS=true

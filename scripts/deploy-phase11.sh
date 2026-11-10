@@ -51,6 +51,12 @@ if [ "$MODELS" -lt 3 ]; then
 fi
 echo ""
 
+# Long-context agent tag (qwen3-coder:30b-128k) used by OpenHands and Continue
+if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
+    bash "$REPO_ROOT/scripts/create-ollama-variants.sh" || echo "WARNING: some Ollama variants were not created"
+    echo ""
+fi
+
 # Verify docker compose file exists
 if [ ! -f "docker/compose.codegen.yml" ]; then
     echo "ERROR: docker/compose.codegen.yml not found"
@@ -91,6 +97,29 @@ if curl -sf http://localhost:3003 > /dev/null 2>&1; then
     echo "✓ OpenHands responding on :3003"
 else
     echo "⊘ OpenHands initializing (might need more time)"
+fi
+
+# OpenHands keeps its own saved settings in /data/openhands/state, and those
+# win over the LLM_MODEL env var after the first start. Sync the model from
+# compose.codegen.yml into them. Posting without llm_api_key keeps the stored key.
+WANT_MODEL=$(grep -oP 'LLM_MODEL=\K\S+' docker/compose.codegen.yml)
+if SETTINGS=$(curl -sf http://localhost:3003/api/settings); then
+    BODY=$(WANT_MODEL="$WANT_MODEL" python3 -c '
+import json, os, sys
+s = json.load(sys.stdin)
+if s.get("llm_model") == os.environ["WANT_MODEL"]:
+    sys.exit(0)
+s["llm_model"] = os.environ["WANT_MODEL"]
+drop = {"llm_api_key_set", "search_api_key_set", "provider_tokens_set", "secrets_store", "email", "email_verified"}
+print(json.dumps({k: v for k, v in s.items() if v is not None and k not in drop}))
+' <<< "$SETTINGS")
+    if [ -n "$BODY" ]; then
+        curl -sf -X POST http://localhost:3003/api/settings -H 'Content-Type: application/json' -d "$BODY" > /dev/null \
+            && echo "✓ OpenHands saved settings now use $WANT_MODEL" \
+            || echo "WARNING: could not update OpenHands settings to $WANT_MODEL"
+    else
+        echo "✓ OpenHands saved settings already use $WANT_MODEL"
+    fi
 fi
 
 echo ""
