@@ -3,19 +3,26 @@
 # Must parse on Windows PowerShell 5.1.
 #
 #   .\scripts\test-coding-agent.ps1
-#   .\scripts\test-coding-agent.ps1 -Server 192.168.1.102 -Model qwen3-coder:30b
+#   .\scripts\test-coding-agent.ps1 -Server 192.168.1.102 -Model qwen3-coder:30b-128k
+#   .\scripts\test-coding-agent.ps1 -LongContext    # also fill ~100k tokens and find a needle
 #
 # -Model is the OpenHands model (non-streaming requests). -CopilotModel is the
 # model selected in VS Code Copilot agent mode, which streams its requests;
 # qwen3-coder intermittently leaks its tool calls as text when streamed.
+# qwen3-coder:30b-128k is qwen3-coder:30b with num_ctx 131072 baked in
+# (scripts/create-ollama-variants.sh), so clients that send no num_ctx,
+# like OpenHands over /v1, still get the full window.
 
 param(
     [string]$Server = "192.168.1.102",
-    [string]$Model = "qwen3-coder:30b",
+    [string]$Model = "qwen3-coder:30b-128k",
+    [int]$MinContext = 131072,
     [string]$CopilotModel = "gpt-oss:20b",
     [int]$StreamTrials = 3,
-    [string[]]$RequiredModels = @("qwen3-coder:30b", "gpt-oss:20b", "qwen2.5-coder:7b", "devstral:latest", "nomic-embed-text:latest"),
-    [int]$OpenHandsPort = 3003
+    [string[]]$RequiredModels = @("qwen3-coder:30b", "qwen3-coder:30b-128k", "gpt-oss:20b", "qwen2.5-coder:7b", "devstral:latest", "nomic-embed-text:latest"),
+    [int]$OpenHandsPort = 3003,
+    [switch]$LongContext,
+    [int]$LongContextTokens = 100000
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,6 +128,9 @@ try {
 $ps = (Invoke-RestMethod "$ollama/api/ps" -TimeoutSec 10).models | Where-Object { $_.name -eq $Model }
 if ($ps -and $ps.size_vram -ge $ps.size) {
     Pass ("{0} fully on GPU ({1:N1} GB, ctx {2})" -f $Model, ($ps.size_vram / 1GB), $ps.context_length)
+    if ($ps.context_length -lt $MinContext) {
+        Fail ("{0} loaded with ctx {1}, expected at least {2} (a client sent a smaller num_ctx)" -f $Model, $ps.context_length, $MinContext)
+    }
 } elseif ($ps) {
     Fail ("{0} partly on CPU: {1:N1} of {2:N1} GB in VRAM" -f $Model, ($ps.size_vram / 1GB), ($ps.size / 1GB))
 } else {
@@ -139,6 +149,43 @@ try {
     }
 } catch {
     Fail "OpenHands check failed: $($_.Exception.Message)"
+}
+
+# 7. Long context: bury a needle 40% into ~LongContextTokens of code and ask for it.
+# Sends no num_ctx, like OpenHands, so it exercises the tag's own window.
+if ($LongContext) {
+    $blocks = [int]($LongContextTokens / 45)
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $blocks; $i++) {
+        if ($i -eq [int]($blocks * 0.4)) { [void]$sb.AppendLine("DEPLOY_TOKEN = 'amber-7731-kestrel'  # read by release.py") }
+        [void]$sb.AppendLine("def handler_$i(request, retries=$($i % 7)):")
+        [void]$sb.AppendLine("    value = request.get('field_$i', $i)")
+        [void]$sb.AppendLine("    return {'id': $i, 'value': value * $($i % 13), 'ok': True}")
+        [void]$sb.AppendLine("")
+    }
+    $lc = @{
+        model    = $Model
+        stream   = $false
+        messages = @(
+            @{ role = "system"; content = "You are a code assistant. Answer with the value only." },
+            @{ role = "user"; content = $sb.ToString() + "`nWhat string is DEPLOY_TOKEN set to in the code above?" }
+        )
+        options  = @{ num_predict = 32; temperature = 0 }
+    } | ConvertTo-Json -Depth 5
+    try {
+        $r = Invoke-RestMethod "$ollama/api/chat" -Method Post -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($lc)) -TimeoutSec 900
+        $secs = $r.prompt_eval_duration / 1e9
+        $info = "{0} prompt tokens, prefill {1:N0} tok/s ({2:N0}s)" -f $r.prompt_eval_count, ($r.prompt_eval_count / $secs), $secs
+        if ($r.prompt_eval_count -lt $LongContextTokens * 0.8) {
+            Fail "long context truncated: only $info"
+        } elseif ($r.message.content -match "amber-7731-kestrel") {
+            Pass "long context needle found: $info"
+        } else {
+            Fail "long context needle missed ($info): $($r.message.content)"
+        }
+    } catch {
+        Fail "long context request failed: $($_.Exception.Message)"
+    }
 }
 
 Write-Host ""
