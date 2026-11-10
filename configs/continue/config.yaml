@@ -1,19 +1,34 @@
 # Continue.dev (v1+ YAML format) — copy to ~/.continue/config.yaml on the client.
 # Same models as config.json, which older Continue releases read instead.
-# All models are served by Ollama on the workstation (GPU1+GPU2).
+# All models are served by Ollama on the workstation (GPU1+GPU2), the same
+# server VS Code Copilot Chat uses (its "Ollama" provider, same apiBase).
+# gpt-oss:20b is listed first so it is the default, matching Copilot agent mode:
+# qwen3-coder leaks its tool calls as text when streamed, and Continue streams.
 name: Kovati Workstation
 version: 1.0.0
 schema: v1
 
 models:
-  - name: Qwen3-Coder 30B [Primary]
+  - name: GPT-OSS 20B [Agent, same as Copilot]
     provider: ollama
-    model: qwen3-coder:30b
+    model: gpt-oss:20b
     apiBase: http://192.168.1.102:11434
     roles: [chat, edit, apply]
     capabilities: [tool_use]
     defaultCompletionOptions:
       contextLength: 65536
+      maxTokens: 4096
+
+  # Same tag and window as OpenHands, so both share one loaded copy. Continue
+  # always sends num_ctx, and a mismatch makes Ollama reload the model.
+  - name: Qwen3-Coder 30B 128k [Chat/edit]
+    provider: ollama
+    model: qwen3-coder:30b-128k
+    apiBase: http://192.168.1.102:11434
+    roles: [chat, edit, apply]
+    capabilities: [tool_use]
+    defaultCompletionOptions:
+      contextLength: 131072
       temperature: 0.1
       maxTokens: 4096
 

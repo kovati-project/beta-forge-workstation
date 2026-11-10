@@ -1,11 +1,22 @@
 {
   "models": [
     {
-      "title": "Qwen3-Coder 30B [Primary]",
+      "title": "GPT-OSS 20B [Agent, same as Copilot]",
       "provider": "ollama",
-      "model": "qwen3-coder:30b",
+      "model": "gpt-oss:20b",
       "apiBase": "http://192.168.1.102:11434",
       "contextLength": 65536,
+      "capabilities": { "tools": true },
+      "completionOptions": {
+        "maxTokens": 4096
+      }
+    },
+    {
+      "title": "Qwen3-Coder 30B 128k [Chat/edit]",
+      "provider": "ollama",
+      "model": "qwen3-coder:30b-128k",
+      "apiBase": "http://192.168.1.102:11434",
+      "contextLength": 131072,
       "capabilities": { "tools": true },
       "completionOptions": {
         "temperature": 0.1,
