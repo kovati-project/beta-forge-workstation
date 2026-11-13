@@ -34,8 +34,8 @@ check "SearXNG API responding"        "curl -sf 'http://localhost:8080/search?q=
 
 # Backends reachable from Open WebUI's perspective
 echo ""
-check "Ollama reachable at :11434"    "curl -sf http://localhost:11434/v1/models"
-check "nomic-embed-text in Ollama"    "curl -sf http://localhost:11434/v1/models | grep -q nomic-embed-text"
+check "vllm-4gpu reachable at :8002"  "curl -sf http://localhost:8002/v1/models"
+check "vllm-embed has nomic-embed-text" "curl -sf http://localhost:8003/v1/models | grep -q nomic-embed-text"
 check "ComfyUI reachable at :8188"    "curl -sf http://localhost:8188/system_stats"
 
 # Config
@@ -47,8 +47,8 @@ check "SearXNG secret_key not placeholder" "! grep -q 'change-this-to-a-random-3
 # Manual checks
 echo ""
 warn "Admin account created and signup disabled — verify in browser"
-warn "Ollama models visible in model selector — check http://10.10.10.2:3000"
-warn "Chat response from mistral:7b works end-to-end"
+warn "qwen3.8-27b visible in model selector — check http://10.10.10.2:3000"
+warn "Chat response from qwen3.8-27b works end-to-end"
 warn "/image command produces output via ComfyUI (requires checkpoint downloaded)"
 warn "Web search returns results in chat"
 warn "RAG document upload works — try uploading a PDF and querying it"

@@ -47,7 +47,7 @@ check "n8n files directory exists" "[[ -d /data/n8n-files ]]"
 # Manual checks
 echo ""
 warn "n8n owner account created (visit http://10.10.10.2:5678)"
-warn "n8n Ollama integration configured (Settings → AI)"
+warn "n8n LLM integration configured (Settings → AI, http://vllm-4gpu:8000/v1)"
 warn "Can create and save n8n workflows"
 warn "MCP servers respond to JSON-RPC calls (advanced testing)"
 warn "First n8n workflow executes end-to-end"

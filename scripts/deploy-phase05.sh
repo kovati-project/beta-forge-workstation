@@ -19,17 +19,17 @@ fi
 
 # ── 1. Prereq checks ──────────────────────────────────────────────────────────
 echo "[1/3] Checking prerequisites..."
-if ! docker ps --filter name=ollama --filter status=running | grep -q ollama; then
-    echo "  ✗ Ollama is not running — start Phase 03 services first"
+if ! curl -sf http://localhost:8002/v1/models | grep -q '"qwen3.8-27b"'; then
+    echo "  ✗ vllm-4gpu is not serving qwen3.8-27b — run Phase 03 first"
     exit 1
 fi
-echo "  ✓ Ollama running"
+echo "  ✓ vllm-4gpu serving qwen3.8-27b"
 
-if ! curl -sf http://localhost:11434/v1/models | grep -q nomic-embed-text; then
-    echo "  ⚠  nomic-embed-text not found in Ollama — pulling now..."
-    docker exec ollama ollama pull nomic-embed-text
+if ! curl -sf http://localhost:8003/v1/models | grep -q '"nomic-embed-text"'; then
+    echo "  ✗ vllm-embed is not serving nomic-embed-text (required for RAG) — run Phase 03 first"
+    exit 1
 fi
-echo "  ✓ nomic-embed-text present (required for RAG)"
+echo "  ✓ vllm-embed serving nomic-embed-text"
 
 # ── 2. Check SearXNG config ───────────────────────────────────────────────────
 echo "[2/3] Checking SearXNG config..."
@@ -71,10 +71,10 @@ echo "Next steps (in browser at http://10.10.10.2:3000):"
 echo "  1. Register your admin account (first signup = admin)"
 echo "  2. Admin → Settings → General: verify WEBUI_SECRET_KEY entropy"
 echo "  3. Verify models visible: Admin → Settings → Connections"
-echo "  4. Test chat with a small model (mistral:7b recommended for first test)"
+echo "  4. Test chat with qwen3.8-27b"
 echo "  5. Test image generation: type /image a red cat in the chat"
 echo "  6. Settings → Documents: verify chunk size 1000, overlap 100"
 echo ""
 echo "Continue.dev config for client machines:"
-echo "  Copy configs/open-webui/continue-config.json to ~/.continue/config.json"
+echo "  Copy configs/continue/config.yaml to ~/.continue/config.yaml"
 echo "  Install VS Code extension: code --install-extension Continue.continue"

@@ -1,7 +1,7 @@
 #!/bin/bash
 [ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Phase 11 validation: Verify code generation stack deployment
-# Checks: OpenHands, vLLM, Ollama, models, configuration
+# Checks: OpenHands, vLLM (Qwen3.8-27B + embeddings), configuration
 
 set -e
 
@@ -30,18 +30,18 @@ check_warn() {
 echo "Automated checks:"
 echo ""
 
-# 1. vLLM responding
-if curl -sf http://localhost:8000/v1/models > /dev/null 2>&1; then
-    check_pass "vLLM API responding on :8000"
+# 1. Coding model (vllm-4gpu) serving qwen3.8-27b
+if curl -sf http://localhost:8002/v1/models 2>/dev/null | grep -q '"qwen3.8-27b"'; then
+    check_pass "vllm-4gpu serving qwen3.8-27b on :8002"
 else
-    check_fail "vLLM not responding on :8000"
+    check_fail "vllm-4gpu not serving qwen3.8-27b on :8002"
 fi
 
-# 2. Ollama responding
-if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
-    check_pass "Ollama responding on :11434"
+# 2. Embeddings (vllm-embed) serving nomic-embed-text
+if curl -sf http://localhost:8003/v1/models 2>/dev/null | grep -q '"nomic-embed-text"'; then
+    check_pass "vllm-embed serving nomic-embed-text on :8003"
 else
-    check_fail "Ollama not responding on :11434"
+    check_fail "vllm-embed not serving nomic-embed-text on :8003"
 fi
 
 # 3. OpenHands responding
@@ -66,7 +66,7 @@ else
 fi
 
 # 6. Config files exist
-for file in configs/continue/config.json scripts/code-router.py; do
+for file in configs/continue/config.yaml configs/continue/config.json configs/vscode/chatLanguageModels.json; do
     if [ -f "$file" ]; then
         check_pass "File exists: $file"
     else
@@ -83,32 +83,13 @@ for dir in /data/openhands /data/code-cache; do
     fi
 done
 
-# 8. Python script syntax
-if python3 -m py_compile scripts/code-router.py 2>/dev/null; then
-    check_pass "code-router.py Python syntax valid"
+# 8. Fill-in-the-middle completion (Continue tab autocomplete path)
+FIM_BODY='{"model": "qwen3.8-27b", "prompt": "<|fim_prefix|>def add(a, b):\n    <|fim_suffix|>\n<|fim_middle|>", "max_tokens": 16, "temperature": 0}'
+if curl -sf -X POST http://localhost:8002/v1/completions \
+    -H "Content-Type: application/json" -d "$FIM_BODY" 2>/dev/null | grep -q "return"; then
+    check_pass "vllm-4gpu completes fill-in-the-middle requests"
 else
-    check_fail "code-router.py has syntax errors"
-fi
-
-# 9. Code models available in Ollama
-QWEN_7B=$(curl -s http://localhost:11434/api/tags | grep -c "qwen2.5-coder:7b" || true)
-QWEN_14B=$(curl -s http://localhost:11434/api/tags | grep -c "qwen2.5-coder:14b" || true)
-QWEN_32B=$(curl -s http://localhost:11434/api/tags | grep -c "qwen2.5-coder:32b" || true)
-DEEPSEEK=$(curl -s http://localhost:11434/api/tags | grep -c "deepseek-coder" || true)
-
-if [ "$QWEN_7B" -gt 0 ] || [ "$QWEN_14B" -gt 0 ]; then
-    check_pass "At least one Qwen coder model available in Ollama"
-else
-    check_warn "No Qwen coder models found (pull with: docker exec ollama ollama pull qwen2.5-coder:7b)"
-fi
-
-# 10. Verify vLLM can handle code requests
-if curl -sf -X POST http://localhost:8000/v1/completions \
-    -H "Content-Type: application/json" \
-    -d '{"model": "current-model", "prompt": "def hello(): ", "max_tokens": 10}' > /dev/null 2>&1; then
-    check_pass "vLLM accepts code completion requests"
-else
-    check_warn "vLLM completion test failed (might be loading model)"
+    check_warn "FIM completion test failed (might be loading model)"
 fi
 
 echo ""
@@ -118,19 +99,20 @@ echo ""
 # ========== MANUAL CHECKS ==========
 echo "Manual verification checklist:"
 echo ""
-echo "[ ] Code models pulled in Ollama:"
-echo "    docker exec ollama ollama list | grep qwen"
-echo ""
 echo "[ ] Continue.dev installed in IDE:"
 echo "    VS Code: code --list-extensions | grep -i continue"
 echo "    OR verify in IDE Extensions marketplace"
 echo ""
 echo "[ ] Continue.dev config in place:"
-echo "    ~/.continue/config.json exists and is valid JSON"
+echo "    ~/.continue/config.yaml matches configs/continue/config.yaml"
+echo ""
+echo "[ ] VS Code Copilot Chat model:"
+echo "    Manage Models -> Custom Endpoint 'Workstation vLLM' (configs/vscode/chatLanguageModels.json)"
+echo "    Agent mode with Qwen3.8 27B runs a tool (e.g. lists files) without raw <tool_call> text"
 echo ""
 echo "[ ] Tab autocomplete working:"
 echo "    Type incomplete Python: 'def hello():'  (should suggest) <press Tab>"
-echo "    Should trigger suggestions from Qwen 7B (<100ms response)"
+echo "    Should trigger suggestions from Qwen3.8-27B (FIM)"
 echo ""
 echo "[ ] Code chat working:"
 echo "    Ctrl+L (VS Code) → Select code → Ask: 'Explain this'"
@@ -139,10 +121,6 @@ echo ""
 echo "[ ] Slash commands available:"
 echo "    Ctrl+L → Type: /security-review"
 echo "    Should show command in autocomplete"
-echo ""
-echo "[ ] Model routing script working:"
-echo "    python3 scripts/code-router.py"
-echo "    Should output test cases with model recommendations"
 echo ""
 echo "[ ] OpenHands autonomous tasks:"
 echo "    Visit http://10.10.10.2:3003"
@@ -158,19 +136,18 @@ echo "[ ] Semantic code search:"
 echo "    Index repo → Ctrl+L → Ask: 'Find functions that handle authentication'"
 echo "    Should retrieve relevant code chunks"
 echo ""
-echo "[ ] CUDA-specific routing:"
+echo "[ ] CUDA review prompt:"
 echo "    Test: /cuda-review on a CUDA kernel file"
-echo "    Should route to larger model with CUDA-specific prompt"
 echo ""
 
 # ========== VLLM MODEL CHECK ==========
 echo ""
-echo "vLLM loaded models:"
-curl -s http://localhost:8000/v1/models 2>/dev/null | jq '.data[].id' 2>/dev/null || check_warn "Could not query vLLM models"
-
-echo ""
-echo "Ollama available models:"
-curl -s http://localhost:11434/api/tags 2>/dev/null | jq '.models[].name' 2>/dev/null | head -5 || check_warn "Could not query Ollama models"
+echo "vLLM served models:"
+for port in 8002 8003; do
+    curl -s "http://localhost:$port/v1/models" 2>/dev/null \
+        | jq -r --arg p "$port" '.data[] | "  :\($p) \(.id) (max_model_len \(.max_model_len))"' 2>/dev/null \
+        || check_warn "Could not query vLLM models on :$port"
+done
 
 # ========== RESULT ==========
 echo ""

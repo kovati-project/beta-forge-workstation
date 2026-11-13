@@ -21,41 +21,21 @@ else
 fi
 echo ""
 
-# vLLM is loaded on-demand by the Loadout Manager — not always running
-echo "Checking Phase 03 (vLLM)..."
-if ! curl -sf http://localhost:8000/v1/models > /dev/null 2>&1; then
-    echo "WARNING: vLLM not active (normal — activate a loadout profile to start it)"
+# The coding model (Qwen3.8-27B on vllm-4gpu) serves OpenHands, Continue.dev
+# and Copilot Chat; vllm-embed serves Continue's codebase embeddings.
+echo "Checking vLLM coding model (vllm-4gpu :8002) and embeddings (vllm-embed :8003)..."
+if curl -sf http://localhost:8002/v1/models 2>/dev/null | grep -q '"qwen3.8-27b"'; then
+    echo "✓ vllm-4gpu serving qwen3.8-27b"
 else
-    echo "✓ vLLM running on :8000"
+    echo "WARNING: vllm-4gpu is not serving qwen3.8-27b — OpenHands will deploy but needs it at runtime:"
+    echo "  docker compose -f docker/compose.inference.yml up -d vllm-4gpu vllm-embed"
 fi
-echo ""
-
-# Verify Ollama is running
-echo "Checking Ollama..."
-if ! curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo "WARNING: Ollama not running on :11434 — OpenHands will deploy but needs a model endpoint at runtime"
+if curl -sf http://localhost:8003/v1/models 2>/dev/null | grep -q '"nomic-embed-text"'; then
+    echo "✓ vllm-embed serving nomic-embed-text"
 else
-    echo "✓ Ollama running on :11434"
+    echo "WARNING: vllm-embed is not serving nomic-embed-text (Continue codebase search, Open WebUI RAG)"
 fi
 echo ""
-
-# Check if code models are available
-echo "Checking for code models in Ollama..."
-MODELS=$(curl -s http://localhost:11434/api/tags | grep -o '"name":"[^"]*"' | wc -l)
-if [ "$MODELS" -lt 3 ]; then
-    echo "WARNING: Only $MODELS models found. Pull code models:"
-    echo "  docker exec ollama ollama pull qwen2.5-coder:32b"
-    echo "  docker exec ollama ollama pull qwen2.5-coder:14b"
-    echo "  docker exec ollama ollama pull qwen2.5-coder:7b"
-    echo "  docker exec ollama ollama pull deepseek-coder-v2:16b"
-fi
-echo ""
-
-# Long-context agent tag (qwen3-coder:30b-128k) used by OpenHands and Continue
-if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
-    bash "$REPO_ROOT/scripts/create-ollama-variants.sh" || echo "WARNING: some Ollama variants were not created"
-    echo ""
-fi
 
 # Verify docker compose file exists
 if [ ! -f "docker/compose.codegen.yml" ]; then
@@ -100,25 +80,28 @@ else
 fi
 
 # OpenHands keeps its own saved settings in /data/openhands/state, and those
-# win over the LLM_MODEL env var after the first start. Sync the model from
-# compose.codegen.yml into them. Posting without llm_api_key keeps the stored key.
+# win over the LLM_* env vars after the first start. Sync model and base URL
+# from compose.codegen.yml into them. Posting without llm_api_key keeps the
+# stored key.
 WANT_MODEL=$(grep -oP 'LLM_MODEL=\K\S+' docker/compose.codegen.yml)
+WANT_URL=$(grep -oP 'LLM_BASE_URL=\K\S+' docker/compose.codegen.yml)
 if SETTINGS=$(curl -sf http://localhost:3003/api/settings); then
-    BODY=$(WANT_MODEL="$WANT_MODEL" python3 -c '
+    BODY=$(WANT_MODEL="$WANT_MODEL" WANT_URL="$WANT_URL" python3 -c '
 import json, os, sys
 s = json.load(sys.stdin)
-if s.get("llm_model") == os.environ["WANT_MODEL"]:
+want = {"llm_model": os.environ["WANT_MODEL"], "llm_base_url": os.environ["WANT_URL"]}
+if all(s.get(k) == v for k, v in want.items()):
     sys.exit(0)
-s["llm_model"] = os.environ["WANT_MODEL"]
+s.update(want)
 drop = {"llm_api_key_set", "search_api_key_set", "provider_tokens_set", "secrets_store", "email", "email_verified"}
 print(json.dumps({k: v for k, v in s.items() if v is not None and k not in drop}))
 ' <<< "$SETTINGS")
     if [ -n "$BODY" ]; then
         curl -sf -X POST http://localhost:3003/api/settings -H 'Content-Type: application/json' -d "$BODY" > /dev/null \
-            && echo "✓ OpenHands saved settings now use $WANT_MODEL" \
-            || echo "WARNING: could not update OpenHands settings to $WANT_MODEL"
+            && echo "✓ OpenHands saved settings now use $WANT_MODEL via $WANT_URL" \
+            || echo "WARNING: could not update OpenHands settings to $WANT_MODEL via $WANT_URL"
     else
-        echo "✓ OpenHands saved settings already use $WANT_MODEL"
+        echo "✓ OpenHands saved settings already use $WANT_MODEL via $WANT_URL"
     fi
 fi
 
@@ -128,8 +111,8 @@ echo ""
 echo "Code generation stack ready:"
 echo ""
 echo "  OpenHands (autonomous agent):      http://10.10.10.2:3003"
-echo "  vLLM primary (Qwen 32B):           http://10.10.10.2:8000"
-echo "  Ollama (fast models):              http://10.10.10.2:11434"
+echo "  vLLM Qwen3.8-27B (chat/agent/FIM): http://10.10.10.2:8002/v1"
+echo "  vLLM nomic-embed-text:             http://10.10.10.2:8003/v1"
 echo ""
 echo "Next steps:"
 echo ""
@@ -139,14 +122,12 @@ echo "   PyCharm:   Marketplace → search 'Continue'"
 echo "   Neovim:    git clone https://github.com/continuedev/continue.git"
 echo ""
 echo "2. Configure Continue.dev:"
-echo "   Copy configs/continue/config.json to:"
-echo "   ~/.continue/config.json"
+echo "   Copy configs/continue/config.yaml to:"
+echo "   ~/.continue/config.yaml"
 echo ""
-echo "3. Pull code models in Ollama:"
-echo "   docker exec ollama ollama pull qwen2.5-coder:32b"
-echo "   docker exec ollama ollama pull qwen2.5-coder:14b"
-echo "   docker exec ollama ollama pull qwen2.5-coder:7b"
-echo "   docker exec ollama ollama pull deepseek-coder-v2:16b"
+echo "3. Configure VS Code Copilot Chat (Manage Models -> Custom Endpoint):"
+echo "   URL http://10.10.10.2:8002/v1, model qwen3.8-27b, tool calling on,"
+echo "   any non-empty API key (vLLM does not check it)"
 echo ""
 echo "4. Test Continue.dev:"
 echo "   Ctrl+L (VS Code): Start a code chat session"
@@ -162,8 +143,5 @@ echo "   - 'Implement a FastAPI endpoint for X with tests'"
 echo "   - 'Fix the failing test in test_module.py'"
 echo "   - 'Refactor this function to use async/await'"
 echo ""
-echo "7. Test model routing:"
-echo "   python3 scripts/code-router.py"
-echo ""
-echo "8. Run validation:"
+echo "7. Run validation:"
 echo "   bash scripts/validate-phase11.sh"

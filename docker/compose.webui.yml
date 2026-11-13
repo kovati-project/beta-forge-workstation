@@ -11,19 +11,19 @@ services:
       - "3000:8080"
     volumes:
       - open-webui-data:/app/backend/data
-      - /data/models/ollama:/root/.ollama
     environment:
       # Backends are addressed by container name and *internal* port on the
       # ai-workstation network; 10.10.10.2 never existed on this host (#51).
       # Open WebUI keeps no saved connection settings in its DB here, so these env
       # vars are authoritative (re-check webui.db `config` if that ever changes).
 
-      # Ollama backend (primary)
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # No Ollama on this host; without this Open WebUI probes localhost:11434.
+      - ENABLE_OLLAMA_API=false
 
-      # vLLM backends (OpenAI-compatible; the base URL must end in /v1). pair-b and
-      # 4gpu only resolve while the loadout-manager has that profile running.
-      - OPENAI_API_BASE_URLS=http://vllm-pair-a:8000/v1;http://vllm-pair-b:8000/v1;http://vllm-4gpu:8000/v1
+      # vLLM backends (OpenAI-compatible; the base URL must end in /v1).
+      # vllm-4gpu (Qwen3.8-27B) is the default stack; pair-a and pair-b only
+      # resolve while the loadout-manager has that profile running.
+      - OPENAI_API_BASE_URLS=http://vllm-4gpu:8000/v1;http://vllm-pair-a:8000/v1;http://vllm-pair-b:8000/v1
       - OPENAI_API_KEYS=EMPTY;EMPTY;EMPTY
 
       # Image generation via ComfyUI
@@ -32,8 +32,11 @@ services:
       - COMFYUI_BASE_URL=http://comfyui:8188
 
       # RAG
+      # vllm-embed serves the same nomic-embed-text model Ollama did.
+      - RAG_EMBEDDING_ENGINE=openai
       - RAG_EMBEDDING_MODEL=nomic-embed-text
-      - RAG_EMBEDDING_ENGINE=ollama
+      - RAG_OPENAI_API_BASE_URL=http://vllm-embed:8000/v1
+      - RAG_OPENAI_API_KEY=EMPTY
       - CHUNK_SIZE=1000
       - CHUNK_OVERLAP=100
 

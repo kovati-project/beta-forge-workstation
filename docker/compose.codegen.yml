@@ -3,7 +3,7 @@ name: ai-codegen
 services:
 
   # ── OpenHands: Autonomous coding agent ────────────────────────────────────
-  # Uses Ollama (compose.inference.yml) over the shared ai-workstation network,
+  # Uses vllm-4gpu (compose.inference.yml) over the shared ai-workstation network,
   # so no host IP is hardcoded. Each conversation runs in a separate sandbox
   # container started through the Docker socket; the server reaches it via
   # host.docker.internal.
@@ -22,15 +22,14 @@ services:
     environment:
       - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:0.59-nikolaik
       - SANDBOX_VOLUMES=/data/openhands/workspace:/workspace:rw
-      # 128k tag from scripts/create-ollama-variants.sh. /v1 requests carry no
-      # num_ctx, so the window comes from the tag. Keep input below it with
-      # room for output; past num_ctx Ollama silently drops the oldest tokens.
-      # These env values seed OpenHands' saved settings only on first start;
-      # deploy-phase11.sh syncs llm_model into the saved settings afterwards.
-      - LLM_MODEL=openai/qwen3-coder:30b-128k
-      - LLM_BASE_URL=http://ollama:11434/v1
-      - LLM_MAX_INPUT_TOKENS=122880
-      - LLM_MAX_OUTPUT_TOKENS=8192
+      # vllm-4gpu (compose.inference.yml) serves Qwen3.8-27B with a 262,144-
+      # token window; input + output must fit in it, and thinking tokens count
+      # as output. These env values seed OpenHands' saved settings only on
+      # first start; deploy-phase11.sh syncs model and base URL afterwards.
+      - LLM_MODEL=openai/qwen3.8-27b
+      - LLM_BASE_URL=http://vllm-4gpu:8000/v1
+      - LLM_MAX_INPUT_TOKENS=229376
+      - LLM_MAX_OUTPUT_TOKENS=32768
       - LLM_API_KEY=local-llm
       - LLM_TIMEOUT=600
       - LOG_ALL_EVENTS=true
