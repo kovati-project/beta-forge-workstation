@@ -2,48 +2,17 @@ name: ai-inference
 
 services:
 
-  # ── Ollama ────────────────────────────────────────────────────────────────────
-  # Lightweight model management. Hot-swap capable. Serves the coding agent
-  # (OpenHands) and the VS Code copilot (Continue.dev).
-  # Runs on GPU1+GPU2 so it does not compete with vllm-pair-a on GPU0+GPU3.
-  # GPU placement comes from device_ids below; profiles.yaml gpu_assignment
-  # only labels the GPUs in the dashboard.
-  ollama:
-    image: ollama/ollama:0.40.15
-    container_name: ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - /data/models/ollama:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-      # Default window for models whose tag sets no num_ctx (gpt-oss, the
-      # autocomplete model). The agent model gets 128k from its own tag,
-      # qwen3-coder:30b-128k (scripts/create-ollama-variants.sh).
-      - OLLAMA_CONTEXT_LENGTH=65536
-      # KV cache is allocated per parallel slot: a second 128k slot for
-      # qwen3-coder costs ~6.8 GB and evicts every other model from the 48 GB
-      # on GPU1+GPU2. One slot keeps agent + Copilot model + autocomplete +
-      # embeddings resident (~45 GB). Requests to the same model queue.
-      - OLLAMA_NUM_PARALLEL=1
-      - OLLAMA_FLASH_ATTENTION=1
-      - OLLAMA_KV_CACHE_TYPE=q8_0
-      # agent model + autocomplete model + embeddings stay resident
-      - OLLAMA_MAX_LOADED_MODELS=3
-      - OLLAMA_KEEP_ALIVE=24h
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['1', '2']
-              capabilities: [gpu]
+  # Default stack (`docker compose up -d` with no profile): vllm-4gpu serving
+  # Qwen3.8-27B on all four GPUs, plus vllm-embed. Every LLM client points at
+  # them: VS Code Copilot Chat, Continue.dev, OpenHands, Open WebUI, n8n, Dify.
+  # Pair A and pair B share GPUs with vllm-4gpu, so they are opt-in profiles
+  # (the loadout manager stops the stack before starting another profile).
 
   # ── vLLM: NVLink Pair A [GPU0, GPU3] ─────────────────────────────────────────
   # High-throughput serving for 32B–40B models.
   # CUDA_VISIBLE_DEVICES=0,3 maps to the confirmed NVLink bridge.
   # Model path is a symlink — update /data/models/vllm/current before starting.
+  # Not started by default — use profile "pair-a" or the loadout manager.
   vllm-pair-a:
     image: vllm/vllm-openai:latest
     container_name: vllm-pair-a
@@ -79,6 +48,8 @@ services:
             - driver: nvidia
               device_ids: ['0', '3']
               capabilities: [gpu]
+    profiles:
+      - pair-a
 
   # ── vLLM: NVLink Pair B [GPU1, GPU2] ─────────────────────────────────────────
   # Second independent inference slot. Same config as pair A, different GPUs/port.
@@ -119,11 +90,36 @@ services:
     profiles:
       - pair-b
 
-  # ── vLLM: Full 4-GPU [GPU0, GPU1, GPU2, GPU3] ────────────────────────────────
-  # For 70B+ models. Requires all GPUs free — mutually exclusive with pair A/B.
-  # fp8 quantization allows longer context on 96GB total VRAM.
+  # ── vLLM: Full 4-GPU [GPU0, GPU1, GPU2, GPU3] — default LLM ──────────────────
+  # Qwen3.8-27B-FP8: /models/large -> qwen3.8-27b-fp8 (loadout manager slot
+  # "4gpu"). The flags below are specific to that model family (qwen3_5
+  # architecture); re-check them before pointing the slot at another model.
+  #
+  #   TP=4          weights are 31 GB, ~7.7 GB per GPU. Only 16 of 64 layers
+  #                 use full attention, so the KV cache is ~64 KB/token (bf16)
+  #                 and the native 262,144-token window fits several times over.
+  #                 GPU pairs 0-3 and 1-2 are NVLinked; TP=4 also crosses PCIe.
+  #   0.82          leaves ~4 GB per GPU: whisper-stt shares GPU0, vllm-embed
+  #                 GPU1, and CUDA graphs are allocated outside this budget.
+  #   parsers       qwen3_coder emits structured (also streamed) tool calls for
+  #                 Copilot agent mode, Continue and OpenHands; qwen3 splits the
+  #                 thinking into reasoning_content. Thinking is on by default;
+  #                 clients turn it off with chat_template_kwargs.enable_thinking.
+  #   --language-model-only  skips the vision tower, which no client uses.
+  #   --enable-prefix-caching  vLLM leaves it off by default for hybrid
+  #                 (linear-attention) models, so every agent turn re-read the
+  #                 whole conversation. vLLM picks the Mamba-state cache mode;
+  #                 its support is marked experimental in 0.23.
+  #   Sampling defaults come from the model's generation_config.json.
+  #   Autocomplete uses /v1/completions with the Qwen FIM tokens.
+  #
+  # Pre-flight on this box (vLLM 0.23.0, TP=4, before prefix caching): loads in
+  # ~5 min, 7.45 GiB weights/GPU (Marlin weight-only FP8 on Ampere), decode
+  # ~55 tok/s, prefill ~550 tok/s, FIM autocomplete 0.4-0.6 s. Custom
+  # all-reduce is off across >2 PCIe GPUs and NCCL_P2P_LEVEL=NVL routes the
+  # cross-pair traffic through host memory, which limits prefill.
   vllm-4gpu:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.23.0
     container_name: vllm-4gpu
     restart: unless-stopped
     ipc: host
@@ -140,15 +136,18 @@ services:
       - HF_HOME=/root/.cache/huggingface
     command: >
       /models/large
+      --served-model-name qwen3.8-27b
       --tensor-parallel-size 4
-      --max-model-len 16384
-      --gpu-memory-utilization 0.90
-      --quantization fp8
-      --max-num-seqs 32
-      --enable-chunked-prefill
+      --max-model-len 262144
+      --gpu-memory-utilization 0.82
+      --max-num-seqs 16
+      --enable-prefix-caching
+      --language-model-only
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
       --host 0.0.0.0
       --port 8000
-      --served-model-name large-model
     deploy:
       resources:
         reservations:
@@ -156,8 +155,41 @@ services:
             - driver: nvidia
               device_ids: ['0', '1', '2', '3']
               capabilities: [gpu]
-    profiles:
-      - large
+
+  # ── vLLM: embeddings [GPU1, ~2 GB] ───────────────────────────────────────────
+  # nomic-embed-text-v1.5 for Open WebUI RAG and Continue.dev codebase search.
+  # Same model Ollama served as "nomic-embed-text", under the same name, so
+  # existing Open WebUI document vectors stay comparable.
+  # Weights download into /data/models/hf-cache on first start. Trust-remote-code
+  # is needed because the repo's config.json names a custom NomicBert config class.
+  vllm-embed:
+    image: vllm/vllm-openai:v0.23.0
+    container_name: vllm-embed
+    restart: unless-stopped
+    ipc: host
+    ports:
+      - "8003:8000"
+    volumes:
+      - /data/models/hf-cache:/root/.cache/huggingface
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+    command: >
+      nomic-ai/nomic-embed-text-v1.5
+      --served-model-name nomic-embed-text
+      --runner pooling
+      --trust-remote-code
+      --max-model-len 8192
+      --gpu-memory-utilization 0.08
+      --enforce-eager
+      --host 0.0.0.0
+      --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
 
 networks:
   default:

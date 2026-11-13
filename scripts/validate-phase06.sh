@@ -37,7 +37,7 @@ check "training-lora-text profile exists" "curl -sf http://localhost:8800/loadou
 
 # Docker socket access
 echo ""
-check "Docker socket accessible" "docker ps --filter name=ollama 2>/dev/null | head -1"
+check "Docker socket accessible" "docker ps --filter name=vllm-4gpu 2>/dev/null | head -1"
 
 echo ""
 echo "Result: ${PASS} passed, ${FAIL} failed"

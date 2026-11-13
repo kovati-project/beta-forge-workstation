@@ -25,13 +25,14 @@ warn() {
 echo "=== Phase 03 Validation ==="
 echo ""
 
-# Ollama
-check "Ollama container running"         "docker ps --filter name=ollama --filter status=running | grep -q ollama"
-check "Ollama API responding"            "curl -sf http://localhost:11434/v1/models"
-check "Ollama has at least one model"    "docker exec ollama ollama list 2>/dev/null | grep -qv '^NAME'"
-check "nomic-embed-text present"         "docker exec ollama ollama list 2>/dev/null | grep -q nomic-embed-text"
+# Default stack: vllm-4gpu (Qwen3.8-27B) + vllm-embed
+check "vllm-4gpu container running"      "docker ps --filter name=vllm-4gpu --filter status=running | grep -q vllm-4gpu"
+check "vllm-4gpu serving qwen3.8-27b"    "curl -sf http://localhost:8002/v1/models | grep -q '\"qwen3.8-27b\"'"
+check "vllm-embed container running"     "docker ps --filter name=vllm-embed --filter status=running | grep -q vllm-embed"
+check "vllm-embed serving nomic-embed-text" "curl -sf http://localhost:8003/v1/models | grep -q nomic-embed-text"
+check "Ollama container removed"         "! docker inspect ollama >/dev/null 2>&1"
 
-# vLLM pair A
+# vLLM pair A (opt-in loadout profile; shares GPUs with the default stack)
 echo ""
 if docker ps --filter name=vllm-pair-a --filter status=running | grep -q vllm-pair-a; then
     check "vLLM pair A container running"  "true"
@@ -42,12 +43,11 @@ if docker ps --filter name=vllm-pair-a --filter status=running | grep -q vllm-pa
     warn "No NCCL errors — check: docker logs vllm-pair-a 2>&1 | grep -i nccl"
     warn "GPU utilization >80% during inference — check: nvidia-smi dmon -s u -d 2"
 else
-    echo -e "${YELLOW}—${NC} vLLM pair A not running (model not downloaded yet — skip until symlink is set)"
+    echo -e "${YELLOW}—${NC} vLLM pair A not running (opt-in profile: inference-pair-a)"
 fi
 
 # Storage
 echo ""
-check "/data/models/ollama exists"       "test -d /data/models/ollama"
 check "/data/models/vllm exists"         "test -d /data/models/vllm"
 check "/data/models/hf-cache exists"     "test -d /data/models/hf-cache"
 

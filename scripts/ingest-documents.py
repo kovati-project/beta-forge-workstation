@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ingest documents into Qdrant via Ollama embeddings.
+Ingest documents into Qdrant via vLLM embeddings (vllm-embed, nomic-embed-text).
 Supports: PDF, Markdown, TXT, HTML, code files
 """
 import sys
@@ -19,22 +19,23 @@ except ImportError:
     sys.exit(1)
 
 # Configuration
-OLLAMA_URL = "http://localhost:11434"
+# vllm-embed (docker/compose.inference.yml), OpenAI-compatible API
+EMBED_URL = "http://localhost:8003/v1"
 QDRANT_URL = "http://localhost:6333"
 EMBED_MODEL = "nomic-embed-text"
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
 
 def get_embedding(text: str) -> List[float]:
-    """Get embedding from Ollama."""
+    """Get embedding from vllm-embed."""
     try:
         resp = requests.post(
-            f"{OLLAMA_URL}/api/embed",
-            json={"model": EMBED_MODEL, "input": text},
+            f"{EMBED_URL}/embeddings",
+            json={"model": EMBED_MODEL, "input": [text]},
             timeout=30
         )
         resp.raise_for_status()
-        return resp.json()["embeddings"][0]
+        return resp.json()["data"][0]["embedding"]
     except Exception as e:
         print(f"  ERROR getting embedding: {e}")
         return None
@@ -126,14 +127,14 @@ def main():
     """Main entry point."""
     print("=== Document Ingestion to Qdrant ===\n")
     
-    # Verify Ollama is available
+    # Verify the embedding server is available
     try:
-        resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        resp = requests.get(f"{EMBED_URL}/models", timeout=5)
         resp.raise_for_status()
     except Exception as e:
-        print(f"ERROR: Ollama not available at {OLLAMA_URL}")
+        print(f"ERROR: embedding server not available at {EMBED_URL}")
         print(f"  {e}")
-        print("Start Ollama with: docker compose -f docker/compose.inference.yml up -d ollama")
+        print("Start it with: docker compose -f docker/compose.inference.yml up -d vllm-embed")
         sys.exit(1)
     
     # Verify Qdrant is available
@@ -146,7 +147,7 @@ def main():
         print("Start Qdrant with: docker compose -f docker/compose.storage.yml up -d qdrant")
         sys.exit(1)
     
-    print("✓ Ollama available")
+    print("✓ Embedding server available")
     print("✓ Qdrant available\n")
     
     # Example ingestion patterns (customize as needed)

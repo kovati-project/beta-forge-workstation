@@ -187,8 +187,14 @@ check_service "Loadout Manager" "http://localhost:8800/health" "200"
 # 6. Inference services
 echo ""
 echo -e "${BLUE}Inference Services:${NC}"
-check_service "Ollama" "http://localhost:11434/api/tags" "200"
-check_service "vLLM Pair A (GPU 0+3)" "http://localhost:8000/health" "200"
+check_service "vLLM Qwen3.8-27B (4-GPU, :8002)" "http://localhost:8002/health" "200"
+check_service "vLLM embeddings (:8003)" "http://localhost:8003/health" "200"
+# Pair A is an opt-in loadout profile now; it shares GPUs with the default stack.
+if curl -sf http://localhost:8000/health &>/dev/null; then
+    check_service "vLLM Pair A (GPU 0+3)" "http://localhost:8000/health" "200"
+else
+    echo -e "  ${YELLOW}◇${NC} vLLM Pair A (profile not active)"
+fi
 check_service "ComfyUI" "http://localhost:8188/system_stats" "200"
 check_service "Open WebUI" "http://localhost:3000" "200"
 check_service "SearXNG" "http://localhost:8080" "200"

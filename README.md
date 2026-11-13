@@ -10,7 +10,7 @@ Self-hosted AI stack running on a Threadripper Pro 5955WX / 512GB RAM / 4× RTX 
 
 | Layer | Services |
 |---|---|
-| Inference | Ollama (11434), vLLM pair A/B/4-GPU (8000/8001/8002), ComfyUI (8188) |
+| Inference | vLLM Qwen3.8-27B (8002, default, all 4 GPUs) + embeddings (8003); optional vLLM pair A/B (8000/8001); ComfyUI (8188) |
 | UI | Open WebUI (3000), SearXNG (8080) |
 | Orchestration | Loadout Manager (8800) — VRAM-aware GPU profile switching |
 | Agentic | n8n (5678), Dify (3010), MCP servers |
@@ -109,7 +109,7 @@ Stack files in `docker/`:
 
 | File | Services |
 |---|---|
-| `compose.inference.yml` | Ollama, vLLM, ComfyUI |
+| `compose.inference.yml` | vLLM (4-GPU default + embeddings, pair A/B profiles) |
 | `compose.webui.yml` | Open WebUI, SearXNG |
 | `compose.loadout.yml` | Loadout Manager |
 | `compose.storage.yml` | MinIO, Qdrant, PostgreSQL, Langfuse |
@@ -123,7 +123,7 @@ Stack files in `docker/`:
 ### Restart a single container
 
 ```bash
-docker restart ollama
+docker restart vllm-4gpu
 docker restart open-webui
 docker restart loadout-manager
 ```
@@ -153,16 +153,22 @@ After pulling, force-recreate to apply:
 docker compose -f docker/compose.inference.yml up -d --force-recreate
 ```
 
-### Add / remove Ollama models
+### Add / remove models
+
+Models are Hugging Face checkpoints under `/data/models/vllm/`; a vLLM service
+serves whichever one its slot symlink (`current`, `current-b`, `large`) points at.
+The loadout manager's Models page does the same as:
 
 ```bash
-bash scripts/update-system.sh model-add qwen2.5-coder:32b
-bash scripts/update-system.sh model-remove qwen2.5-coder:7b
-
-# Or directly
-docker exec ollama ollama pull mistral:7b
-docker exec ollama ollama list
+bash scripts/update-system.sh model-add Qwen/Qwen2.5-32B-Instruct qwen2.5-32b
+ln -sfn qwen2.5-32b /data/models/vllm/current     # pair A slot
+bash scripts/update-system.sh model-remove qwen2.5-14b
 ```
+
+The default slot `large` holds Qwen3.8-27B-FP8, which VS Code Copilot Chat,
+Continue.dev, OpenHands, Open WebUI and n8n all use (`configs/continue/`,
+`configs/vscode/chatLanguageModels.json`). `vllm-4gpu`'s flags are specific to
+that model family; check them before pointing `large` elsewhere.
 
 ### Update NVIDIA drivers
 
@@ -191,10 +197,9 @@ curl http://localhost:8800/status
 
 | Profile | GPUs | Use case |
 |---|---|---|
-| `inference-small` | GPU 0 | 7B–13B Ollama |
-| `inference-pair-a` | GPU 0+3 | 34B–40B vLLM TP=2 |
+| `inference-4gpu` | all | **Default.** Qwen3.8-27B (coding + chat) + embeddings |
+| `inference-pair-a` | GPU 0+3 | 34B–40B vLLM TP=2 (+ embeddings on GPU 1) |
 | `inference-pair-b` | GPU 1+2 | Second parallel model |
-| `inference-4gpu` | all | 70B+ full precision |
 | `image-studio` | GPU 0 | ComfyUI, frees 1/2/3 for LLM |
 | `training-lora-image` | GPU 1+2 | Kohya image LoRA |
 | `training-lora-text` | all | Axolotl FSDP fine-tune |

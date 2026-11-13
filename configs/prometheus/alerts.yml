@@ -194,11 +194,10 @@ groups:
       # whether to drop those jobs (decision pending; semantics unchanged here):
       #   - loadout-manager : scraped at /health, which is JSON, not Prometheus
       #                       exposition format (no /metrics endpoint exists)
-      #   - ollama          : stock Ollama exposes no Prometheus endpoint
       #   - comfyui         : exposes no Prometheus endpoint
       #   - open-webui      : exposes no Prometheus endpoint
-      # The vllm-pair-a / vllm-pair-b / vllm-4gpu jobs are only up while the
-      # matching loadout profile is running, so at most one is normally up.
+      # vllm-4gpu and vllm-embed are the default stack and normally up;
+      # vllm-pair-a / vllm-pair-b are only up while their loadout profile runs.
       # Separately, all 10.10.10.2 targets are currently unroutable (TASK-060).
       - alert: ServiceDown
         expr: up == 0
@@ -278,23 +277,6 @@ groups:
         annotations:
           summary: "vLLM p95 latency high"
           description: "vLLM p95 request latency {{ $value | humanizeDuration }} on {{ $labels.job }} ({{ $labels.instance }}, model {{ $labels.model_name }})"
-
-      # DISABLED -- Ollama Queue Buildup
-      # Stock Ollama exposes no Prometheus metrics at all (no /metrics, and no
-      # ollama_queue_size anywhere), so this rule could never fire. Enabling it
-      # needs an exporter that publishes a queue-depth gauge named
-      # ollama_queue_size (a sidecar or proxy in front of :11434); none exists
-      # in this repo. The 'ollama' scrape job is also expected to be down (see
-      # ServiceDown). vLLM equivalent, if wanted, is vllm:num_requests_waiting.
-      # - alert: OllamaQueueBuildup
-      #   expr: ollama_queue_size > 20
-      #   for: 3m
-      #   labels:
-      #     severity: warning
-      #     component: inference
-      #   annotations:
-      #     summary: "Ollama queue backed up"
-      #     description: "Ollama queue has {{ $value }} pending requests"
 
   - name: training_alerts
     interval: 30s

@@ -341,7 +341,7 @@ ok "NVLink validation script at /opt/scripts/validate-nvlink.py"
 step "Step 8/8 — Storage layout"
 
 for dir in \
-  /data/models/ollama \
+\
   /data/models/vllm \
   /data/models/comfyui/checkpoints \
   /data/models/comfyui/loras \

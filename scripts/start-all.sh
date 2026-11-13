@@ -154,14 +154,14 @@ for i in {1..30}; do
 done
 
 # 6. Activate default inference profile
-log_step "Activating default inference profile (Ollama)..."
-curl -sX POST http://localhost:8800/activate/inference-small || {
+log_step "Activating default inference profile (Qwen3.8-27B on vLLM, all 4 GPUs)..."
+curl -sX POST http://localhost:8800/activate/inference-4gpu || {
     log_error "Failed to activate default profile"
 }
-sleep 8  # Allow Ollama to load base model
+sleep 8  # vLLM keeps loading in the background; clients retry until it is up
 
-# 7. Start inference services
-start_service "Inference services (Ollama, vLLM, ComfyUI)" "compose.inference.yml" || exit 1
+# 7. Start inference services (default stack: vllm-4gpu + vllm-embed)
+start_service "Inference services (vLLM Qwen3.8-27B + embeddings)" "compose.inference.yml" || exit 1
 sleep 5
 
 # 8. Start training services (if available)

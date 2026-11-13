@@ -15,10 +15,10 @@ echo ""
 # Verify Phase 03 (vLLM) and Phase 05 (Open WebUI) for context
 echo "Checking dependencies..."
 
-if ! curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo "WARNING: Ollama not running (optional, but recommended for voice agent)"
+if ! curl -sf http://localhost:8002/v1/models > /dev/null 2>&1; then
+    echo "WARNING: vllm-4gpu not running (optional, but recommended for voice agent)"
 else
-    echo "✓ Ollama running"
+    echo "✓ vllm-4gpu running"
 fi
 
 if ! curl -sf http://localhost:3000 > /dev/null 2>&1; then

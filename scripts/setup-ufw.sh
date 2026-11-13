@@ -99,10 +99,10 @@ edge    9080   tcp  mgmt  Authentik HTTP
 edge    9443   tcp  mgmt  Authentik HTTPS
 
 # --- model / media APIs ------------------------------------------------------
-api     11434  tcp  mgmt  Ollama API
 api     8000   tcp  mgmt  vLLM pair A
 api     8001   tcp  mgmt  vLLM pair B
-api     8002   tcp  mgmt  vLLM 4-GPU
+api     8002   tcp  mgmt  vLLM 4-GPU (Qwen3.8-27B: Copilot, Continue)
+api     8003   tcp  mgmt  vLLM embeddings
 api     9099   tcp  mgmt  Whisper STT
 api     5000   tcp  mgmt  Piper TTS
 api     8189   tcp  mgmt  Real-ESRGAN
