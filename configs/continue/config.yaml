@@ -1,60 +1,73 @@
 # Continue.dev (v1+ YAML format) — copy to ~/.continue/config.yaml on the client.
 # Same models as config.json, which older Continue releases read instead.
-# All models are served by Ollama on the workstation (GPU1+GPU2), the same
-# server VS Code Copilot Chat uses (its "Ollama" provider, same apiBase).
-# gpt-oss:20b is listed first so it is the default, matching Copilot agent mode:
-# qwen3-coder leaks its tool calls as text when streamed, and Continue streams.
+#
+# Everything is served by vLLM on the workstation (docker/compose.inference.yml):
+#   :8002  vllm-4gpu   Qwen3.8-27B on all four GPUs, 262,144-token window.
+#                      Same server VS Code Copilot Chat and OpenHands use.
+#   :8003  vllm-embed  nomic-embed-text, for codebase search.
+# One model serves chat/agent, edit/apply and autocomplete; the entries below
+# differ only in request options. vLLM ignores the API key.
 name: Kovati Workstation
 version: 1.0.0
 schema: v1
 
 models:
-  - name: GPT-OSS 20B [Agent, same as Copilot]
-    provider: ollama
-    model: gpt-oss:20b
-    apiBase: http://192.168.1.102:11434
-    roles: [chat, edit, apply]
+  # Chat and agent mode. Thinking is on (the model's default); vLLM returns it
+  # as reasoning_content. Sampling comes from the model's generation_config.
+  - name: Qwen3.8 27B [Chat/agent]
+    provider: vllm
+    model: qwen3.8-27b
+    apiBase: http://192.168.1.102:8002/v1
+    apiKey: EMPTY
+    roles: [chat]
     capabilities: [tool_use]
     defaultCompletionOptions:
-      contextLength: 65536
-      maxTokens: 4096
+      contextLength: 262144
+      maxTokens: 32768
 
-  # Same tag and window as OpenHands, so both share one loaded copy. Continue
-  # always sends num_ctx, and a mismatch makes Ollama reload the model.
-  - name: Qwen3-Coder 30B 128k [Chat/edit]
-    provider: ollama
-    model: qwen3-coder:30b-128k
-    apiBase: http://192.168.1.102:11434
-    roles: [chat, edit, apply]
-    capabilities: [tool_use]
+  # Edit and apply want the rewritten code straight away, so thinking is off,
+  # with Qwen's recommended non-thinking sampling.
+  - name: Qwen3.8 27B [Edit/apply, no thinking]
+    provider: vllm
+    model: qwen3.8-27b
+    apiBase: http://192.168.1.102:8002/v1
+    apiKey: EMPTY
+    roles: [edit, apply]
     defaultCompletionOptions:
-      contextLength: 131072
-      temperature: 0.1
-      maxTokens: 4096
+      contextLength: 262144
+      maxTokens: 8192
+      temperature: 0.7
+      topP: 0.8
+      topK: 20
+    requestOptions:
+      extraBodyProperties:
+        presence_penalty: 1.5
+        chat_template_kwargs:
+          enable_thinking: false
 
-  - name: Devstral 24B [Agent alt]
-    provider: ollama
-    model: devstral
-    apiBase: http://192.168.1.102:11434
-    roles: [chat, edit, apply]
-    capabilities: [tool_use]
-    defaultCompletionOptions:
-      contextLength: 65536
-      temperature: 0.15
-
-  - name: Qwen2.5-Coder 7B [Autocomplete]
-    provider: ollama
-    model: qwen2.5-coder:7b
-    apiBase: http://192.168.1.102:11434
+  # Tab autocomplete: raw fill-in-the-middle prompt to /v1/completions (no chat
+  # template, so no thinking). Continue picks a FIM template from the model
+  # name and only recognises Qwen *coder* names, so the Qwen FIM tokens are set
+  # here explicitly.
+  - name: Qwen3.8 27B [Autocomplete]
+    provider: vllm
+    model: qwen3.8-27b
+    apiBase: http://192.168.1.102:8002/v1
+    apiKey: EMPTY
     roles: [autocomplete]
+    promptTemplates:
+      autocomplete: "<|fim_prefix|>{{{prefix}}}<|fim_suffix|>{{{suffix}}}<|fim_middle|>"
     defaultCompletionOptions:
-      contextLength: 4096
-      temperature: 0.05
+      contextLength: 8192
+      maxTokens: 256
+      temperature: 0.01
+      stop: ["<|endoftext|>", "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>", "<|fim_pad|>", "<|file_sep|>", "<|im_end|>"]
 
   - name: Nomic Embed
-    provider: ollama
+    provider: openai
     model: nomic-embed-text
-    apiBase: http://192.168.1.102:11434
+    apiBase: http://192.168.1.102:8003/v1
+    apiKey: EMPTY
     roles: [embed]
 
 context:

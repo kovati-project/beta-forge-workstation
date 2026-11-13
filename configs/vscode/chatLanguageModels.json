@@ -1,0 +1,18 @@
+[
+	{
+		"name": "Workstation vLLM",
+		"vendor": "customendpoint",
+		"apiType": "chat-completions",
+		"models": [
+			{
+				"id": "qwen3.8-27b",
+				"name": "Qwen3.8 27B (workstation)",
+				"url": "http://192.168.1.102:8002/v1",
+				"toolCalling": true,
+				"vision": false,
+				"contextWindow": 262144,
+				"maxOutputTokens": 32768
+			}
+		]
+	}
+]
