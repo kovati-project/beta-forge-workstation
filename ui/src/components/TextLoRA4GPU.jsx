@@ -41,8 +41,8 @@ export function TextLoRA4GPU({ onNext, onBack, initialValue }) {
         <div className="warning-text">
           <div className="warning-title">This will stop active services:</div>
           <div className="warning-services">
-            • vllm-pair-a
-            <br />• ollama
+            • vllm-4gpu
+            <br />• vllm-embed
           </div>
         </div>
       </div>

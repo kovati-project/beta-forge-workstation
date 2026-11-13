@@ -5,9 +5,9 @@ import './APIKeysSection.css';
 
 const SCOPES = [
   { id: 'all-inference', label: 'All Inference' },
+  { id: 'vllm-4gpu', label: 'vLLM 4-GPU (Qwen3.8-27B)' },
+  { id: 'vllm-embed', label: 'vLLM embeddings' },
   { id: 'vllm-pair-a', label: 'vLLM Pair A' },
-  { id: 'ollama', label: 'Ollama' },
-  { id: 'vllm-4gpu', label: 'vLLM 4-GPU' },
 ];
 
 export function APIKeysSection() {

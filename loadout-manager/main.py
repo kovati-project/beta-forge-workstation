@@ -137,10 +137,10 @@ def load_profiles() -> Dict:
 # Workload kind per service name; drives the colour of the per-GPU service tag.
 # Services not listed here render with the neutral tag colour.
 SERVICE_TYPES = {
-    "ollama": "inference",
     "vllm-pair-a": "inference",
     "vllm-pair-b": "inference",
     "vllm-4gpu": "inference",
+    "vllm-embed": "inference",
     "axolotl": "training",
     "kohya": "training",
     "unsloth": "training",

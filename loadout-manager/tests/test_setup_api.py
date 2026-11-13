@@ -72,12 +72,12 @@ def test_completion_flag_lifecycle(api):
 
 
 @pytest.mark.parametrize("hardware, expected", [
-    ({"gpus": [{}] * 4, "nvlink_pairs": [[0, 3], [1, 2]], "total_vram_gb": 96}, "dual-stack"),
+    ({"gpus": [{}] * 4, "nvlink_pairs": [[0, 3], [1, 2]], "total_vram_gb": 96}, "inference-4gpu"),
     ({"gpus": [{}] * 4, "nvlink_pairs": [], "total_vram_gb": 96}, "inference-4gpu"),
     ({"gpus": [{}] * 2, "nvlink_pairs": [[0, 1]], "total_vram_gb": 48}, "inference-pair-a"),
     ({"gpus": [{}] * 2, "nvlink_pairs": [], "total_vram_gb": 48}, "inference-pair-b"),
-    ({"gpus": [{}], "nvlink_pairs": [], "total_vram_gb": 24}, "inference-small"),
-    ({}, "inference-small"),
+    ({"gpus": [{}], "nvlink_pairs": [], "total_vram_gb": 24}, "idle"),
+    ({}, "idle"),
 ])
 def test_recommendation(api, hardware, expected):
     r = api.client.post("/api/setup/recommend", json=hardware)

@@ -75,13 +75,13 @@ def test_sufficient_vram_passes_and_requested_services_started(lm):
 
 def test_refusal_does_not_disturb_a_running_profile(lm):
     """A refused activation must not tear down what is currently running."""
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     lm.set_free(10)
     r = lm.activate("dual-stack")
     assert is_4xx(r)
     assert lm.docker.calls == []
-    assert lm.state["active_profile"] == "inference-small"
-    assert lm.state["running_services"] == ["ollama"]
+    assert lm.state["active_profile"] == "inference-pair-a"
+    assert lm.state["running_services"] == ["vllm-pair-a", "vllm-embed"]
 
 
 # ── Telemetry unavailable ────────────────────────────────────────────────────
@@ -112,10 +112,10 @@ def test_idle_is_not_blocked_by_missing_telemetry(lm):
 
 @pytest.mark.xfail(
     strict=True,
-    reason="BUG-5: inference-small / inference-pair-a / inference-pair-b have no "
+    reason="BUG-5: inference-pair-a / inference-pair-b have no "
            "vram_required_gb, so the gate is skipped entirely and fails OPEN when "
            "telemetry is down (and cannot refuse on low VRAM at all).")
-@pytest.mark.parametrize("name", ["inference-small", "inference-pair-a", "inference-pair-b"])
+@pytest.mark.parametrize("name", ["inference-pair-a", "inference-pair-b"])
 def test_telemetry_unavailable_fails_closed_without_declared_requirement(lm, name):
     lm.telemetry_down()
     r = lm.activate(name)
@@ -126,7 +126,7 @@ def test_telemetry_unavailable_fails_closed_without_declared_requirement(lm, nam
 @pytest.mark.xfail(
     strict=True,
     reason="BUG-5: profiles without vram_required_gb are never refused for low VRAM.")
-@pytest.mark.parametrize("name", ["inference-small", "inference-pair-a", "inference-pair-b"])
+@pytest.mark.parametrize("name", ["inference-pair-a", "inference-pair-b"])
 def test_low_vram_refused_without_declared_requirement(lm, name):
     lm.set_free(0.5)  # essentially no VRAM anywhere
     r = lm.activate(name)
@@ -156,7 +156,7 @@ def test_gate_counts_only_the_profiles_exclusive_gpus(lm):
            "running profile (about to be stopped by the switch itself) counts "
            "as unavailable and legitimate switches are refused.")
 @pytest.mark.parametrize("active,target", [
-    ("inference-small", "image-studio"),         # the data's own 'compatible_with' pair
+    ("inference-pair-a", "image-studio"),        # inference -> image studio
     ("training-lora-text", "training-lora-text"),  # plain restart of the active profile
 ])
 def test_vram_held_by_the_outgoing_profile_does_not_block_the_switch(lm, active, target):

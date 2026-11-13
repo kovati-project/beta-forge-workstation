@@ -8,7 +8,8 @@ import './ServiceHealthGrid.css';
 const SERVICE_CATEGORIES = {
   'vllm-pair-a': 'inference',
   'vllm-pair-b': 'inference',
-  'ollama': 'inference',
+  'vllm-4gpu': 'inference',
+  'vllm-embed': 'inference',
   'comfyui': 'image',
   'kohya': 'training',
   'axolotl': 'training',

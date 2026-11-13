@@ -5,10 +5,10 @@ import { Tag } from './Tag';
 import './OpenAIEndpointsSection.css';
 
 const OPENAI_ENDPOINTS = [
-  { name: 'vllm-pair-a', port: 8000, path: '/v1' },
-  { name: 'ollama', port: 11434, path: '/v1' },
-  { name: 'vllm-pair-b', port: 8001, path: '/v1' },
   { name: 'vllm-4gpu', port: 8002, path: '/v1' },
+  { name: 'vllm-embed', port: 8003, path: '/v1' },
+  { name: 'vllm-pair-a', port: 8000, path: '/v1' },
+  { name: 'vllm-pair-b', port: 8001, path: '/v1' },
   { name: 'whisper-stt', port: 9099, path: '/v1/audio' },
   { name: 'piper-tts', port: 5000, path: '/v1/audio/speech' },
 ];

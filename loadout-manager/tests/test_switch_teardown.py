@@ -30,7 +30,7 @@ def is_4xx(resp):
 # ── Teardown ordering and state update ───────────────────────────────────────
 
 @pytest.mark.parametrize("a,b", [
-    ("inference-small", "training-lora-image"),
+    ("inference-pair-a", "training-lora-image"),
     ("training-lora-text", "inference-4gpu"),
     ("image-studio", "training-unsloth"),
     ("dual-stack", "inference-pair-b"),
@@ -54,14 +54,14 @@ def test_switch_stops_previous_stacks_before_starting_the_new_profile(lm, a, b):
 
 
 def test_switch_stops_all_three_managed_stacks(lm):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     lm.activate("training-lora-image")
     assert {f for c in lm.docker.downs for f in c.compose_files} == ALL_COMPOSE
     assert len(lm.docker.downs) == 3
 
 
 def test_state_after_successful_switch(lm, main_module):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     before = lm.state["last_switched"]
     assert lm.activate("training-lora-image").status_code == 200
 
@@ -79,7 +79,7 @@ def test_state_after_successful_switch(lm, main_module):
 
 
 def test_listing_reflects_new_active_profile(lm):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     lm.activate("training-lora-image")
     body = lm.client.get("/loadouts").json()
     assert [n for n, p in body.items() if p["active"]] == ["training-lora-image"]
@@ -88,7 +88,7 @@ def test_listing_reflects_new_active_profile(lm):
 # ── `switching` flag ─────────────────────────────────────────────────────────
 
 def test_switching_true_for_every_docker_call_and_false_afterwards(lm):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     assert lm.state["switching"] is False
     lm.activate("training-lora-image")
     assert len(lm.docker.calls) == 4  # 3 x down + 1 x up
@@ -97,7 +97,7 @@ def test_switching_true_for_every_docker_call_and_false_afterwards(lm):
 
 
 def test_ws_events_bracket_the_transition(lm):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     lm.activate("training-lora-image")
     ev = lm.ws.events
     assert [e["switching"] for e in ev] == [True, False]
@@ -124,12 +124,12 @@ def test_unwritable_state_file_cannot_wedge_the_flag(lm, monkeypatch, tmp_path):
 
 def test_persisted_switching_true_is_not_restored_after_restart(lm, tmp_path, monkeypatch):
     p = tmp_path / "persisted.json"
-    p.write_text(json.dumps({"active_profile": "inference-small", "switching": True,
-                             "last_switched": 5.0, "running_services": ["ollama"]}))
+    p.write_text(json.dumps({"active_profile": "inference-pair-a", "switching": True,
+                             "last_switched": 5.0, "running_services": ["vllm-pair-a", "vllm-embed"]}))
     monkeypatch.setattr(lm.main, "STATE_PATH", p)
     lm.main.load_state()
     assert lm.state["switching"] is False
-    assert lm.state["active_profile"] == "inference-small"
+    assert lm.state["active_profile"] == "inference-pair-a"
 
 
 # ── Failure paths ────────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ FAILURES = {
 @pytest.mark.parametrize("mode", FAILURES)
 def test_failed_start_leaves_flag_and_state_consistent(lm, mode, main_module):
     FAILURES[mode](lm.docker)
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     r = lm.activate("training-lora-image")
 
     # Accepted at the door: failure is only visible afterwards, through state.
@@ -251,7 +251,7 @@ async def test_activation_and_stop_are_rejected_while_switching(lm, async_client
     assert s["switching"] is True
 
     calls_before = len(lm.docker.calls)
-    r2 = await async_client.post("/activate/inference-small")
+    r2 = await async_client.post("/activate/inference-pair-a")
     assert is_4xx(r2)
     assert r2.status_code == 409
     r3 = await async_client.post("/stop")
@@ -270,7 +270,7 @@ async def test_activation_and_stop_are_rejected_while_switching(lm, async_client
 async def test_two_back_to_back_activations_cannot_both_be_accepted(lm, async_client):
     r1, r2 = await asyncio.gather(
         async_client.post("/activate/training-lora-image"),
-        async_client.post("/activate/inference-small"),
+        async_client.post("/activate/inference-pair-a"),
     )
     codes = sorted([r1.status_code, r2.status_code])
     assert codes[0] == 200 and is_4xx_code(codes[1]), codes
@@ -282,7 +282,7 @@ def is_4xx_code(code):
 
 
 def test_no_docker_call_runs_on_the_event_loop(lm):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     assert lm.activate("training-lora-image").status_code == 200
     lm.client.post("/stop")
     assert lm.docker.calls, "expected docker calls"
@@ -291,7 +291,7 @@ def test_no_docker_call_runs_on_the_event_loop(lm):
 
 @pytest.mark.anyio
 async def test_stop_and_activate_cannot_both_be_accepted(lm, async_client):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     r_stop, r_act = await asyncio.gather(
         async_client.post("/stop"),
         async_client.post("/activate/training-lora-image"),
@@ -313,7 +313,7 @@ def test_stop_releases_the_switch_slot_even_if_stopping_fails(lm, monkeypatch):
 # ── Edge cases ───────────────────────────────────────────────────────────────
 
 def test_unknown_profile_is_404_and_touches_nothing(lm):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     before = lm.snapshot()
     r = lm.activate("no-such-profile")
     assert r.status_code == 404
@@ -329,7 +329,7 @@ def test_unknown_profile_is_404_even_while_switching(lm):
 
 def test_activate_while_switching_flag_set_is_409_and_starts_nothing(lm):
     lm.state["switching"] = True
-    r = lm.activate("inference-small")
+    r = lm.activate("inference-pair-a")
     assert r.status_code == 409
     assert lm.docker.calls == []
 

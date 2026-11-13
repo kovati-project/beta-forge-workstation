@@ -2,29 +2,18 @@ profiles:
 
   # ── INFERENCE PROFILES ────────────────────────────────────────────────────
 
-  inference-small:
-    description: "Single GPU chat — 7B-13B models, lowest latency"
-    compose_files:
-      - compose.inference.yml
-    services:
-      - ollama
-    gpu_assignment:
-      ollama: ["0", "3"]
-    exclusive_gpus: ["0", "3"]
-    compatible_with: [image-studio]
-
   inference-pair-a:
     description: "NVLink pair A [GPU0,GPU3] — 32B-40B models, fast"
     compose_files:
       - compose.inference.yml
     services:
       - vllm-pair-a
-      - ollama
+      - vllm-embed
     gpu_assignment:
       vllm-pair-a: ["0", "3"]
-      ollama: ["1", "2"]
+      vllm-embed: ["1"]
     exclusive_gpus: ["0", "3"]
-    incompatible_with: [inference-small, inference-4gpu, inference-4gpu-large,
+    incompatible_with: [inference-4gpu, inference-4gpu-large,
                         dual-stack, training-lora-text, training-lora-image, training-unsloth]
 
   inference-pair-b:
@@ -39,17 +28,21 @@ profiles:
     incompatible_with: [inference-4gpu, inference-4gpu-large, dual-stack,
                         image-studio, training-lora-text, training-lora-image]
 
+  # Default. Qwen3.8-27B for VS Code Copilot Chat, Continue.dev, OpenHands,
+  # Open WebUI, n8n and Dify, plus nomic-embed-text for RAG / codebase search.
   inference-4gpu:
-    description: "Full mesh [GPU0,1,2,3] — 70B+ models"
+    description: "Qwen3.8-27B on all 4 GPUs — coding + chat (default)"
     compose_files:
       - compose.inference.yml
     services:
       - vllm-4gpu
+      - vllm-embed
     gpu_assignment:
       vllm-4gpu: ["0", "1", "2", "3"]
+      vllm-embed: ["1"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 88
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b, 
+    incompatible_with: [inference-pair-a, inference-pair-b, 
                         inference-4gpu-large, dual-stack, image-studio,
                         training-lora-text, training-lora-image, training-unsloth]
 
@@ -65,7 +58,7 @@ profiles:
       vllm-pair-b: ["1", "2"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 96
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+    incompatible_with: [inference-pair-a, inference-pair-b,
                         inference-4gpu, inference-4gpu-large, image-studio,
                         training-lora-text, training-lora-image, training-unsloth]
 
@@ -85,7 +78,6 @@ profiles:
       vllm-pair-b: ["1", "2"]
     exclusive_gpus: ["0", "1", "2"]
     vram_required_gb: 72
-    compatible_with: [inference-small]
     incompatible_with: [inference-pair-b, inference-4gpu, inference-4gpu-large,
                         dual-stack, training-lora-text, training-lora-image]
 
@@ -115,7 +107,7 @@ profiles:
       axolotl: ["0", "1", "2", "3"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 90
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+    incompatible_with: [inference-pair-a, inference-pair-b,
                         inference-4gpu, inference-4gpu-large, dual-stack, image-studio, training-lora-image]
 
   training-unsloth:
@@ -128,7 +120,7 @@ profiles:
       unsloth: ["0", "3"]
     exclusive_gpus: ["0", "3"]
     vram_required_gb: 48
-    incompatible_with: [inference-small, inference-pair-a, inference-4gpu, 
+    incompatible_with: [inference-pair-a, inference-4gpu, 
                         inference-4gpu-large, dual-stack, training-lora-text, training-lora-image]
 
   inference-4gpu-large:
@@ -141,7 +133,7 @@ profiles:
       vllm-4gpu: ["0", "1", "2", "3"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 96
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+    incompatible_with: [inference-pair-a, inference-pair-b,
                         inference-4gpu, dual-stack, image-studio, training-lora-text, 
                         training-lora-image, training-unsloth]
     environment:

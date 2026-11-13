@@ -129,16 +129,17 @@ async def recommend_profile(hardware: Dict) -> Dict:
     has_nvlink = len(hardware.get("nvlink_pairs", [])) > 0
     total_vram = hardware.get("total_vram_gb", 0)
     
-    if n_gpus == 4 and has_nvlink and total_vram >= 96:
-        profile = "dual-stack"
-    elif n_gpus == 4 and not has_nvlink:
+    # inference-4gpu is the default stack (Qwen3.8-27B for every LLM client);
+    # dual-stack trades it for two unrelated models. Below two GPUs there is no
+    # LLM profile: every vLLM service needs a GPU pair or all four.
+    if n_gpus == 4:
         profile = "inference-4gpu"
     elif n_gpus == 2 and has_nvlink:
         profile = "inference-pair-a"
     elif n_gpus == 2:
         profile = "inference-pair-b"
     else:
-        profile = "inference-small"
+        profile = "idle"
     
     return {
         "recommended": profile,
@@ -234,7 +235,6 @@ async def provision_stack():
                 "grafana/grafana:latest",
                 "authelia/authelia:latest",
                 "node-red/node-red:latest",
-                "ollama/ollama:latest",
                 "vllm/vllm-openai:v0.9.1",
                 "ghcr.io/open-webui/open-webui:latest",
             ]

@@ -21,7 +21,7 @@ SERVICE_MAP = {
     "vllm-pair-a": "vllm-pair-a",
     "vllm-pair-b": "vllm-pair-b",
     "vllm-4gpu": "vllm-4gpu",
-    "ollama": "ollama",
+    "vllm-embed": "vllm-embed",
     "open-webui": "open-webui",
     "axolotl": "axolotl",
     "kohya": "kohya",
@@ -47,7 +47,7 @@ PORT_MAP = {
     "vllm-pair-a": 8000,
     "vllm-pair-b": 8001,
     "vllm-4gpu": 8002,
-    "ollama": 11434,
+    "vllm-embed": 8003,
     "open-webui": 3000,
     "axolotl": None,
     "kohya": 7860,
@@ -73,7 +73,7 @@ COMPOSE_FILES = {
     "vllm-pair-a": "compose.inference.yml",
     "vllm-pair-b": "compose.inference.yml",
     "vllm-4gpu":   "compose.inference.yml",
-    "ollama":      "compose.inference.yml",
+    "vllm-embed":  "compose.inference.yml",
     "open-webui":  "compose.webui.yml",
     "axolotl":     "compose.training.yml",
     "kohya":       "compose.training.yml",
@@ -104,8 +104,9 @@ COMPOSE_SERVICE_NAME = {
 
 # Services that are gated behind a compose profile — must pass --profile when starting
 SERVICE_PROFILES = {
+    # vllm-4gpu and vllm-embed are the default stack (no profile).
+    "vllm-pair-a": "pair-a",
     "vllm-pair-b": "pair-b",
-    "vllm-4gpu":   "large",
     "axolotl":     "training",
     "unsloth":     "training",
     "jupyterlab":  "notebook",
@@ -117,13 +118,13 @@ GPU_ASSIGNMENT = {
     "vllm-pair-a": [0, 3],
     "vllm-pair-b": [1, 2],
     "vllm-4gpu": [0, 1, 2, 3],
+    "vllm-embed": [1],
     "axolotl": [0, 1, 2, 3],
     "kohya": [1, 2],
     "comfyui": [0],
     "invokeai": [0],
     "real-esrgan": [0],
     "whisper-stt": [0],
-    "ollama": [0],
 }
 
 # Secrets the platform generates and owns. scripts/init-secrets.sh is the
@@ -219,7 +220,6 @@ REQUIRED_HOST_DIRS = {
 # External service URLs
 PROMETHEUS_URL = "http://localhost:9091"
 LANGFUSE_URL = "http://localhost:3002"
-OLLAMA_URL = "http://localhost:11434"
 MINIO_URL = "http://localhost:9000"
 QDRANT_URL = "http://localhost:6333"
 AUTHENTIK_URL = "http://localhost:9000"

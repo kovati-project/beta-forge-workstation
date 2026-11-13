@@ -4,8 +4,8 @@ export function HelpTools() {
   const groups = [
     {
       name: 'Text Inference',
-      services: ['vLLM (pair-a, port 8000)', 'vLLM (pair-b, port 8001)', 'vLLM (4-GPU, port 8002)', 'Ollama (port 11434)'],
-      desc: 'OpenAI-compatible LLM inference servers. vLLM is optimized for throughput; Ollama is simpler and works with any GGUF model.',
+      services: ['vLLM (pair-a, port 8000)', 'vLLM (pair-b, port 8001)', 'vLLM (4-GPU, port 8002)', 'vLLM embeddings (port 8003)'],
+      desc: 'OpenAI-compatible LLM inference servers. The default 4-GPU server runs Qwen3.8-27B for chat, coding agents and autocomplete; the embeddings server feeds RAG and codebase search.',
     },
     {
       name: 'Image Studio',
@@ -30,7 +30,7 @@ export function HelpTools() {
     {
       name: 'Chat UI',
       services: ['Open WebUI', 'SearXNG (private search)'],
-      desc: 'Open WebUI provides a ChatGPT-like frontend connecting to your local vLLM or Ollama. SearXNG enables web search without telemetry.',
+      desc: 'Open WebUI provides a ChatGPT-like frontend connecting to your local vLLM servers. SearXNG enables web search without telemetry.',
     },
     {
       name: 'Storage & Vector',

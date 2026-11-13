@@ -67,8 +67,8 @@ async def system_health():
 async def service_status():
     """Get status of all deployed services."""
     services = [
-        {"name": "Ollama", "port": 11434, "status": "running"},
-        {"name": "vLLM (Pair A)", "port": 8000, "status": "running"},
+        {"name": "vLLM Qwen3.8-27B (4-GPU)", "port": 8002, "status": "running"},
+        {"name": "vLLM embeddings", "port": 8003, "status": "running"},
         {"name": "Open WebUI", "port": 3000, "status": "running"},
         {"name": "Grafana", "port": 3001, "status": "running"},
         {"name": "Langfuse", "port": 3002, "status": "running"},
@@ -154,13 +154,13 @@ async def get_runbook():
                     "4. Verify Docker daemon: docker ps",
                     "5. Run health check: bash scripts/healthcheck.sh",
                     "6. Activate loadout profile: curl -X POST http://localhost:8800/activate/inference-4gpu",
-                    "7. Verify services: curl http://localhost:11434/api/tags (Ollama)",
+                    "7. Verify services: curl http://localhost:8002/v1/models (vLLM, Qwen3.8-27B)",
                 ]
             },
             {
                 "section": "Common Tasks",
                 "steps": [
-                    "Pull a model: docker exec ollama ollama pull mistral:7b",
+                    "Download a model: Models page (Hugging Face) or huggingface-cli download <repo> --local-dir /data/models/vllm/<name>",
                     "View GPU status: nvidia-smi (watch -n 1 for continuous)",
                     "Check service logs: docker logs -f <container_name>",
                     "Restart all services: bash scripts/start-all.sh",

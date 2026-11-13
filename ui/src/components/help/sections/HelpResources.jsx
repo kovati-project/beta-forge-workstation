@@ -15,13 +15,12 @@ export function HelpResources() {
           <p>Lists all models stored in MinIO, organized by inference engine:</p>
           <ul>
             <li><strong>vLLM models</strong> — HuggingFace-format model directories for use with the vLLM inference server</li>
-            <li><strong>Ollama models</strong> — GGUF quantized models downloaded via Ollama</li>
             <li><strong>Axolotl base models</strong> — Models available as a base for text LoRA training</li>
             <li><strong>Kohya base models</strong> — Diffusion checkpoints available for image LoRA training</li>
           </ul>
           <p>Each model entry shows file size, type, and last modified date. Use the download button to export a model, or the delete button (with confirmation) to free up storage.</p>
           <div className="help-tip">
-            <strong>Tip:</strong> To add a new model, pull it via Ollama (CLI) or copy it into the MinIO bucket via the Storage tab or the MinIO web console (port 9001).
+            <strong>Tip:</strong> To add a new model, download it from Hugging Face on the Models page or copy it into the MinIO bucket via the Storage tab or the MinIO web console (port 9001).
           </div>
         </div>
       </Panel>
