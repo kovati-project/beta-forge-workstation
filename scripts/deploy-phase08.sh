@@ -21,14 +21,17 @@ echo "  ✓ Loadout Manager available"
 # ── 2. Create n8n files directory ─────────────────────────────────────────────
 echo "[2/4] Setting up directories..."
 sudo mkdir -p /data/n8n-files
-echo "  ✓ n8n files directory ready"
+# mcp-filesystem mounts only these (read-only) as its /data sandbox
+sudo mkdir -p /data/documents /data/datasets /data/outputs /data/notebooks
+echo "  ✓ n8n files and MCP sandbox directories ready"
 
 # ── 3. Start agentic services ─────────────────────────────────────────────────
 echo "[3/4] Starting agentic services..."
 for _c in n8n mcp-filesystem mcp-fetch mcp-browser mcp-code-exec; do
     remove_orphan "$_c" ai-agentic
 done
-docker compose -f "$REPO_ROOT/docker/compose.agentic.yml" up -d \
+# --build: the MCP images are built locally from docker/mcp/* (pinned versions)
+docker compose -f "$REPO_ROOT/docker/compose.agentic.yml" up -d --build \
   n8n mcp-filesystem mcp-fetch mcp-browser mcp-code-exec
 echo "  Waiting for startup (15s)..."
 sleep 15
@@ -51,10 +54,10 @@ echo "=== Deploy complete ==="
 echo ""
 echo "Services deployed (${READY}/5):"
 echo "  n8n              → http://10.10.10.2:5678"
-echo "  MCP filesystem   → :3100"
-echo "  MCP fetch        → :3103"
-echo "  MCP browser      → :3101"
-echo "  MCP code-exec    → :3102"
+echo "  MCP filesystem   → :3100/mcp (streamable HTTP)"
+echo "  MCP fetch        → :3103/mcp"
+echo "  MCP browser      → :3101/mcp"
+echo "  MCP code-exec    → :3102/mcp"
 echo ""
 echo "Next steps:"
 echo "  1. Visit http://10.10.10.2:5678 and create owner account"
