@@ -8,7 +8,7 @@ const MCP_SERVERS = [
   {
     name: 'mcp-filesystem',
     port: 3100,
-    role: 'Read/write /data/ directory tree',
+    role: 'Read-only /data (documents, datasets, outputs, notebooks)',
   },
   {
     name: 'mcp-browser',
@@ -18,12 +18,12 @@ const MCP_SERVERS = [
   {
     name: 'mcp-code-exec',
     port: 3102,
-    role: 'Sandboxed Python/shell execution',
+    role: 'Sandboxed Python execution (no network)',
   },
   {
     name: 'mcp-fetch',
     port: 3103,
-    role: 'HTTP fetch and web scraping',
+    role: 'HTTP fetch, pages as markdown',
   },
 ];
 

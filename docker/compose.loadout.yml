@@ -56,6 +56,12 @@ services:
       # services by container name and container port, like #87 does for Qdrant etc.
       - WHISPER_URL=http://whisper:8000
       - PIPER_URL=http://piper-openai:8000
+      # MCP servers (compose.agentic.yml) are on the ai-workstation network;
+      # reach them through their published ports on the host.
+      # Integration note: kept as #93 chose. api/mcp.py builds every server URL
+      # from one MCP_HOST plus a per-server port, so container names (mcp-fetch,
+      # mcp-browser, ...) would need a code change there; no other PR reaches MCP.
+      - MCP_HOST=host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     deploy:
