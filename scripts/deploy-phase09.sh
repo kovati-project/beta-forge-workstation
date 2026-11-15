@@ -83,6 +83,16 @@ if ! docker volume inspect ai-storage_postgres-data > /dev/null 2>&1; then
     chmod 644 "$PG_INIT"
 fi
 
+# MinIO no longer publishes images, so build ours from source (docker/minio/,
+# issue #92). The first build compiles minio + mc (a few minutes); later runs
+# are served from the build cache.
+echo "Building MinIO image from source..."
+if ! docker compose -f docker/compose.storage.yml build minio; then
+    echo "ERROR: MinIO image build failed (see output above)"
+    exit 1
+fi
+echo "✓ MinIO image built"
+
 docker compose -f docker/compose.storage.yml up -d minio qdrant postgres langfuse
 echo "✓ Containers started"
 echo ""
@@ -184,9 +194,11 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Optional, for the MinIO copy in scripts/backup.sh: install mc on the host"
-echo "   and add the alias (password: MINIO_ROOT_PASSWORD in docker/.env):"
-echo "   mc alias set local http://localhost:9000 admin"
+echo "1. Optional, for the MinIO copy in scripts/backup.sh: use the mc that ships"
+echo "   inside the minio image (no download). It prompts for the secret key"
+echo "   (MINIO_ROOT_PASSWORD in docker/.env):"
+echo "   docker exec -it minio mc alias set local http://localhost:9000 admin"
+echo "   docker exec minio mc ls local"
 echo "   (buckets are already created; check with: bash scripts/setup-minio-buckets.sh --check)"
 echo "   (Qdrant collections too: python3 scripts/setup-qdrant.py --check)"
 echo ""
