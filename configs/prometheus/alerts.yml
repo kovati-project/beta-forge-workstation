@@ -199,7 +199,8 @@ groups:
       #   - open-webui      : exposes no Prometheus endpoint
       # The vllm-pair-a / vllm-pair-b / vllm-4gpu jobs are only up while the
       # matching loadout profile is running, so at most one is normally up.
-      # Separately, all 10.10.10.2 targets are currently unroutable (TASK-060).
+      # (The old host-IP targets from TASK-060 are gone: prometheus.yml now
+      # scrapes by container name, #51.)
       - alert: ServiceDown
         expr: up == 0
         for: 1m

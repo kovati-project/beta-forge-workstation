@@ -13,6 +13,9 @@ router = APIRouter(tags=["admin"])
 
 AUTHENTIK_URL = os.getenv("AUTHENTIK_URL", "http://localhost:9080")
 AUTHENTIK_TOKEN = os.getenv("AUTHENTIK_TOKEN", "")
+# Browser-facing workstation address (IP or hostname), from docker/.env via
+# compose.loadout.yml (#51).
+WORKSTATION_HOST = os.getenv("WORKSTATION_HOST", "10.10.10.2")
 
 
 def _auth_headers():
@@ -163,19 +166,19 @@ async def list_oauth2_apps():
                     "name": "Open WebUI",
                     "client_id": "openwebui",
                     "enabled": True,
-                    "redirect_uris": "http://10.10.10.2:3000/auth/callback",
+                    "redirect_uris": f"http://{WORKSTATION_HOST}:3000/auth/callback",
                 },
                 {
                     "name": "Grafana",
                     "client_id": "grafana",
                     "enabled": True,
-                    "redirect_uris": "http://10.10.10.2:3001/login/generic_oauth",
+                    "redirect_uris": f"http://{WORKSTATION_HOST}:3001/login/generic_oauth",
                 },
                 {
                     "name": "n8n",
                     "client_id": "n8n",
                     "enabled": False,
-                    "redirect_uris": "http://10.10.10.2:5678/auth/generic/callback",
+                    "redirect_uris": f"http://{WORKSTATION_HOST}:5678/auth/generic/callback",
                 },
             ],
             "note": "Stub data - Authentik token not configured",
