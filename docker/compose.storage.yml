@@ -3,8 +3,16 @@ name: ai-storage
 services:
 
   # ── MinIO: S3-compatible model and artifact store ─────────────────────────
+  # MinIO no longer publishes container images (minio/minio, minio/mc and the
+  # quay.io copies can't be pulled; issue #92), so this image is built locally
+  # from source at a pinned release by docker/minio/Dockerfile. It still ships
+  # `mc` in /usr/bin (backup.sh and setup-minio-buckets.sh use `docker exec
+  # minio mc ...`). `docker compose build minio` produces the tag below and
+  # `up` uses it; `pull` has nothing to fetch (use --ignore-buildable).
+  # To upgrade, bump the RELEASE args in the Dockerfile and this tag together.
   minio:
-    image: minio/minio:latest
+    build: ./minio
+    image: kovati/minio:RELEASE.2025-10-15T17-29-55Z
     container_name: minio
     restart: unless-stopped
     ports:
