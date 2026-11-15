@@ -36,6 +36,11 @@ services:
       - HOST_COMPOSE_DIR=${REPO_ROOT:-/home/kasemo/ai-workstation-project}/docker
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # MCP servers (compose.agentic.yml) are on the ai-workstation network;
+      # reach them through their published ports on the host.
+      - MCP_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         reservations:
