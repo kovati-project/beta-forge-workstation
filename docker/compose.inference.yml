@@ -12,6 +12,9 @@ services:
     image: ollama/ollama:0.30.5
     container_name: ollama
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "11434:11434"
     volumes:
@@ -43,6 +46,9 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-pair-a
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8000:8000"
@@ -82,6 +88,9 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-pair-b
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8001:8000"
@@ -121,6 +130,9 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-4gpu
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8002:8000"
