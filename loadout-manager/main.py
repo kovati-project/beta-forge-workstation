@@ -301,6 +301,20 @@ def _claim_switch() -> bool:
 # itself after teardown) goes through these checks. They fail closed: anything
 # they cannot verify is refused.
 
+def _vram_reserve_per_gpu() -> float:
+    """GiB per GPU that NVML never reports as free on an otherwise empty card
+    (driver and context reservation, typically 0.3-0.5 GiB on a 24 GB card)."""
+    raw = os.environ.get("LOADOUT_VRAM_RESERVE_GB_PER_GPU", "0.5")
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        logger.warning(f"Ignoring invalid LOADOUT_VRAM_RESERVE_GB_PER_GPU={raw!r}; using 0.5")
+        return 0.5
+
+
+VRAM_RESERVE_GB_PER_GPU = _vram_reserve_per_gpu()
+
+
 def _incompatible(a: str, b: str, profiles: Dict) -> bool:
     """Symmetric: either side declaring the other is enough."""
     return (b in (profiles.get(a) or {}).get("incompatible_with", [])
@@ -310,9 +324,12 @@ def _incompatible(a: str, b: str, profiles: Dict) -> bool:
 def _check_incompatibility(profile_name: str, profiles: Dict) -> Optional[str]:
     """Refuse a target the active profile is declared incompatible with. The
     operator has to /stop the active profile first. Re-activating the active
-    profile (a restart) is always allowed."""
+    profile (a restart) and switching to a profile with no services (idle, the
+    way out of anything) are always allowed."""
     active = state["active_profile"]
     if not active or active == profile_name:
+        return None
+    if not (profiles[profile_name].get("services") or []):
         return None
     if active not in profiles:
         return (f"Active profile '{active}' is not defined in profiles.yaml, so "
@@ -334,6 +351,15 @@ def _check_vram(profile_name: str, profile: Dict, telemetry: Dict,
     it (all three stacks) down before starting. Its VRAM is about to be freed,
     so current free memory says nothing; only check that the requirement can
     fit on these GPUs at all. do_switch re-checks free memory after teardown.
+
+    Headroom: the requirements in profiles.yaml are whole-card figures (48 for
+    two 24 GB cards, 96 for four), but an empty card never reports all of its
+    memory as free. The free-memory check therefore credits
+    VRAM_RESERVE_GB_PER_GPU per GPU. Without that credit those profiles pass
+    the capacity check, get the running profile torn down, and then are always
+    refused after teardown. With it, the two checks agree: a switch that passes
+    the capacity check fails after teardown only if something unmanaged holds
+    more than the reserve.
     """
     raw = profile.get("vram_required_gb")
     try:
@@ -371,9 +397,10 @@ def _check_vram(profile_name: str, profile: Dict, telemetry: Dict,
                     f"total, {required:g}GB required")
         return None
     free = sum(g["vram_free_gb"] for g in gpus)
-    if free < required:
-        return (f"Insufficient VRAM: {free:.1f}GB free on GPUs {wanted}, "
-                f"{required:g}GB required")
+    reserve = VRAM_RESERVE_GB_PER_GPU * len(gpus)
+    if free + reserve < required:
+        return (f"Insufficient VRAM: {free:.1f}GB free on GPUs {wanted} "
+                f"(+{reserve:g}GB driver reserve), {required:g}GB required")
     return None
 
 
@@ -434,16 +461,26 @@ async def do_switch(profile_name: str):
     state["switching"] = True
     await broadcast_state()
     try:
-        profile = load_profiles()[profile_name]
+        try:
+            profile = load_profiles()[profile_name]
+        except Exception as e:
+            # Nothing has been stopped yet, so the state still describes reality.
+            raise _SwitchAborted(f"Cannot load profile '{profile_name}': "
+                                 f"{type(e).__name__}: {e}")
         logger.info(f"Switching to profile: {profile_name}")
 
         # Stop all existing services. If any stack may still be running, do
         # not start another on top of it: that is the VRAM conflict the gates
-        # exist to prevent. State is left as it was; we do not know what is up.
+        # exist to prevent. The old profile stays recorded as active (some of
+        # it may still be up, so the gates keep treating it as running) and
+        # last_error says which stacks did not stop.
         failures = await stop_all_services()
         if failures:
-            raise _SwitchAborted("Teardown failed, not starting "
-                                 f"'{profile_name}': {'; '.join(failures)}")
+            raise _SwitchAborted(
+                f"Teardown partly failed, not starting '{profile_name}'. "
+                f"{3 - len(failures)} of 3 stacks stopped; possibly still running: "
+                f"{'; '.join(failures)}. '{state['active_profile']}' is still "
+                f"recorded as active until a /stop succeeds")
 
         # Everything managed is down from here on.
         state["active_profile"] = None
@@ -477,7 +514,16 @@ async def do_switch(profile_name: str):
                 logger.error(f"Starting {profile_name} failed, cleaning up: {e}")
                 leftover = await stop_all_services()
                 if leftover:
-                    raise RuntimeError(f"{e}; cleanup also failed: {'; '.join(leftover)}")
+                    # Some of the new profile may be running and holding VRAM.
+                    # Record it as active so the gates keep treating it as
+                    # running, rather than claiming nothing is up.
+                    state["active_profile"] = profile_name
+                    state["running_services"] = list(services)
+                    save_state()
+                    raise _SwitchAborted(
+                        f"Starting '{profile_name}' failed ({e}) and cleanup also "
+                        f"failed: {'; '.join(leftover)}. '{profile_name}' is recorded "
+                        f"as active because some of it may be running; /stop it")
                 raise
         # A profile with no services (idle) has nothing to start: no `up` at
         # all, since a bare `docker compose up` would pick up whatever compose

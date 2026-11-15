@@ -8,11 +8,36 @@ the original gate; they are plain tests now that the defects are fixed.
 The gate counts free VRAM on the profile's own exclusive_gpus only (BUG-3), so
 boundary tests put the free memory on those GPUs and fill the others with
 memory the gate must ignore.
+
+The free-memory check credits a driver reserve per GPU (an empty card never
+reports all its memory free), so the boundary is
+`required - RESERVE * len(exclusive_gpus)`. The reserve is pinned here so an
+environment override cannot move the boundaries.
 """
 
 import datetime as _dt
 
 import pytest
+
+RESERVE = 0.5
+
+
+@pytest.fixture(autouse=True)
+def _pin_reserve(lm, monkeypatch):
+    monkeypatch.setattr(lm.main, "VRAM_RESERVE_GB_PER_GPU", RESERVE)
+
+
+def threshold(h, name, required):
+    """Least free VRAM (summed over the profile's GPUs) the gate accepts."""
+    return required - RESERVE * len(h.profiles[name]["exclusive_gpus"])
+
+
+def set_free_after_down(h, free_gb):
+    """Model teardown freeing memory: the first `down` changes what NVML reports."""
+    def rule(c):
+        if c.verb == "down":
+            h.set_free(free_gb)
+    h.docker.rules.append(rule)
 
 # Profiles that declare vram_required_gb > 0. Every GPU profile does (BUG-5).
 GATED = [
@@ -62,7 +87,8 @@ def test_insufficient_vram_is_refused_and_starts_nothing(lm):
 @pytest.mark.parametrize("name,required", GATED)
 def test_just_below_requirement_is_refused(lm, name, required):
     # Other GPUs fully free: their memory must not count towards the requirement.
-    free_on_own_gpus(lm, name, required - 1, elsewhere=24)
+    # 0.4 below the boundary keeps clear of the 0.1 GB rounding in telemetry.
+    free_on_own_gpus(lm, name, threshold(lm, name, required) - 0.4, elsewhere=24)
     r = lm.activate(name)
     assert is_4xx(r)
     assert_nothing_happened(lm)
@@ -70,9 +96,9 @@ def test_just_below_requirement_is_refused(lm, name, required):
 
 @pytest.mark.parametrize("name,required", GATED)
 def test_exactly_at_requirement_is_accepted_and_starts(lm, name, required):
-    # Boundary: the gate uses `free < required`, so free == required must pass,
-    # and with nothing free on the GPUs the profile does not use.
-    free_on_own_gpus(lm, name, required, elsewhere=0)
+    # Boundary: the gate refuses `free + reserve < required`, so free exactly at
+    # the threshold must pass, with nothing free on the GPUs the profile does not use.
+    free_on_own_gpus(lm, name, threshold(lm, name, required), elsewhere=0)
     r = lm.activate(name)
     assert r.status_code == 200, r.text
     assert lm.docker.starts, "an accepted activation must start the profile"
@@ -90,11 +116,15 @@ def test_sufficient_vram_passes_and_requested_services_started(lm):
 
 
 def test_refusal_does_not_disturb_a_running_profile(lm):
-    """A refused activation must not tear down what is currently running."""
+    """A VRAM refusal must not tear down what is currently running. The pair is
+    compatible, so only the VRAM gate can refuse it: on 16 GB cards
+    training-lora-image's 48 GB cannot fit on GPU1+GPU2."""
+    assert "inference-small" not in lm.profiles["training-lora-image"].get("incompatible_with", [])
+    assert "training-lora-image" not in lm.profiles["inference-small"].get("incompatible_with", [])
     lm.make_active("inference-small")
-    lm.set_free(10)
-    r = lm.activate("dual-stack")
-    assert is_4xx(r)
+    lm.set_free(10, total_gb=16.0)
+    r = lm.activate("training-lora-image")
+    assert r.status_code == 409
     assert lm.docker.calls == []
     assert lm.state["active_profile"] == "inference-small"
     assert lm.state["running_services"] == ["ollama"]
@@ -159,24 +189,46 @@ def test_gate_counts_only_the_profiles_exclusive_gpus(lm):
 ])
 def test_vram_held_by_the_outgoing_profile_does_not_block_the_switch(lm, active, target):
     lm.make_active(active)
-    # The active profile's own containers are holding almost all VRAM.
+    # The active profile's own containers are holding almost all VRAM...
     lm.set_free([1, 1, 1, 1])
+    # ...and teardown frees it.
+    set_free_after_down(lm, 24)
     r = lm.activate(target)
     assert r.status_code == 200, "teardown would have freed this VRAM"
+    assert len(lm.docker.starts) == 1
+    assert lm.state["active_profile"] == target
+    assert lm.state["last_error"] is None
 
 
-def test_four_gpu_profiles_need_zero_headroom_on_24gb_cards(lm):
+@pytest.mark.parametrize("name", ["dual-stack", "inference-4gpu-large"])
+def test_whole_card_requirements_are_reachable_on_empty_cards(lm, name):
     """
-    Characterisation, not an assertion of correctness: dual-stack and
-    inference-4gpu-large require 96 GB on a 4 x 24 GB box (every byte). Real
-    idle GPUs never report their full capacity as free (driver/context
-    reservation), so with realistic numbers these profiles are unreachable
-    through the gate. Free figures below are illustrative, NOT measured.
+    dual-stack and inference-4gpu-large require 96 GB on a 4 x 24 GB box (every
+    byte). Empty cards never report all of it free; the driver reserve credit
+    makes them reachable. Free figures are illustrative, NOT measured.
     """
-    lm.set_free([23.6] * 4)  # 94.4 GB free in total
-    assert lm.activate("dual-stack").status_code == 409
-    assert lm.activate("inference-4gpu-large").status_code == 409
+    lm.set_free([23.6] * 4)  # 94.4 free + 4 x 0.5 reserve >= 96
+    assert lm.activate(name).status_code == 200
+    assert lm.state["active_profile"] == name
+
+
+@pytest.mark.parametrize("name", ["dual-stack", "inference-4gpu-large"])
+def test_whole_card_requirements_refuse_more_than_the_reserve_in_use(lm, name):
+    lm.set_free([23.4] * 4)  # 0.6 GB/card in use: more than the reserve
+    assert lm.activate(name).status_code == 409
     assert lm.docker.calls == []
+
+
+def test_restart_of_a_96gb_profile_succeeds_with_realistic_free_memory(lm):
+    """Review item 5: the capacity pre-check and the post-teardown check must
+    agree, or a 96 GB switch tears down the running profile and is then always
+    refused."""
+    lm.make_active("dual-stack")
+    lm.set_free(1)
+    set_free_after_down(lm, 23.6)  # what an empty 24 GB card typically reports
+    assert lm.activate("dual-stack").status_code == 200
+    assert len(lm.docker.starts) == 1
+    assert lm.state["active_profile"] == "dual-stack"
 
 
 def test_outgoing_profile_still_holding_vram_after_teardown_aborts_the_start(lm):
@@ -192,18 +244,6 @@ def test_outgoing_profile_still_holding_vram_after_teardown_aborts_the_start(lm)
     assert lm.state["running_services"] == []
     assert lm.state["last_error"]
     assert lm.state["switching"] is False
-
-
-def test_requirement_that_cannot_fit_the_gpus_is_refused_even_while_switching_over(lm):
-    """With a profile running the free-memory check is deferred, but a
-    requirement larger than the profile's GPUs can ever hold is refused up front."""
-    lm.make_active("inference-small")
-    # 16 GB cards: training-lora-image's 48 GB cannot fit on GPU1+GPU2.
-    lm.set_free(16, total_gb=16.0)
-    r = lm.activate("training-lora-image")
-    assert r.status_code == 409
-    assert lm.docker.calls == []
-    assert lm.state["active_profile"] == "inference-small"
 
 
 # ── Scheduled switches go through the same gate (BUG-6) ──────────────────────
@@ -239,7 +279,9 @@ async def test_scheduled_switch_is_subject_to_the_vram_gate(lm, monkeypatch):
         await main.scheduler_loop()
     await real_asyncio.gather(*lm.tasks)
 
-    assert lm.docker.starts == [], "scheduler started a profile that fails the VRAM gate"
+    # No docker call at all: refused before teardown, not aborted after it.
+    assert lm.docker.calls == [], "scheduler acted on a profile that fails the VRAM gate"
+    assert lm.state["active_profile"] is None
 
 
 async def _run_one_scheduler_pass(lm, monkeypatch, profile):

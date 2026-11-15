@@ -197,6 +197,47 @@ def test_switch_does_not_start_new_profile_if_teardown_failed(lm, how):
     # We do not know what is still up, so the old profile is not written off.
     assert lm.state["active_profile"] == "inference-small"
     assert lm.state["last_error"]
+    # The partial failure is visible to clients, not only in the log.
+    assert lm.client.get("/status").json()["last_error"]
+    assert lm.ws.events[-1]["last_error"]
+    assert lm.state["switching"] is False
+
+
+def test_failed_start_with_failed_cleanup_keeps_the_new_profile_recorded(lm):
+    """Review item 4: if `up` fails and the cleanup `down` fails too, some of the
+    new profile may be running. State must not claim nothing is up."""
+    lm.docker.fail("up", rc=1, stderr="port already allocated")
+
+    def cleanup_down_fails(c):
+        if c.verb == "down" and lm.docker.starts:
+            return subprocess.CompletedProcess(c.cmd, 1, "", "cannot stop container")
+    lm.docker.rules.append(cleanup_down_fails)
+
+    assert lm.activate("dual-stack").status_code == 200
+    (up,) = lm.docker.starts
+    assert [c for c in lm.docker.downs if c.seq > up.seq], "cleanup must be attempted"
+    assert lm.state["active_profile"] == "dual-stack"
+    assert lm.state["running_services"] == lm.profiles["dual-stack"]["services"]
+    assert lm.state["last_error"]
+    assert lm.state["switching"] is False
+    # ...so the incompatibility gate still sees it as running.
+    assert lm.activate("training-lora-text").status_code == 409
+
+
+@pytest.mark.anyio
+async def test_error_before_teardown_leaves_state_alone(lm, monkeypatch):
+    """Review item 6: a profile that cannot be loaded fails before anything is
+    stopped, so the running profile must stay recorded."""
+    lm.make_active("inference-small")
+
+    def broken():
+        raise KeyError("profiles")
+    monkeypatch.setattr(lm.main, "load_profiles", broken)
+    await lm.main.do_switch("training-lora-image")
+    assert lm.docker.calls == []
+    assert lm.state["active_profile"] == "inference-small"
+    assert lm.state["running_services"] == ["ollama"]
+    assert lm.state["last_error"]
     assert lm.state["switching"] is False
 
 

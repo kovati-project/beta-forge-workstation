@@ -199,7 +199,7 @@ failure and a deliberate port conflict on `up`) is still required to close the i
 
 ## Fixes for BUG-1 to BUG-9 (2026-11-14, branch `fix/loadout-gating`)
 
-Mocked suite after the fix: `294 passed, 16 xfailed` (was `245 passed, 42 xfailed`; the
+Mocked suite after the fix and the review follow-up: `300 passed, 16 xfailed` (was `245 passed, 42 xfailed`; the
 remaining xfails are OPS/SET/UI items outside this document). Still **not** run on the host.
 
 - **Shared gate.** `validate_activation()` in `main.py` is called by `POST /activate` and the
@@ -238,3 +238,20 @@ remaining xfails are OPS/SET/UI items outside this document). Still **not** run 
   are declared incompatible (`training-lora-text -> inference-4gpu`, `dual-stack ->
   inference-pair-b`) for compatible ones with the same coverage; the BUG-7 test uses a
   compatible pair so only the teardown failure can stop the start.
+
+Review follow-up (PR #88):
+
+- **Driver reserve.** The free-memory check credits `LOADOUT_VRAM_RESERVE_GB_PER_GPU`
+  (default 0.5 GiB) per GPU: `free + reserve * n >= required`. The YAML requirements are
+  whole-card figures (48 = 2 x 24, 96 = 4 x 24), which an empty card never reports as free,
+  so without the credit those profiles passed the capacity pre-check, tore down the running
+  profile and were then always refused. With it, the pre-check (total capacity) and the
+  post-teardown check agree. The 0.5 default must be checked against `nvidia-smi` on an idle
+  card. The old "zero headroom" characterisation test is replaced by tests that accept 23.6
+  and refuse 23.4 GiB free per card for the 96 GB profiles.
+- A failed `up` whose cleanup `down` also fails records the new profile as active with its
+  services, so the gates keep treating it as running.
+- An error loading the profile, before anything is stopped, leaves the state unchanged.
+- `idle` (any profile without services) is reachable even when the active profile has been
+  removed from `profiles.yaml`.
+- A partial teardown failure names the stacks that may still be running in `last_error`.

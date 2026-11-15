@@ -187,3 +187,15 @@ def test_activation_after_stop_is_not_blocked_by_the_previous_profile(lm):
     assert lm.client.post("/stop").status_code == 200
     assert lm.activate("training-lora-text").status_code == 200
     assert lm.state["active_profile"] == "training-lora-text"
+
+
+def test_idle_is_reachable_when_the_active_profile_was_removed_from_yaml(lm):
+    """Review item 7: an active profile missing from profiles.yaml cannot be
+    checked for compatibility, so GPU profiles are refused, but idle (no
+    services) is the way out and must still work."""
+    lm.main.state.update(active_profile="retired-profile",
+                         running_services=["old-svc"], switching=False)
+    assert lm.activate("training-lora-image").status_code == 409
+    assert lm.docker.calls == []
+    assert lm.activate("idle").status_code == 200
+    assert lm.state["active_profile"] == "idle"
