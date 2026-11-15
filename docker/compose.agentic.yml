@@ -7,6 +7,9 @@ services:
     image: n8nio/n8n:1.68.0
     container_name: n8n
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "5678:5678"
     volumes:
@@ -16,20 +19,25 @@ services:
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://10.10.10.2:5678/
+      # Browser-facing URLs use WORKSTATION_HOST from docker/.env (#51)
+      - WEBHOOK_URL=http://${WORKSTATION_HOST:-10.10.10.2}:5678/
       - DB_TYPE=sqlite
       - EXECUTIONS_PROCESS=main
       # LLM integration via OpenAI-compatible endpoint (Ollama)
       - N8N_AI_ENABLED=true
       - N8N_AI_PROVIDER=openai
       - N8N_AI_OPENAI_API_KEY=EMPTY
-      - N8N_AI_OPENAI_BASE_URL=http://10.10.10.2:11434/v1
+      # Container-to-container: ollama by name on the ai-workstation network
+      - N8N_AI_OPENAI_BASE_URL=http://ollama:11434/v1
 
   # ── Dify: LLM app development platform ────────────────────────────────────
   dify-api:
     image: langgenius/dify-api:latest
     container_name: dify-api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     environment:
       - MODE=api
       - SECRET_KEY=${DIFY_SECRET_KEY}
@@ -39,7 +47,7 @@ services:
       - DB_DATABASE=dify
       - REDIS_HOST=dify-redis
       - STORAGE_TYPE=local
-      - OPENAI_API_BASE=http://10.10.10.2:11434/v1
+      - OPENAI_API_BASE=http://ollama:11434/v1
     depends_on:
       - dify-db
       - dify-redis
@@ -52,16 +60,32 @@ services:
     image: langgenius/dify-web:latest
     container_name: dify-web
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3010:3000"
     environment:
-      - NEXT_PUBLIC_API_PREFIX=http://10.10.10.2:5001/v1
-      - NEXT_PUBLIC_APP_API_PREFIX=http://10.10.10.2:5001/api
+      # Read by the browser, so these must be the host address, not a container name
+      - NEXT_PUBLIC_API_PREFIX=http://${WORKSTATION_HOST:-10.10.10.2}:5001/v1
+      - NEXT_PUBLIC_APP_API_PREFIX=http://${WORKSTATION_HOST:-10.10.10.2}:5001/api
 
   dify-db:
     image: postgres:15-alpine
     container_name: dify-db
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns PGDATA as root (DAC_OVERRIDE to traverse an existing
+    # 0700 data dir, FOWNER for its chmods), then drops to postgres via su-exec
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     environment:
       - POSTGRES_USER=dify
       - POSTGRES_PASSWORD=${DIFY_DB_PASSWORD}
@@ -73,54 +97,140 @@ services:
     image: redis:7-alpine
     container_name: dify-redis
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns /data as root, then drops to redis via setpriv
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     volumes:
       - dify-redis-data:/data
 
   # ── MCP Servers ───────────────────────────────────────────────────────────
+  # All four speak MCP streamable HTTP at http://<host>:<port>/mcp (legacy SSE
+  # at /sse for the two behind mcp-proxy and for mcp-browser). Open WebUI,
+  # loadout-manager and the UI's exported client config all use /mcp.
+  # Images are built from docker/mcp/* with pinned server versions; nothing is
+  # installed at container start. Ports stay closed to the LAN by default
+  # (scripts/setup-ufw.sh); containers reach them over the Docker network.
+  #
+  # Each server checks the HTTP Host header (DNS-rebinding protection) against
+  # loopback plus: its container name, host.docker.internal (loadout-manager
+  # sits on another network) and MCP_LAN_HOST, the address LAN clients use
+  # (defaults to WORKSTATION_HOST, so one host setting covers both; #81).
 
   mcp-filesystem:
-    image: node:20-alpine
+    build: ./mcp/filesystem
+    image: kovati/mcp-filesystem:2.1.0
     container_name: mcp-filesystem
     restart: unless-stopped
     ports:
       - "3100:3100"
+    # Sandbox root is /data inside the container, read-only. Only user content
+    # is mounted into it, not the service state that also lives under host
+    # /data (authentik, n8n, caddy, minio, backups, ...), so no credentials are
+    # reachable even through a server bug.
     volumes:
-      - /data:/data:ro
-    command: >
-      sh -c "npm install -g @modelcontextprotocol/server-filesystem &&
-             npx @modelcontextprotocol/server-filesystem --port 3100 /data"
+      - /data/documents:/data/documents:ro
+      - /data/datasets:/data/datasets:ro
+      - /data/outputs:/data/outputs:ro
+      - /data/notebooks:/data/notebooks:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+      - /home/node:size=16m,uid=1000,gid=1000
+    command:
+      - --host=0.0.0.0
+      - --port=3100
+      - --allowed-host=mcp-filesystem:3100
+      - --allowed-host=host.docker.internal:3100
+      - --allowed-host=${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3100
+      - --
+      - mcp-server-filesystem
+      - /data
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    pids_limit: 64
 
   mcp-fetch:
-    image: node:20-alpine
+    build: ./mcp/fetch
+    image: kovati/mcp-fetch:2026.10.28
     container_name: mcp-fetch
     restart: unless-stopped
     ports:
       - "3103:3103"
-    command: >
-      sh -c "npm install -g @modelcontextprotocol/server-fetch &&
-             npx @modelcontextprotocol/server-fetch --port 3103"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+      - /home/mcp:size=16m,uid=10001,gid=10001
+    command:
+      - --host=0.0.0.0
+      - --port=3103
+      - --allowed-host=mcp-fetch:3103
+      - --allowed-host=host.docker.internal:3103
+      - --allowed-host=${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3103
+      - --
+      - /opt/fetch/bin/mcp-server-fetch
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 512m
+    pids_limit: 64
 
   mcp-browser:
-    image: mcr.microsoft.com/playwright:v1.48.0-jammy
+    image: mcr.microsoft.com/playwright/mcp:v0.0.83
     container_name: mcp-browser
     restart: unless-stopped
     ports:
       - "3101:3101"
-    command: >
-      sh -c "npm install -g @modelcontextprotocol/server-browser &&
-             npx @modelcontextprotocol/server-browser --port 3101"
+    # The image entrypoint already runs headless Chromium with --no-sandbox
+    # (Chromium's own sandbox needs user namespaces, which cap_drop ALL and
+    # no-new-privileges rule out; the container is the sandbox instead).
+    # --isolated keeps the profile in memory; nothing persists between sessions.
+    command:
+      - --port=3101
+      - --host=0.0.0.0
+      - --isolated
+      - --allowed-hosts=localhost:3101,127.0.0.1:3101,mcp-browser:3101,host.docker.internal:3101,${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3101
+      - --output-dir=/tmp/playwright-output
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+      - /home/node:size=128m,uid=1000,gid=1000
+    shm_size: 512m
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 2g
+    pids_limit: 512
 
   mcp-code-exec:
-    image: node:20-alpine
+    # Off by default (compose profile "code-exec"). The security review on
+    # PR #93 found that a snippet can wedge the server (an orphaned child
+    # holding stdout open) and, running as the server's own uid, can signal
+    # it. Enable only after those are fixed: ENABLE_MCP_CODE_EXEC=1 for
+    # deploy-phase08.sh, or `docker compose --profile code-exec up -d`.
+    profiles: ["code-exec"]
+    build: ./mcp/code-exec
+    image: kovati/mcp-code-exec:1
     container_name: mcp-code-exec
     restart: unless-stopped
     ports:
       - "3102:3102"
+    # Snippets run with no network (seccomp blocks non-AF_UNIX sockets), stdlib
+    # only, and per-run rlimits; see docker/mcp/code-exec/server.py.
     environment:
-      - PORT=3102
-    command: >
-      sh -c "npm install -g @modelcontextprotocol/server-code-executor &&
-             npx @modelcontextprotocol/server-code-executor --port 3102"
+      - MCP_ALLOWED_HOSTS=mcp-code-exec:3102,host.docker.internal:3102,${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3102
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,uid=10001,gid=10001,mode=0700
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 128
 
 volumes:
   dify-storage:

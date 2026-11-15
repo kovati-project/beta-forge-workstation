@@ -12,6 +12,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 export REPO_ROOT
 UI_DIR="$REPO_ROOT/ui"
 LM_DIR="$REPO_ROOT/loadout-manager"
@@ -135,6 +136,8 @@ if $BUILD_DOCKER; then
     ok "Stopped existing container"
   fi
 
+  # compose.loadout.yml joins the external ai-workstation network
+  docker network inspect ai-workstation &>/dev/null || docker network create ai-workstation
   docker compose -f "$COMPOSE_FILE" up -d "$SERVICE_NAME"
   ok "Container started"
 
@@ -164,8 +167,8 @@ echo "╔═══════════════════════�
 echo "║                  Deploy complete                 ║"
 echo "╚══════════════════════════════════════════════════╝"
 if $BUILD_DOCKER; then
-  echo "  UI:   http://10.10.10.2:$PORT"
-  echo "  API:  http://10.10.10.2:$PORT/api"
+  echo "  UI:   http://${WORKSTATION_HOST}:$PORT"
+  echo "  API:  http://${WORKSTATION_HOST}:$PORT/api"
   echo "  Logs: docker compose -f docker/compose.loadout.yml logs -f"
 fi
 echo ""

@@ -12,6 +12,9 @@ services:
     image: ollama/ollama:0.30.5
     container_name: ollama
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "11434:11434"
     volumes:
@@ -43,11 +46,18 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-pair-a
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8000:8000"
     volumes:
       - /data/models/vllm:/models
+      # Same-path mounts so models registered from the Models tab (absolute
+      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
@@ -82,11 +92,18 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-pair-b
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8001:8000"
     volumes:
       - /data/models/vllm:/models
+      # Same-path mounts so models registered from the Models tab (absolute
+      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
@@ -121,11 +138,18 @@ services:
     image: vllm/vllm-openai:latest
     container_name: vllm-4gpu
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8002:8000"
     volumes:
       - /data/models/vllm:/models
+      # Same-path mounts so models registered from the Models tab (absolute
+      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:

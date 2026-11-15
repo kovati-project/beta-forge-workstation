@@ -147,9 +147,11 @@ DRIVER_VER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head 
 ok "nvidia-smi: $GPU_COUNT GPUs, driver $DRIVER_VER"
 [[ $GPU_COUNT -eq 4 ]] || warn "Expected 4 GPUs, found $GPU_COUNT"
 
-# NVLink check
+# NVLink check. Up links print "Link N: 14.062 GB/s", down ones "<inactive>";
+# the word "Active" does not appear (same parse as configs/drivers/verify-drivers.sh).
 for i in 0 1 2 3; do
-  LINKS=$(nvidia-smi nvlink --status -i $i 2>/dev/null | grep -c "Active" || true)
+  LINKS=$(nvidia-smi nvlink --status -i $i 2>/dev/null \
+    | grep -Ec '^[[:space:]]*Link [0-9]+:.*([0-9.]+ ?GB/s|(^|[^[:alpha:]])Active)' || true)
   ok "GPU$i NVLink: $LINKS active links"
 done
 

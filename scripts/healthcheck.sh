@@ -18,6 +18,7 @@ WARNINGS=0
 # Locate the deployed tree and its deploy stamp. sync-and-deploy.ps1 writes
 # scripts/.deployed-commit (key=value lines) into the synced tree.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 STAMP_FILE="$SCRIPT_DIR/.deployed-commit"
 
@@ -227,7 +228,7 @@ else
 fi
 
 if curl -sf http://localhost:3010 &>/dev/null; then
-    check_service "Dify" "http://localhost:3010" "200"
+    check_service "Dify" "http://localhost:3010" "200|307"
 else
     echo -e "  ${YELLOW}◇${NC} Dify (not running)"
 fi
@@ -254,7 +255,7 @@ fi
 echo ""
 echo -e "${BLUE}Observability:${NC}"
 if curl -sf http://localhost:3002 &>/dev/null; then
-    check_service "Langfuse" "http://localhost:3002" "200"
+    check_service "Langfuse" "http://localhost:3002" "200|307"
 else
     echo -e "  ${YELLOW}◇${NC} Langfuse (not running)"
 fi
@@ -333,8 +334,8 @@ if [ $WARNINGS -gt 0 ]; then
 fi
 
 echo ""
-echo -e "Check Grafana dashboards at ${BLUE}http://10.10.10.2:3001${NC}"
-echo -e "View Authentik admin at ${BLUE}http://10.10.10.2:9080/if/admin/${NC}"
+echo -e "Check Grafana dashboards at ${BLUE}http://${WORKSTATION_HOST}:3001${NC}"
+echo -e "View Authentik admin at ${BLUE}http://${WORKSTATION_HOST}:9080/if/admin/${NC}"
 
 # Exit with appropriate code
 [ $UNHEALTHY -eq 0 ]

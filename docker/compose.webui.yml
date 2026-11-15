@@ -7,6 +7,9 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3000:8080"
     volumes:
@@ -14,7 +17,7 @@ services:
       - /data/models/ollama:/root/.ollama
     environment:
       # Backends are addressed by container name and *internal* port on the
-      # ai-workstation network; 10.10.10.2 never existed on this host (#51).
+      # ai-workstation network, so they do not depend on WORKSTATION_HOST (#51).
       # Open WebUI keeps no saved connection settings in its DB here, so these env
       # vars are authoritative (re-check webui.db `config` if that ever changes).
 
@@ -32,6 +35,12 @@ services:
       - COMFYUI_BASE_URL=http://comfyui:8188
 
       # RAG
+      # Store knowledge-base vectors in the shared Qdrant (compose.storage.yml)
+      # instead of the default Chroma inside this container. Open WebUI keeps
+      # its own "open-webui_*" collections, separate from the RAG collections
+      # scripts/setup-qdrant.py creates. Env-only setting: recreate to apply.
+      - VECTOR_DB=qdrant
+      - QDRANT_URI=http://qdrant:6333
       - RAG_EMBEDDING_MODEL=nomic-embed-text
       - RAG_EMBEDDING_ENGINE=ollama
       - CHUNK_SIZE=1000
@@ -48,15 +57,22 @@ services:
       - ENABLE_SIGNUP=false
       - DEFAULT_USER_ROLE=user
 
-      # Voice I/O pre-wiring (endpoints deployed in Phase 12)
+      # Voice I/O (compose.voice.yml). Both engines are "openai" (HTTP):
+      # STT -> faster-whisper-server; "whisper-1" resolves to the server's
+      #        WHISPER__MODEL (set WHISPER_MODEL in docker/.env, nowhere else).
+      # TTS -> piper-openai, the /v1/audio/speech adapter in front of the
+      #        Wyoming-only piper container. OpenAI voice names map to PIPER_VOICE.
+      # These are Open WebUI PersistentConfig values: once someone saves the Audio
+      # admin page, the database copy wins over these env vars.
       - AUDIO_STT_ENGINE=openai
       - AUDIO_STT_OPENAI_API_BASE_URL=http://whisper:8000/v1
       - AUDIO_STT_OPENAI_API_KEY=EMPTY
+      - AUDIO_STT_MODEL=whisper-1
       - AUDIO_TTS_ENGINE=openai
-      # KNOWN BROKEN: piper speaks the Wyoming protocol (raw TCP), not the OpenAI
-      # speech API, so TTS cannot work until an OpenAI-compatible TTS server replaces it.
-      - AUDIO_TTS_OPENAI_API_BASE_URL=http://piper:10200/v1
+      - AUDIO_TTS_OPENAI_API_BASE_URL=http://piper-openai:8000/v1
       - AUDIO_TTS_OPENAI_API_KEY=EMPTY
+      - AUDIO_TTS_MODEL=piper
+      - AUDIO_TTS_VOICE=${PIPER_VOICE:-en_US-lessac-high}
 
       # Features
       - ENABLE_CODE_EXECUTION=true
@@ -70,6 +86,15 @@ services:
     image: searxng/searxng:latest
     container_name: searxng
     restart: unless-stopped
+    # The image runs granian as root unless told otherwise; its entrypoint
+    # supports non-root (skips the chown and update-ca-certificates). 977 is the
+    # image's searxng user. settings.yml must already exist and be readable by
+    # it (init-secrets.sh renders it 0664), since 977 cannot create it.
+    user: "977:977"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "8080:8080"
     volumes:

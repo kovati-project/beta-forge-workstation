@@ -15,7 +15,7 @@
 #   BACKUP_ROOT          destination root            (default $DATA_ROOT/backups)
 #   BACKUP_MIN_FREE_GB   abort if less free space    (default 20, 0 = no check)
 
-set -euo pipefail
+set -Eeuo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -42,18 +42,51 @@ log_step() { echo -e "${GREEN}[$(date +%H:%M:%S)]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
+usage() {
+    cat <<'USAGE'
+Usage: bash scripts/backup.sh [all|volumes|configs|models]   (default: all)
+
+  all      Docker volumes, bind-mounted service data, Postgres dumps and configs
+  volumes  Docker volumes, bind-mounted service data and Postgres dumps only
+  configs  project configs, training configs, LoRA adapters, recent checkpoints
+  models   vLLM model weights (large; never part of 'all')
+
+Writes $BACKUP_ROOT/<YYYYmmdd-HHMMSS>/: one archive per source plus MANIFEST.txt.
+Exit: 0 ok, 1 something failed, 2 bad usage or missing prerequisite.
+USAGE
+}
+
 case "$BACKUP_MODE" in
+    -h|--help)
+        usage
+        exit 0
+        ;;
     all|volumes|configs|models) ;;
     *)
-        log_error "Unknown mode: $BACKUP_MODE (expected: all|volumes|configs|models)"
+        log_error "Unknown mode: '$BACKUP_MODE'"
+        usage >&2
         exit 2
         ;;
 esac
+if [ "$#" -gt 1 ]; then
+    log_error "Too many arguments: $*"
+    usage >&2
+    exit 2
+fi
+if ! [[ "$BACKUP_MIN_FREE_GB" =~ ^[0-9]+$ ]]; then
+    log_error "BACKUP_MIN_FREE_GB must be a whole number of GB, got '$BACKUP_MIN_FREE_GB'"
+    exit 2
+fi
 
-# Prerequisites
+# Prerequisites. Only the volume backups use docker; configs/models are plain tar.
 if [ "$BACKUP_MODE" = "all" ] || [ "$BACKUP_MODE" = "volumes" ]; then
-    if ! command -v docker &>/dev/null || ! docker info &>/dev/null; then
-        log_error "docker is not installed or the daemon is not reachable (is the user in the docker group?)"
+    if ! command -v docker &>/dev/null; then
+        log_error "docker is not installed (needed for mode '$BACKUP_MODE')"
+        exit 2
+    fi
+    if ! docker_err=$(docker info 2>&1 >/dev/null); then
+        log_error "docker daemon is not reachable (is it running, and is this user in the docker group?)"
+        if [ -n "$docker_err" ]; then echo "$docker_err" >&2; fi
         exit 2
     fi
 fi
@@ -76,6 +109,72 @@ if [ "$BACKUP_MIN_FREE_GB" -gt 0 ]; then
     fi
 fi
 
+# MANIFEST.txt is what the loadout-manager API reads to tell a good run from a
+# bad one: no manifest = "incomplete", a "## FAILED" section (one name per
+# line) = "fail". It is written on every exit path past this point.
+manifest="$BACKUP_DIR/MANIFEST.txt"
+MANIFEST_WRITTEN=0
+write_manifest() {
+    {
+        echo "# Backup Manifest"
+        echo "Date: $(date)"
+        echo "Mode: $BACKUP_MODE"
+        echo ""
+        echo "## Files"
+        (cd "$BACKUP_DIR" && ls -lh | awk 'NR>1 && $9 != "MANIFEST.txt" {printf "%s  %s\n", $5, $9}')
+        if [ "${#SKIPPED[@]}" -gt 0 ]; then
+            echo ""
+            echo "## Skipped (source not present)"
+            printf '%s\n' "${SKIPPED[@]}"
+        fi
+        if [ "${#FAILED[@]}" -gt 0 ]; then
+            echo ""
+            echo "## FAILED"
+            printf '%s\n' "${FAILED[@]}"
+        fi
+        echo ""
+        echo "## Restore Instructions"
+        echo "# To restore a volume (name is the real Docker volume, see 'docker volume ls'):"
+        echo "docker volume create <volume-name>"
+        echo "docker run --rm -v <volume-name>:/target -v \$(pwd):/source alpine tar xzf /source/<file>.tar.gz -C /target"
+        echo ""
+        echo "# To restore n8n / authentik (bind-mounted dirs; stop the containers first):"
+        echo "docker run --rm -v /data/<n8n|authentik>:/target -v \$(pwd):/source alpine tar xzf /source/<file>.tar.gz -C /target"
+        echo ""
+        echo "# To restore a PostgreSQL dump into a fresh, running container:"
+        echo "gunzip -c <file>.sql.gz | docker exec -i <container> psql -U <user> -d postgres"
+        echo ""
+        echo "# To restore a directory:"
+        echo "tar xzf <file>.tar.gz -C <target-directory>"
+    } > "$manifest"
+    MANIFEST_WRITTEN=1
+}
+
+# If anything aborts the script from here on (an unexpected error under set -e,
+# SIGTERM from systemd, Ctrl-C), remove the archive that was being written and
+# still leave a MANIFEST.txt marking the run FAILED, so a partial run never
+# looks like a good backup and retention never runs.
+IN_PROGRESS=""
+ERR_LINE=""
+on_exit() {
+    local rc=$?
+    trap - EXIT
+    if [ "$MANIFEST_WRITTEN" -eq 0 ]; then
+        [ "$rc" -eq 0 ] && rc=1
+        log_error "backup.sh aborted (exit $rc${ERR_LINE:+, near line $ERR_LINE}); marking this run FAILED"
+        if [ -n "$IN_PROGRESS" ]; then
+            rm -f "$IN_PROGRESS"
+        fi
+        FAILED+=("aborted")
+        write_manifest || log_error "Could not write $manifest"
+    fi
+    exit "$rc"
+}
+trap 'ERR_LINE=$LINENO' ERR
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 log_step "=== AI Workstation Backup ==="
 log_step "Backup directory: $BACKUP_DIR"
 log_step "Backup mode: $BACKUP_MODE"
@@ -86,14 +185,17 @@ echo ""
 finish_archive() {
     local file=$1
     local name=$2
-    local size
+    local size err
 
-    if ! gzip -t "$file" 2>/dev/null; then
+    if ! err=$(gzip -t "$file" 2>&1); then
         log_error "Archive failed integrity check: $name"
+        if [ -n "$err" ]; then echo "$err" >&2; fi
         rm -f "$file"
+        IN_PROGRESS=""
         FAILED+=("$name")
         return 0
     fi
+    IN_PROGRESS=""
 
     size=$(du -sh "$file" | cut -f1)
     log_step "  → $(basename "$file") ($size)"
@@ -143,6 +245,7 @@ tar_in_container() {
     local file="$BACKUP_DIR/${name}.tar.gz"
 
     log_step "Backing up: $name..."
+    IN_PROGRESS=$file
     if ! docker run --rm \
         -v "$source":/source:ro \
         -v "$BACKUP_DIR":/backup \
@@ -205,6 +308,7 @@ backup_directory() {
     fi
 
     log_step "Backing up directory: $name..."
+    IN_PROGRESS=$file
     tar czf "$file" "$@" -C "$(dirname "$source")" "$(basename "$source")" || rc=$?
     # tar exit 1 = "file changed as we read it": archive is usable
     if [ "$rc" -eq 1 ]; then
@@ -234,6 +338,7 @@ backup_postgres() {
     fi
 
     log_step "Dumping PostgreSQL: $container..."
+    IN_PROGRESS=$file
     if ! docker exec "$container" pg_dumpall -U "$pguser" | gzip > "$file"; then
         log_error "Failed to dump PostgreSQL: $container"
         rm -f "$file"
@@ -287,6 +392,7 @@ if [ "$BACKUP_MODE" = "all" ] || [ "$BACKUP_MODE" = "configs" ]; then
     if [ -d "$DATA_ROOT/checkpoints" ]; then
         if [ -n "$(find "$DATA_ROOT/checkpoints" -type f -mtime -7 -print -quit 2>/dev/null)" ]; then
             log_step "Backing up recent training checkpoints..."
+            IN_PROGRESS="$BACKUP_DIR/recent-checkpoints.tar.gz"
             if find "$DATA_ROOT/checkpoints" -type f -mtime -7 -print0 | tar czf "$BACKUP_DIR/recent-checkpoints.tar.gz" --null -T -; then
                 finish_archive "$BACKUP_DIR/recent-checkpoints.tar.gz" "recent-checkpoints"
             else
@@ -309,20 +415,10 @@ if [ "$BACKUP_MODE" = "all" ] || [ "$BACKUP_MODE" = "models" ]; then
     log_warn "Model backups are large. Consider using MinIO instead for long-term storage."
 
     # Only backup if explicitly requested
+    # (The old find -maxdepth 1 | tar -T - listed the vllm dir *and* each
+    # subdirectory, so tar recursed into every model twice.)
     if [ "$BACKUP_MODE" = "models" ]; then
-        if [ -d "$DATA_ROOT/models/vllm" ]; then
-            log_step "Backing up vLLM models..."
-            if find "$DATA_ROOT/models/vllm" -maxdepth 1 -type d -print0 | tar czf "$BACKUP_DIR/vllm-models.tar.gz" --null -T -; then
-                finish_archive "$BACKUP_DIR/vllm-models.tar.gz" "vllm-models"
-            else
-                log_error "vLLM models too large to backup (archive would exceed disk)"
-                rm -f "$BACKUP_DIR/vllm-models.tar.gz"
-                FAILED+=("vllm-models")
-            fi
-        else
-            log_warn "Directory not found: $DATA_ROOT/models/vllm (skipping)"
-            SKIPPED+=("vllm-models")
-        fi
+        backup_directory "$DATA_ROOT/models/vllm" "vllm-models"
     fi
     echo ""
 fi
@@ -333,39 +429,7 @@ if [ "$CREATED" -eq 0 ] && [ "${#FAILED[@]}" -eq 0 ]; then
 fi
 
 # Generate backup manifest (before the MinIO sync so it is mirrored too)
-manifest="$BACKUP_DIR/MANIFEST.txt"
-{
-    echo "# Backup Manifest"
-    echo "Date: $(date)"
-    echo "Mode: $BACKUP_MODE"
-    echo ""
-    echo "## Files"
-    (cd "$BACKUP_DIR" && ls -lh | awk 'NR>1 {printf "%s  %s\n", $5, $9}')
-    if [ "${#SKIPPED[@]}" -gt 0 ]; then
-        echo ""
-        echo "## Skipped (source not present)"
-        printf '%s\n' "${SKIPPED[@]}"
-    fi
-    if [ "${#FAILED[@]}" -gt 0 ]; then
-        echo ""
-        echo "## FAILED"
-        printf '%s\n' "${FAILED[@]}"
-    fi
-    echo ""
-    echo "## Restore Instructions"
-    echo "# To restore a volume (name is the real Docker volume, see 'docker volume ls'):"
-    echo "docker volume create <volume-name>"
-    echo "docker run --rm -v <volume-name>:/target -v \$(pwd):/source alpine tar xzf /source/<file>.tar.gz -C /target"
-    echo ""
-    echo "# To restore n8n / authentik (bind-mounted dirs; stop the containers first):"
-    echo "docker run --rm -v /data/<n8n|authentik>:/target -v \$(pwd):/source alpine tar xzf /source/<file>.tar.gz -C /target"
-    echo ""
-    echo "# To restore a PostgreSQL dump into a fresh, running container:"
-    echo "gunzip -c <file>.sql.gz | docker exec -i <container> psql -U <user> -d postgres"
-    echo ""
-    echo "# To restore a directory:"
-    echo "tar xzf <file>.tar.gz -C <target-directory>"
-} > "$manifest"
+write_manifest
 
 # Sync backups to MinIO (if available)
 echo -e "${BLUE}MinIO Sync:${NC}"
@@ -377,6 +441,8 @@ if command -v mc &>/dev/null && mc ls local &>/dev/null; then
         # mc is configured, so a failed mirror means no offsite copy: not a silent warning
         log_error "MinIO sync failed (local backup is intact)"
         FAILED+=("minio-sync")
+        # Re-write the local manifest so the run is recorded as failed
+        write_manifest
     fi
 else
     log_warn "MinIO client not configured (skipping sync)"
@@ -388,17 +454,28 @@ echo ""
 # directories directly under BACKUP_ROOT are eligible, and nothing is pruned
 # when this run failed (don't trade good old backups for a bad new one).
 echo -e "${BLUE}Cleanup:${NC}"
+RUN_DIR_GLOB='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]'
 if [ "${#FAILED[@]}" -eq 0 ]; then
     log_step "Removing backups older than 30 days..."
-    old_count=$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \
-        -name '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]' \
-        -mtime +30 2>/dev/null | wc -l)
-    find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \
-        -name '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]' \
-        -mtime +30 -exec rm -rf {} + || log_warn "Some old backups could not be removed"
+    # -mindepth 1: never BACKUP_ROOT itself; -name: only <YYYYmmdd-HHMMSS> run
+    # directories; never this run's directory.
+    old_runs=()
+    while IFS= read -r -d '' d; do
+        old_runs+=("$d")
+    done < <(find "$BACKUP_ROOT/" -mindepth 1 -maxdepth 1 -type d -name "$RUN_DIR_GLOB" \
+                 ! -name "$DATE" -mtime +30 -print0 || log_warn "Could not list $BACKUP_ROOT")
 
-    if [ "$old_count" -gt 0 ]; then
-        log_step "  → Removed $old_count old backup(s)"
+    removed=0
+    for d in "${old_runs[@]}"; do
+        if rm -rf -- "$d"; then
+            removed=$((removed + 1))
+        else
+            log_warn "Could not remove old backup: $d"
+        fi
+    done
+
+    if [ "${#old_runs[@]}" -gt 0 ]; then
+        log_step "  → Removed $removed of ${#old_runs[@]} old backup(s)"
     else
         log_step "  → No old backups to remove"
     fi

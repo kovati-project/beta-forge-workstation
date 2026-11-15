@@ -80,3 +80,27 @@ The model cache mount `/data/models/whisper:/root/.cache/huggingface` is correct
   loaded model (expect `Systran/faster-whisper-large-v3`).
 - `nvidia-smi` shows about 3-6 GB held on GPU 0 while loaded.
 - Then run the deferred `/v1/audio/transcriptions` accuracy check.
+
+## Host re-check (2026-11-14, read-only)
+
+- `docker exec whisper ... Config().whisper` on the running container:
+  `model='Systran/faster-whisper-large-v3' ... compute_type=float16 ttl=300`. The
+  env fix above is deployed; the server will load large-v3 for `whisper-1`.
+- `curl localhost:9099/api/ps` returned `{"models":[]}` and `/data/models/whisper`
+  was empty: large-v3 had never been downloaded or loaded. `pull-voice-models.sh`
+  had used `--local-dir /data/models/whisper/Systran/...`, which is not the Hugging
+  Face cache layout (`hub/models--Systran--faster-whisper-large-v3`) the server reads.
+- `nvidia-smi`: GPU 0 had about 3.5 GB free (vllm-4gpu at
+  `--gpu-memory-utilization 0.82`). float16 large-v3 (about 3.1 GB of weights plus
+  working memory) does not fit there.
+- API path: a 2.6 s Piper-generated WAV posted with
+  `model=Systran/faster-whisper-tiny.en` returned
+  `{"text":"The quick brown fox jumps over the lazy dog."}` in 4.6 s (tiny.en, about
+  75 MB, was chosen to avoid loading large-v3 next to vLLM during the check).
+
+Fix (branch `fix/voice-services`): `WHISPER_MODEL` in `docker/.env` is the one
+setting (default `Systran/faster-whisper-large-v3`). `compose.voice.yml` passes it as
+`WHISPER__MODEL`; Open WebUI and the Loadout Manager ask for `whisper-1`, which the
+server resolves to it; `pull-voice-models.sh` downloads the same repo id into
+`/data/models/whisper/hub`. Compute type defaults to `int8_float16` (about 1.6 GB).
+`/api/voice/models` now reports `/api/ps` (loaded models), not `/v1/models`.

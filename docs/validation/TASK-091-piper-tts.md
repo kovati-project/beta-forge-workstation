@@ -62,3 +62,24 @@ Static analysis only; the live host was not reachable.
 **Not fixed here:** `/voice/synthesize` and `/voice/voices` in `voice.py` still call
 HTTP routes (`/api/tts`, `/api/voices`) that Piper does not have; they are marked as
 known-broken in code. Open WebUI TTS (#38) is unchanged and still cannot reach Piper.
+
+## Host re-check (2026-11-14, read-only) and fix
+
+- `docker inspect piper`: image `ghcr.io/linuxserver/piper:latest`, label
+  `2.2.2-ls111`, description "This container provides a Wyoming protocol server
+  for Piper". Ports `5000->10200/tcp`.
+- `curl localhost:5000/` returns code `000` (no HTTP).
+- A Wyoming `{"type":"describe"}` line on port 5000 returned an `info` event
+  (wyoming 1.9.0, piper 2.2.2, 177 voices), and a `synthesize` event returned
+  22050 Hz 16-bit mono PCM. Piper works; it just is not HTTP.
+- Open WebUI had `AUDIO_TTS_OPENAI_API_BASE_URL=http://piper:10200/v1`, and nothing
+  saved in its database overrides it.
+
+Fix (branch `fix/voice-services`): a small stdlib-only adapter,
+`docker/piper-openai/piper_openai.py`, runs as the `piper-openai` service on the stock
+`python:3.12-slim` image. It serves `POST /v1/audio/speech` (WAV, or PCM on request),
+`GET /v1/audio/voices`, `GET /v1/models` and `GET /health`, and talks Wyoming to
+`piper:10200`. It owns host port 5000; the Wyoming port is now internal only. Open
+WebUI TTS points at `http://piper-openai:8000/v1`. `/voice/synthesize` and
+`/voice/voices` in `voice.py` now call the adapter. Run on the host against the live
+Piper, the adapter returned a WAV that Whisper transcribed back word for word.

@@ -21,6 +21,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 FROM_PHASE=3
@@ -220,12 +221,12 @@ fi
 
 echo ""
 echo "Service URLs (if all phases deployed):"
-echo "  Open WebUI:     http://10.10.10.2:3000"
-echo "  Grafana:        http://10.10.10.2:3001"
-echo "  n8n:            http://10.10.10.2:5678"
-echo "  Authentik:      http://10.10.10.2:9080/if/flow/initial-setup/"
-echo "  Loadout Status: http://10.10.10.2:8800/status"
-echo "  OpenHands:      http://10.10.10.2:3003"
+echo "  Open WebUI:     http://${WORKSTATION_HOST}:3000"
+echo "  Grafana:        http://${WORKSTATION_HOST}:3001"
+echo "  n8n:            http://${WORKSTATION_HOST}:5678"
+echo "  Authentik:      http://${WORKSTATION_HOST}:9080/if/flow/initial-setup/"
+echo "  Loadout Status: http://${WORKSTATION_HOST}:8800/status"
+echo "  OpenHands:      http://${WORKSTATION_HOST}:3003"
 echo ""
 echo "Run full health check:"
 echo "  bash scripts/healthcheck.sh"

@@ -4,6 +4,7 @@
 # Checks: MinIO, Qdrant, PostgreSQL, Langfuse, buckets, collections
 
 set -e
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 echo "=== Phase 09 Validation ==="
 echo ""
@@ -124,7 +125,7 @@ echo "    - curl http://localhost:6333/collections | jq"
 echo "    - Should list: documents, code, research, security"
 echo ""
 echo "[ ] Langfuse accessible:"
-echo "    - Open http://10.10.10.2:3002 in browser"
+echo "    - Open http://${WORKSTATION_HOST}:3002 in browser"
 echo "    - Should show login/signup page"
 echo ""
 echo "[ ] Document ingestion working:"
@@ -137,7 +138,7 @@ echo "    - bash scripts/sync-checkpoints.sh (should complete without errors)"
 echo ""
 echo "[ ] Open WebUI RAG integration:"
 echo "    - Admin → Documents → Vector Database: Qdrant"
-echo "    - URL: http://10.10.10.2:6333"
+echo "    - URL: http://${WORKSTATION_HOST}:6333"
 echo "    - Model: nomic-embed-text"
 echo "    - Upload a test PDF and query it"
 echo ""

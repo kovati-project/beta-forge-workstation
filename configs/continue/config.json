@@ -4,7 +4,7 @@
       "title": "Qwen3-Coder 30B [Primary]",
       "provider": "ollama",
       "model": "qwen3-coder:30b",
-      "apiBase": "http://192.168.1.102:11434",
+      "apiBase": "http://kovati.lan:11434",
       "contextLength": 65536,
       "capabilities": { "tools": true },
       "completionOptions": {
@@ -17,7 +17,7 @@
       "title": "Devstral 24B [Agent alt]",
       "provider": "ollama",
       "model": "devstral",
-      "apiBase": "http://192.168.1.102:11434",
+      "apiBase": "http://kovati.lan:11434",
       "contextLength": 65536,
       "capabilities": { "tools": true },
       "completionOptions": {
@@ -29,7 +29,7 @@
       "title": "Qwen2.5 14B [vLLM pair A]",
       "provider": "openai",
       "model": "current-model",
-      "apiBase": "http://192.168.1.102:8000/v1",
+      "apiBase": "http://kovati.lan:8000/v1",
       "apiKey": "EMPTY",
       "contextLength": 16384,
       "completionOptions": {
@@ -44,7 +44,7 @@
     "title": "Qwen2.5-Coder 7B [Autocomplete]",
     "provider": "ollama",
     "model": "qwen2.5-coder:7b",
-    "apiBase": "http://192.168.1.102:11434",
+    "apiBase": "http://kovati.lan:11434",
     "contextLength": 4096,
     "completionOptions": {
       "temperature": 0.05,
@@ -55,7 +55,7 @@
   "embeddingsProvider": {
     "provider": "ollama",
     "model": "nomic-embed-text",
-    "apiBase": "http://192.168.1.102:11434"
+    "apiBase": "http://kovati.lan:11434"
   },
 
   "contextProviders": [

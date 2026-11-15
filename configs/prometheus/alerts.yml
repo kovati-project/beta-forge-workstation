@@ -188,20 +188,14 @@ groups:
   - name: service_alerts
     interval: 30s
     rules:
-      # Service Down (cannot scrape)
-      # NOTE: several scrape jobs in prometheus.yml are EXPECTED to be down, so
-      # this rule fires for them permanently until the maintainer decides
-      # whether to drop those jobs (decision pending; semantics unchanged here):
-      #   - loadout-manager : scraped at /health, which is JSON, not Prometheus
-      #                       exposition format (no /metrics endpoint exists)
-      #   - ollama          : stock Ollama exposes no Prometheus endpoint
-      #   - comfyui         : exposes no Prometheus endpoint
-      #   - open-webui      : exposes no Prometheus endpoint
-      # The vllm-pair-a / vllm-pair-b / vllm-4gpu jobs are only up while the
-      # matching loadout profile is running, so at most one is normally up.
-      # Separately, all 10.10.10.2 targets are currently unroutable (TASK-060).
+      # Service Down (cannot scrape) -- always-on targets only.
+      # Every job in prometheus.yml serves real Prometheus metrics (TASK-060),
+      # so up == 0 means the service is genuinely down. Profile-gated targets
+      # (profile_gated="true": vllm-pair-a, vllm-pair-b, vllm-4gpu) are excluded:
+      # their containers run only while the owning loadout profile is active,
+      # and are covered by ProfileServiceDown below instead.
       - alert: ServiceDown
-        expr: up == 0
+        expr: up{profile_gated!="true"} == 0
         for: 1m
         labels:
           severity: critical
@@ -209,6 +203,36 @@ groups:
         annotations:
           summary: "Service {{ $labels.job }} unavailable"
           description: "Service {{ $labels.job }} ({{ $labels.instance }}) is not responding to scrape"
+
+      # Profile Service Down -- a profile-gated service the active loadout
+      # profile should be running cannot be scraped.
+      # loadout-manager exports loadout_service_expected{profile, service} = 1
+      # for each service (container name) of the active profile, and nothing
+      # while a switch is in progress. Profile-gated jobs carry
+      # service=<container name>, so the two join on `service`. A gated target
+      # that is configured always has an `up` series (0 on any scrape failure,
+      # DNS errors included), so "absent" cannot happen for it; expected
+      # services with no scrape job at all (ollama, comfyui, kohya, ...) are
+      # deliberately not matched, since there is nothing to scrape.
+      # `for: 10m` covers vLLM loading weights after a switch: its /metrics is
+      # not served until the engine is up, which takes minutes for large models.
+      # max by (profile, service) drops loadout-manager's own job/instance
+      # labels, which would otherwise make the alert look like it is about
+      # loadout-manager.
+      - alert: ProfileServiceDown
+        expr: |
+          max by (profile, service) (
+              (loadout_service_expected == 1)
+                and on (service)
+              (up{profile_gated="true"} == 0)
+          )
+        for: 10m
+        labels:
+          severity: critical
+          component: service
+        annotations:
+          summary: "Profile service {{ $labels.service }} unavailable"
+          description: "{{ $labels.service }} should be running for loadout profile {{ $labels.profile }} but has not answered a scrape for 10 minutes"
 
       # DISABLED -- Prometheus Storage Warning (> 80% used)
       # This used node_filesystem_*{mountpoint="/prometheus"}, but /prometheus is
@@ -284,8 +308,8 @@ groups:
       # ollama_queue_size anywhere), so this rule could never fire. Enabling it
       # needs an exporter that publishes a queue-depth gauge named
       # ollama_queue_size (a sidecar or proxy in front of :11434); none exists
-      # in this repo. The 'ollama' scrape job is also expected to be down (see
-      # ServiceDown). vLLM equivalent, if wanted, is vllm:num_requests_waiting.
+      # in this repo, and prometheus.yml no longer scrapes ollama at all.
+      # vLLM equivalent, if wanted, is vllm:num_requests_waiting.
       # - alert: OllamaQueueBuildup
       #   expr: ollama_queue_size > 20
       #   for: 3m

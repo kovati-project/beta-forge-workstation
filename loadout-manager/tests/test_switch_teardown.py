@@ -29,11 +29,13 @@ def is_4xx(resp):
 
 # ── Teardown ordering and state update ───────────────────────────────────────
 
+# Pairs must not be declared incompatible: the incompatibility gate (#16)
+# refuses those before any teardown (see test_incompatibility_gate.py).
 @pytest.mark.parametrize("a,b", [
-    ("inference-small", "training-lora-image"),
-    ("training-lora-text", "inference-4gpu"),
-    ("image-studio", "training-unsloth"),
-    ("dual-stack", "inference-pair-b"),
+    ("inference-small", "training-lora-image"),   # inference -> training
+    ("training-lora-image", "inference-small"),   # training  -> inference
+    ("image-studio", "training-unsloth"),         # 2-compose-file outgoing profile
+    ("inference-pair-a", "inference-pair-b"),     # multi-service outgoing profile
 ])
 def test_switch_stops_previous_stacks_before_starting_the_new_profile(lm, a, b):
     lm.make_active(a)
@@ -172,12 +174,6 @@ def test_failed_switch_can_be_retried(lm):
     assert lm.state["active_profile"] == "training-lora-image"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-8: when `up -d` fails part-way (multi-service profiles start some "
-           "containers before one fails; a timeout kills the CLI mid-start) nothing "
-           "cleans up. State says running_services == [] while containers run, "
-           "holding VRAM and invisible to the manager.")
 @pytest.mark.parametrize("mode", ["up_nonzero_rc", "up_timeout"])
 def test_failed_start_triggers_cleanup_of_partially_started_services(lm, mode):
     FAILURES[mode](lm.docker)
@@ -187,20 +183,76 @@ def test_failed_start_triggers_cleanup_of_partially_started_services(lm, mode):
     assert cleanup, "state was reset to 'nothing running' but no `down` followed the failed `up`"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-7: stop_all_services() ignores returncode and swallows timeouts; "
-           "the switch proceeds to `up` on top of a stack that may still be "
-           "running (logs even say 'Stopped').")
 @pytest.mark.parametrize("how", ["nonzero_rc", "timeout"])
 def test_switch_does_not_start_new_profile_if_teardown_failed(lm, how):
     if how == "nonzero_rc":
         lm.docker.fail("down", rc=1, stderr="cannot stop container")
     else:
         lm.docker.raise_on("down", subprocess.TimeoutExpired("docker", 60))
-    lm.make_active("inference-4gpu")
-    lm.activate("training-lora-text")
+    # A compatible pair, so only the teardown failure can stop the start.
+    lm.make_active("inference-small")
+    assert lm.activate("training-lora-image").status_code == 200
+    assert lm.docker.downs, "teardown must have been attempted"
     assert lm.docker.starts == []
+    # We do not know what is still up, so the old profile is not written off.
+    assert lm.state["active_profile"] == "inference-small"
+    assert lm.state["last_error"]
+    # The partial failure is visible to clients, not only in the log.
+    assert lm.client.get("/status").json()["last_error"]
+    assert lm.ws.events[-1]["last_error"]
+    assert lm.state["switching"] is False
+
+
+def test_failed_start_with_failed_cleanup_keeps_the_new_profile_recorded(lm):
+    """Review item 4: if `up` fails and the cleanup `down` fails too, some of the
+    new profile may be running. State must not claim nothing is up."""
+    lm.docker.fail("up", rc=1, stderr="port already allocated")
+
+    def cleanup_down_fails(c):
+        if c.verb == "down" and lm.docker.starts:
+            return subprocess.CompletedProcess(c.cmd, 1, "", "cannot stop container")
+    lm.docker.rules.append(cleanup_down_fails)
+
+    assert lm.activate("dual-stack").status_code == 200
+    (up,) = lm.docker.starts
+    assert [c for c in lm.docker.downs if c.seq > up.seq], "cleanup must be attempted"
+    assert lm.state["active_profile"] == "dual-stack"
+    assert lm.state["running_services"] == lm.profiles["dual-stack"]["services"]
+    assert lm.state["last_error"]
+    assert lm.state["switching"] is False
+    # ...so the incompatibility gate still sees it as running.
+    assert lm.activate("training-lora-text").status_code == 409
+
+
+@pytest.mark.anyio
+async def test_error_before_teardown_leaves_state_alone(lm, monkeypatch):
+    """Review item 6: a profile that cannot be loaded fails before anything is
+    stopped, so the running profile must stay recorded."""
+    lm.make_active("inference-small")
+
+    def broken():
+        raise KeyError("profiles")
+    monkeypatch.setattr(lm.main, "load_profiles", broken)
+    await lm.main.do_switch("training-lora-image")
+    assert lm.docker.calls == []
+    assert lm.state["active_profile"] == "inference-small"
+    assert lm.state["running_services"] == ["ollama"]
+    assert lm.state["last_error"]
+    assert lm.state["switching"] is False
+
+
+@pytest.mark.parametrize("how", ["nonzero_rc", "timeout"])
+def test_stop_reports_failure_if_teardown_failed(lm, how):
+    if how == "nonzero_rc":
+        lm.docker.fail("down", rc=1, stderr="cannot stop container")
+    else:
+        lm.docker.raise_on("down", subprocess.TimeoutExpired("docker", 60))
+    lm.make_active("inference-small")
+    r = lm.client.post("/stop")
+    assert r.status_code >= 500
+    assert lm.state["active_profile"] == "inference-small"
+    assert lm.state["last_error"]
+    assert lm.state["switching"] is False
 
 
 # ── Event loop ───────────────────────────────────────────────────────────────
@@ -360,13 +412,6 @@ def test_idle_activation_tears_down_all_stacks(lm):
     assert lm.state["switching"] is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-9: idle has compose_files: [] and services: [], so do_switch builds "
-           "`docker compose up -d --remove-orphans` with no -f. That fails (no "
-           "compose file in cwd) or, if cwd ever holds one, starts its default "
-           "services. Either way idle cannot be activated. Modelled, not verified "
-           "against a real docker host.")
 def test_idle_never_issues_a_bare_compose_up(lm):
     lm.make_active("inference-4gpu")
     lm.activate("idle")
@@ -374,10 +419,6 @@ def test_idle_never_issues_a_bare_compose_up(lm):
     assert bare == [], bare
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-9: consequence of the bare `up` — the switch is recorded as a "
-           "failure and active_profile ends up None instead of 'idle'.")
 def test_idle_becomes_the_active_profile(lm):
     lm.make_active("inference-4gpu")
     lm.activate("idle")

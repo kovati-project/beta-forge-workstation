@@ -1,6 +1,6 @@
 # Scripts
 
-All scripts run on the workstation (`kasemo@10.10.10.2`) from the project root (`~/ai-workstation/`), except `sync-to-workstation.sh` which runs on the dev machine.
+All scripts run on the workstation (`kasemo@<WORKSTATION_HOST>`) from the project root (`~/ai-workstation/`), except `sync-to-workstation.sh` which runs on the dev machine.
 
 ---
 
@@ -8,12 +8,12 @@ All scripts run on the workstation (`kasemo@10.10.10.2`) from the project root (
 
 ```bash
 # 1. Copy repo to workstation (run from Windows — Git Bash / WSL / PowerShell)
-scp -r . kasemo@10.10.10.2:~/ai-workstation/
+scp -r . kasemo@<WORKSTATION_HOST>:~/ai-workstation/
 # or
 bash scripts/sync-to-workstation.sh
 
 # 2. SSH in and run the three pre-flight steps in order
-ssh kasemo@10.10.10.2
+ssh kasemo@<WORKSTATION_HOST>
 cd ~/ai-workstation
 chmod +x scripts/*.sh scripts/*.py
 
@@ -103,7 +103,8 @@ sudo bash scripts/setup-systemd-service.sh
 
 | Script | Purpose |
 | ------ | ------- |
-| `setup-qdrant.py` | Create the 4 Qdrant collections (768-dim, `nomic-embed-text`) |
+| `setup-minio-buckets.sh` | Create the 5 MinIO buckets and the 90-day expiry on `outputs` (idempotent; `--check` to verify only). Run by `deploy-phase09.sh` |
+| `setup-qdrant.py` | Create the 4 Qdrant collections (768-dim, `nomic-embed-text`); idempotent, standard library only, `--check` to verify. Run by `deploy-phase09.sh` |
 | `ingest-documents.py` | Chunk and embed documents from `/data/documents/` into Qdrant |
 | `code-router.py` | Route coding tasks to the appropriate model by complexity |
 | `whisper-realtime.py` | Stream microphone audio to Whisper over WebSocket |
@@ -126,10 +127,10 @@ These steps cannot be automated — visit each URL after `deploy-all.sh` complet
 
 | Service | URL | Action |
 | ------- | --- | ------ |
-| Authentik | `http://10.10.10.2:9080/if/flow/initial-setup/` | Create admin account |
-| n8n | `http://10.10.10.2:5678` | Complete first-run owner setup |
-| Langfuse | `http://10.10.10.2:3002` | Create admin account |
-| Grafana | `http://10.10.10.2:3001` | Import dashboards 12239, 1860, 893 |
+| Authentik | `http://<WORKSTATION_HOST>:9080/if/flow/initial-setup/` | Create admin account |
+| n8n | `http://<WORKSTATION_HOST>:5678` | Complete first-run owner setup |
+| Langfuse | `http://<WORKSTATION_HOST>:3002` | Create admin account |
+| Grafana | `http://<WORKSTATION_HOST>:3001` | Import dashboards 12239, 1860, 893 |
 
 ---
 

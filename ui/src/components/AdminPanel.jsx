@@ -6,10 +6,33 @@ import { useState, useEffect } from 'react';
 import { adminAPI } from '../utils/adminAPI';
 import './AdminPanel.css';
 
+const EMPTY_USER = { username: '', email: '', password: '', groups: [] };
+
+/** Checkbox list of Authentik groups; `selected` and onChange use group names. */
+function GroupPicker({ groups, selected, onChange }) {
+  if (groups.length === 0) {
+    return <p className="muted">No Authentik groups available.</p>;
+  }
+  const toggle = (name) => onChange(
+    selected.includes(name) ? selected.filter(g => g !== name) : [...selected, name]
+  );
+  return (
+    <div className="group-picker">
+      {groups.map(g => (
+        <label key={g.pk} className="group-option">
+          <input type="checkbox" checked={selected.includes(g.name)} onChange={() => toggle(g.name)} />
+          {g.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function AdminPanel() {
   const [tab, setTab] = useState('overview');
   const [status, setStatus] = useState(null);
   const [users, setUsers] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [apps, setApps] = useState([]);
   const [policies, setPolicies] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -19,9 +42,14 @@ export function AdminPanel() {
 
   // Create-user form state
   const [showCreateUser, setShowCreateUser] = useState(false);
-  const [newUser, setNewUser] = useState({ username: '', email: '', password: '' });
+  const [newUser, setNewUser] = useState(EMPTY_USER);
   const [userFormError, setUserFormError] = useState(null);
   const [userFormBusy, setUserFormBusy] = useState(false);
+
+  // Edit-user form state (one user at a time)
+  const [editUser, setEditUser] = useState(null);
+  const [editError, setEditError] = useState(null);
+  const [editBusy, setEditBusy] = useState(false);
 
   // Create-key form state
   const [newKeyName, setNewKeyName] = useState('');
@@ -33,9 +61,11 @@ export function AdminPanel() {
     const init = async () => {
       try {
         setError(null);
-        const [authStatus, userList, appList, secPolicies, authLogs, keyList] = await Promise.all([
+        const [authStatus, userList, groupList, appList, secPolicies, authLogs, keyList] = await Promise.all([
           adminAPI.getStatus(),
           adminAPI.listUsers(),
+          // Groups only feed the role picker; a failure must not blank the panel.
+          adminAPI.listGroups().catch(() => ({ groups: [] })),
           adminAPI.listOAuth2Apps(),
           adminAPI.getSecurityPolicies(),
           adminAPI.getAuthLogs(),
@@ -44,6 +74,7 @@ export function AdminPanel() {
 
         setStatus(authStatus);
         setUsers(userList.users || []);
+        setGroups(groupList.groups || []);
         setApps(appList.applications || []);
         setPolicies(secPolicies);
         setLogs(authLogs.logs || []);
@@ -69,12 +100,40 @@ export function AdminPanel() {
     try {
       const created = await adminAPI.createUser(newUser);
       setUsers(prev => [...prev, created]);
-      setNewUser({ username: '', email: '', password: '' });
+      setNewUser(EMPTY_USER);
       setShowCreateUser(false);
     } catch (err) {
       setUserFormError(err.message);
     } finally {
       setUserFormBusy(false);
+    }
+  };
+
+  const startEditUser = (user) => {
+    setEditError(null);
+    setEditUser({
+      pk: user.pk,
+      email: user.email || '',
+      name: user.name || '',
+      is_active: user.is_active !== false,
+      groups: user.group_names || [],
+    });
+  };
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+    setEditBusy(true);
+    setEditError(null);
+    try {
+      const { pk, ...payload } = editUser;
+      if (!payload.name) delete payload.name;  // blank = leave unchanged
+      const updated = await adminAPI.updateUser(pk, payload);
+      setUsers(prev => prev.map(u => (u.pk === pk ? updated : u)));
+      setEditUser(null);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setEditBusy(false);
     }
   };
 
@@ -192,6 +251,13 @@ export function AdminPanel() {
               onChange={e => setNewUser(v => ({ ...v, password: e.target.value }))}
             />
           </label>
+          <fieldset className="group-fieldset">
+            <legend>Groups / roles</legend>
+            <GroupPicker
+              groups={groups} selected={newUser.groups}
+              onChange={sel => setNewUser(v => ({ ...v, groups: sel }))}
+            />
+          </fieldset>
           <button type="submit" className="btn-primary" disabled={userFormBusy}>
             {userFormBusy ? 'Creating…' : 'Create User'}
           </button>
@@ -201,29 +267,79 @@ export function AdminPanel() {
       {users.length === 0 ? (
         <p className="empty">No users configured. Create one above or visit the Authentik admin panel.</p>
       ) : (
-        <div className="users-table">
+        <div className="users-table user-list">
           <div className="table-header">
             <span className="col-username">Username</span>
             <span className="col-email">Email</span>
+            <span className="col-groups">Groups</span>
             <span className="col-created">Created</span>
             <span className="col-last">Last Login</span>
             <span className="col-actions"></span>
           </div>
           {users.slice(0, 50).map((user) => (
-            <div key={user.pk || user.id} className="table-row">
-              <span className="col-username">{user.username || 'N/A'}</span>
-              <span className="col-email">{user.email || 'N/A'}</span>
-              <span className="col-created">{user.date_joined ? new Date(user.date_joined).toLocaleDateString() : '—'}</span>
-              <span className="col-last">{user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}</span>
-              <span className="col-actions">
-                <button
-                  className="btn-danger-sm"
-                  onClick={() => handleDeleteUser(user.pk || user.id, user.username)}
-                  title="Delete user"
-                >
-                  Delete
-                </button>
-              </span>
+            <div key={user.pk || user.id}>
+              <div className="table-row">
+                <span className="col-username">{user.username || 'N/A'}</span>
+                <span className="col-email">{user.email || 'N/A'}</span>
+                <span className="col-groups">
+                  {(user.group_names || []).length === 0
+                    ? <span className="muted">—</span>
+                    : user.group_names.map(g => <span key={g} className="group-chip">{g}</span>)}
+                </span>
+                <span className="col-created">{user.date_joined ? new Date(user.date_joined).toLocaleDateString() : '—'}</span>
+                <span className="col-last">{user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}</span>
+                <span className="col-actions">
+                  <button
+                    className="btn-secondary-sm"
+                    onClick={() => (editUser?.pk === user.pk ? setEditUser(null) : startEditUser(user))}
+                    title="Edit user"
+                  >
+                    {editUser?.pk === user.pk ? 'Cancel' : 'Edit'}
+                  </button>
+                  <button
+                    className="btn-danger-sm"
+                    onClick={() => handleDeleteUser(user.pk || user.id, user.username)}
+                    title="Delete user"
+                  >
+                    Delete
+                  </button>
+                </span>
+              </div>
+              {editUser?.pk === user.pk && (
+                <form className="create-form edit-user-form" onSubmit={handleUpdateUser}>
+                  <h3>Edit {user.username}</h3>
+                  {editError && <div className="form-error">{editError}</div>}
+                  <label>Email
+                    <input
+                      type="email" value={editUser.email}
+                      onChange={e => setEditUser(v => ({ ...v, email: e.target.value }))}
+                    />
+                  </label>
+                  <label>Name
+                    <input
+                      type="text" value={editUser.name}
+                      onChange={e => setEditUser(v => ({ ...v, name: e.target.value }))}
+                    />
+                  </label>
+                  <label className="group-option">
+                    <input
+                      type="checkbox" checked={editUser.is_active}
+                      onChange={e => setEditUser(v => ({ ...v, is_active: e.target.checked }))}
+                    />
+                    Active
+                  </label>
+                  <fieldset className="group-fieldset">
+                    <legend>Groups / roles</legend>
+                    <GroupPicker
+                      groups={groups} selected={editUser.groups}
+                      onChange={sel => setEditUser(v => ({ ...v, groups: sel }))}
+                    />
+                  </fieldset>
+                  <button type="submit" className="btn-primary" disabled={editBusy}>
+                    {editBusy ? 'Saving…' : 'Save'}
+                  </button>
+                </form>
+              )}
             </div>
           ))}
         </div>

@@ -330,7 +330,7 @@ def lm(main_module, monkeypatch, tmp_path):
     monkeypatch.delenv("KOVATI_OS_MODE", raising=False)
     monkeypatch.setattr(main, "STATE_PATH", tmp_path / "state.json")
     main.state.update(active_profile=None, switching=False,
-                      last_switched=None, running_services=[])
+                      last_switched=None, running_services=[], last_error=None)
     main._ws_clients.clear()
 
     docker = FakeDocker(main)
@@ -349,7 +349,7 @@ def lm(main_module, monkeypatch, tmp_path):
     main._ws_clients.clear()
     NVML.reset()
     main.state.update(active_profile=None, switching=False,
-                      last_switched=None, running_services=[])
+                      last_switched=None, running_services=[], last_error=None)
 
 
 # ── api/* router harness ─────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 [ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Validate Phase 08: Agentic Workflows & MCP
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 PASS=0; FAIL=0; WARN=0
@@ -22,16 +23,29 @@ warn() {
     ((WARN++))
 }
 
+# MCP streamable-HTTP handshake: POST initialize to /mcp, expect a serverInfo.
+mcp_init() {
+    curl -sf -m 10 -X POST "http://localhost:$1/mcp" \
+        -H 'Content-Type: application/json' \
+        -H 'Accept: application/json, text/event-stream' \
+        -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"validate-phase08","version":"1"}}}' \
+        | grep -q '"serverInfo"'
+}
+
 echo "=== Phase 08 Validation ==="
 echo ""
 
 # Services running
 check "n8n container running" "docker ps --filter name=n8n --filter status=running | grep -q n8n"
 check "n8n HTTP responding" "curl -sf http://localhost:5678/"
-check "MCP filesystem responding" "curl -sf http://localhost:3100/ 2>&1 | grep -q -E '(ok|error|response)' || true"
-check "MCP fetch responding" "curl -sf http://localhost:3103/ 2>&1 | grep -q -E '(ok|error|response)' || true"
-check "MCP browser responding" "curl -sf http://localhost:3101/ 2>&1 | grep -q -E '(ok|error|response)' || true"
-check "MCP code-exec responding" "curl -sf http://localhost:3102/ 2>&1 | grep -q -E '(ok|error|response)' || true"
+check "MCP filesystem answers initialize on :3100/mcp" "mcp_init 3100"
+check "MCP fetch answers initialize on :3103/mcp" "mcp_init 3103"
+check "MCP browser answers initialize on :3101/mcp" "mcp_init 3101"
+if docker ps --format '{{.Names}}' | grep -qx mcp-code-exec; then
+    check "MCP code-exec answers initialize on :3102/mcp" "mcp_init 3102"
+else
+    echo "  - MCP code-exec disabled (compose profile code-exec), not checked"
+fi
 
 # Docker compose validation
 echo ""
@@ -46,10 +60,10 @@ check "n8n files directory exists" "[[ -d /data/n8n-files ]]"
 
 # Manual checks
 echo ""
-warn "n8n owner account created (visit http://10.10.10.2:5678)"
+warn "n8n owner account created (visit http://${WORKSTATION_HOST}:5678)"
 warn "n8n Ollama integration configured (Settings → AI)"
 warn "Can create and save n8n workflows"
-warn "MCP servers respond to JSON-RPC calls (advanced testing)"
+warn "MCP tool calls work (docs/validation/TASK-101-mcp-filesystem.md, re-run section)"
 warn "First n8n workflow executes end-to-end"
 
 echo ""

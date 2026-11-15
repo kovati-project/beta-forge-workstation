@@ -11,6 +11,9 @@ services:
     image: ghcr.io/all-hands-ai/openhands:0.59
     container_name: openhands
     restart: unless-stopped
+    # no no-new-privileges/cap_drop (#68): starts sandbox containers through
+    # the Docker socket (read-write), which is root-equivalent on the host
+    # anyway. Accepted exception (#43).
     ports:
       - "3003:3000"
     extra_hosts:

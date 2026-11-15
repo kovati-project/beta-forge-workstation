@@ -5,6 +5,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -34,15 +35,19 @@ echo "  ✓ nomic-embed-text present (required for RAG)"
 # ── 2. Check SearXNG config ───────────────────────────────────────────────────
 echo "[2/3] Checking SearXNG config..."
 SEARXNG_CFG="$REPO_ROOT/configs/searxng/settings.yml"
-if [[ ! -f "$SEARXNG_CFG" ]]; then
-    if [[ -f "$SEARXNG_CFG.template" ]]; then
-        echo "  settings.yml missing - rendering from template..."
-        (cd "$REPO_ROOT" && bash scripts/init-secrets.sh --render-searxng) \
-            || { echo "  ✗ could not render configs/searxng/settings.yml"; exit 1; }
-    else
-        echo "  ✗ configs/searxng/settings.yml (and its .template) not found"
-        exit 1
+if [[ -f "$SEARXNG_CFG.template" ]]; then
+    # Always re-render: keeps an existing secret_key and refreshes base_url from
+    # WORKSTATION_HOST, so a host change reaches SearXNG on redeploy (#51).
+    if ! (cd "$REPO_ROOT" && bash scripts/init-secrets.sh --render-searxng); then
+        if [[ -f "$SEARXNG_CFG" ]]; then
+            echo "  ⚠  could not re-render configs/searxng/settings.yml - keeping the existing file"
+        else
+            echo "  ✗ could not render configs/searxng/settings.yml"; exit 1
+        fi
     fi
+elif [[ ! -f "$SEARXNG_CFG" ]]; then
+    echo "  ✗ configs/searxng/settings.yml (and its .template) not found"
+    exit 1
 fi
 if grep -qE "change-this-to-a-random-32-char-string|@SEARXNG_SECRET_KEY@" "$SEARXNG_CFG"; then
     echo "  ⚠  SearXNG secret_key is still a placeholder."
@@ -58,7 +63,7 @@ echo "  Waiting for Open WebUI startup (20s)..."
 sleep 20
 
 if curl -sf http://localhost:3000/ &>/dev/null; then
-    echo "  ✓ Open WebUI running at http://10.10.10.2:3000"
+    echo "  ✓ Open WebUI running at http://${WORKSTATION_HOST}:3000"
 else
     echo "  ✗ Open WebUI not responding — check: docker logs open-webui"
     exit 1
@@ -67,7 +72,7 @@ fi
 echo ""
 echo "=== Deploy complete ==="
 echo ""
-echo "Next steps (in browser at http://10.10.10.2:3000):"
+echo "Next steps (in browser at http://${WORKSTATION_HOST}:3000):"
 echo "  1. Register your admin account (first signup = admin)"
 echo "  2. Admin → Settings → General: verify WEBUI_SECRET_KEY entropy"
 echo "  3. Verify models visible: Admin → Settings → Connections"
