@@ -135,6 +135,8 @@ if $BUILD_DOCKER; then
     ok "Stopped existing container"
   fi
 
+  # compose.loadout.yml joins the external ai-workstation network
+  docker network inspect ai-workstation &>/dev/null || docker network create ai-workstation
   docker compose -f "$COMPOSE_FILE" up -d "$SERVICE_NAME"
   ok "Container started"
 
