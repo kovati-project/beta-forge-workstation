@@ -46,8 +46,11 @@ async def auth_middleware(request: Request, call_next):
     """Validate auth in appliance mode."""
     appliance_mode = os.getenv("KOVATI_OS_MODE", "workstation") == "appliance"
     
-    # Allow health checks and setup endpoints without auth
-    if request.url.path.startswith("/health") or request.url.path.startswith("/api/setup"):
+    # Allow health checks and setup endpoints without auth. The Alertmanager
+    # webhook is called container-to-container, never through Authentik, so it
+    # carries no forward-auth headers; it can only append to the alert history.
+    if (request.url.path.startswith("/health") or request.url.path.startswith("/api/setup")
+            or request.url.path == "/api/alerts/webhook"):
         response = await call_next(request)
         return response
     
