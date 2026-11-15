@@ -48,15 +48,22 @@ services:
       - ENABLE_SIGNUP=false
       - DEFAULT_USER_ROLE=user
 
-      # Voice I/O pre-wiring (endpoints deployed in Phase 12)
+      # Voice I/O (compose.voice.yml). Both engines are "openai" (HTTP):
+      # STT -> faster-whisper-server; "whisper-1" resolves to the server's
+      #        WHISPER__MODEL (set WHISPER_MODEL in docker/.env, nowhere else).
+      # TTS -> piper-openai, the /v1/audio/speech adapter in front of the
+      #        Wyoming-only piper container. OpenAI voice names map to PIPER_VOICE.
+      # These are Open WebUI PersistentConfig values: once someone saves the Audio
+      # admin page, the database copy wins over these env vars.
       - AUDIO_STT_ENGINE=openai
       - AUDIO_STT_OPENAI_API_BASE_URL=http://whisper:8000/v1
       - AUDIO_STT_OPENAI_API_KEY=EMPTY
+      - AUDIO_STT_MODEL=whisper-1
       - AUDIO_TTS_ENGINE=openai
-      # KNOWN BROKEN: piper speaks the Wyoming protocol (raw TCP), not the OpenAI
-      # speech API, so TTS cannot work until an OpenAI-compatible TTS server replaces it.
-      - AUDIO_TTS_OPENAI_API_BASE_URL=http://piper:10200/v1
+      - AUDIO_TTS_OPENAI_API_BASE_URL=http://piper-openai:8000/v1
       - AUDIO_TTS_OPENAI_API_KEY=EMPTY
+      - AUDIO_TTS_MODEL=piper
+      - AUDIO_TTS_VOICE=${PIPER_VOICE:-en_US-lessac-high}
 
       # Features
       - ENABLE_CODE_EXECUTION=true

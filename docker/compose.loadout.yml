@@ -50,6 +50,12 @@ services:
       # API token created in Authentik (Directory -> Tokens, intent "API").
       - AUTHENTIK_URL=${AUTHENTIK_URL:-http://host.docker.internal:9080}
       - AUTHENTIK_TOKEN=${AUTHENTIK_TOKEN:-}
+      # api/voice.py. Integration note: #90 used host.docker.internal:9099/:5000
+      # because this container was only on ai-loadout; with #82 it is also on
+      # ai-workstation (where compose.voice.yml runs), so it reaches the voice
+      # services by container name and container port, like #87 does for Qdrant etc.
+      - WHISPER_URL=http://whisper:8000
+      - PIPER_URL=http://piper-openai:8000
     extra_hosts:
       - "host.docker.internal:host-gateway"
     deploy:
