@@ -9,10 +9,9 @@ services:
     restart: unless-stopped
     ports:
       - "9091:9090"
-    # loadout-manager is on its own ai-loadout network (not shared with
-    # Prometheus), so it is scraped via the host's published port 8800.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # Every scrape target, loadout-manager included, is reached by container
+    # name on ai-workstation (configs/prometheus/prometheus.yml), so prometheus
+    # needs no host.docker.internal mapping.
     volumes:
       - ../configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ../configs/prometheus/alerts.yml:/etc/prometheus/alerts.yml
