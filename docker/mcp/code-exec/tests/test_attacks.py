@@ -51,8 +51,12 @@ def run_json(code: str, timeout: int = 10):
     return json.loads(out["stdout"].strip().splitlines()[-1])
 
 
-def proc_table_code() -> str:
-    return """
+def with_procs(code: str) -> str:
+    """Prefix ``code`` with a procs() helper that lists every process and its uid."""
+    return textwrap.dedent(PROCS) + textwrap.dedent(code)
+
+
+PROCS = """
     import os, json
     def procs():
         res = []
@@ -65,7 +69,7 @@ def proc_table_code() -> str:
                 continue
             res.append({'pid': int(p), 'name': st['Name'].strip(), 'uid': int(st['Uid'].split()[0])})
         return res
-    """
+"""
 
 
 # ── baseline guarantees ──────────────────────────────────────────────────────
@@ -152,17 +156,17 @@ def test_setsid_child_holding_stdout_does_not_wedge():
 def test_wedged_parent_times_out_and_nothing_survives():
     out = run(WEDGE + "\ntime.sleep(300)\n", timeout=2)
     assert out["timed_out"] is True
-    others = run_json(proc_table_code() + """
+    others = run_json(with_procs("""
         me = os.getpid()
         print(json.dumps([p for p in procs() if p['uid'] == 10002 and p['pid'] != me]))
-    """)
+    """))
     assert others == [], others
 
 
 # ── #99 items 2 and 5: the snippet cannot touch the server or the launcher ──
 
 def test_cannot_stop_or_kill_server_or_launcher():
-    res = run_json(proc_table_code() + """
+    res = run_json(with_procs("""
         import signal
         me = os.getpid()
         out = []
@@ -176,7 +180,7 @@ def test_cannot_stop_or_kill_server_or_launcher():
                 except OSError as e:
                     out.append([p['pid'], p['uid'], sig, e.errno])
         print(json.dumps(out))
-    """)
+    """))
     uids = {uid for _, uid, _, _ in res}
     assert {0, 10001} <= uids, res                      # launcher and server were targeted
     assert all(r[3] == 1 for r in res), res             # every attempt: EPERM
@@ -184,7 +188,7 @@ def test_cannot_stop_or_kill_server_or_launcher():
 
 
 def test_cannot_read_server_or_launcher_environment():
-    res = run_json(proc_table_code() + """
+    res = run_json(with_procs("""
         out = {}
         for p in procs():
             if p['uid'] != 10002:
@@ -195,7 +199,7 @@ def test_cannot_read_server_or_launcher_environment():
                     except OSError as e:
                         out[f'{p["uid"]}/{f}'] = e.errno
         print(json.dumps(out))
-    """)
+    """))
     assert res and all(v == 13 for v in res.values()), res
 
 
