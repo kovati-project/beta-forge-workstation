@@ -196,3 +196,45 @@ behaviour but with 5 defects around failure handling and loop blocking. None of 
 exercised on the live workstation: the mock results justify the proposed fixes but a
 hardware smoke test (activate each profile from each other, with a deliberate `down`
 failure and a deliberate port conflict on `up`) is still required to close the issues.
+
+## Fixes for BUG-1 to BUG-9 (2026-11-14, branch `fix/loadout-gating`)
+
+Mocked suite after the fix: `294 passed, 16 xfailed` (was `245 passed, 42 xfailed`; the
+remaining xfails are OPS/SET/UI items outside this document). Still **not** run on the host.
+
+- **Shared gate.** `validate_activation()` in `main.py` is called by `POST /activate` and the
+  scheduler before `_claim_switch()` (no await in between). `do_switch` re-checks VRAM after
+  teardown and the 3 s settle. (BUG-6)
+- **Incompatibility (BUG-1).** A target is refused (409, nothing torn down) when it and the
+  active profile list each other in `incompatible_with`, in **either** direction. Restarting
+  the active profile and switching to `idle` are always allowed. Decision taken on the
+  "replace vs co-exist" question above: an incompatible switch must be preceded by an
+  explicit `/stop`, which is what the UI already enforces by disabling the card.
+- **YAML (BUG-2).** The 8 one-way declarations now have mirror entries.
+  `inference-small`/`image-studio` no longer declare `compatible_with` (they share GPU0, and
+  a switch always tears everything down, so they never co-exist). Switching between them is
+  still allowed: neither lists the other as incompatible.
+- **VRAM per GPU (BUG-3).** Free VRAM is summed over the profile's `exclusive_gpus` only;
+  a GPU missing from telemetry is a refusal. The boundary tests now place the free memory
+  on those GPUs and put 0 GB (accepted case) or 24 GB (refused case) on the others.
+- **Outgoing profile (BUG-4).** When a managed profile is running, the endpoint cannot know
+  what teardown will free, so it only checks that the requirement fits the GPUs' total
+  capacity; the free-memory check runs in `do_switch` after teardown. If it fails there,
+  nothing is started, `active_profile` is `null` and `last_error` says why. Trade-off: a
+  compatible switch that is short of VRAM now tears down the running profile before it is
+  refused.
+- **Undeclared requirements (BUG-5).** `inference-small` 16 GB, `inference-pair-a` and
+  `inference-pair-b` 44 GB (vLLM `--gpu-memory-utilization 0.92` on 2 x 24 GB). The 16 GB
+  for Ollama is an estimate. A profile that still omits the key is "unknown": refused when
+  telemetry is down, not limited otherwise.
+- **Teardown (BUG-7).** `stop_all_services()` returns the stacks it could not stop (non-zero
+  exit, timeout, exception). A switch then aborts before `up` with state unchanged and
+  `last_error` set; `/stop` returns 502.
+- **Failed start (BUG-8).** A failed or timed-out `up` is followed by `stop_all_services()`;
+  `last_error` records the failure. `last_error` is in `/status` and the `/ws` events.
+- **idle (BUG-9).** A profile with no services issues no `up` at all and becomes the active
+  profile after teardown.
+- Test changes beyond removing markers: the teardown-ordering test swapped two pairs that
+  are declared incompatible (`training-lora-text -> inference-4gpu`, `dual-stack ->
+  inference-pair-b`) for compatible ones with the same coverage; the BUG-7 test uses a
+  compatible pair so only the teardown failure can stop the start.
