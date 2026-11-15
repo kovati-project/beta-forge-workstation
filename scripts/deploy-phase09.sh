@@ -165,35 +165,43 @@ if [ $FAILED -eq 1 ]; then
     exit 1
 fi
 
+# Buckets and the outputs lifecycle rule (idempotent; safe on every deploy)
+echo ""
+if ! bash "$REPO_ROOT/scripts/setup-minio-buckets.sh"; then
+    echo "ERROR: MinIO bucket setup failed (re-run: bash scripts/setup-minio-buckets.sh)"
+    exit 1
+fi
+
+# Qdrant RAG collections (idempotent; standard-library Python, no pip install)
+echo ""
+if ! python3 "$REPO_ROOT/scripts/setup-qdrant.py"; then
+    echo "ERROR: Qdrant collection setup failed (re-run: python3 scripts/setup-qdrant.py)"
+    exit 1
+fi
+
 echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Configure MinIO client (one-time):"
-echo "   wget https://dl.min.io/client/mc/release/linux-amd64/mc"
-echo "   chmod +x mc && sudo mv mc /usr/local/bin/"
-echo "   mc alias set local http://localhost:9000 admin \"$MINIO_ROOT_PASSWORD\""
+echo "1. Optional, for the MinIO copy in scripts/backup.sh: install mc on the host"
+echo "   and add the alias (password: MINIO_ROOT_PASSWORD in docker/.env):"
+echo "   mc alias set local http://localhost:9000 admin"
+echo "   (buckets are already created; check with: bash scripts/setup-minio-buckets.sh --check)"
+echo "   (Qdrant collections too: python3 scripts/setup-qdrant.py --check)"
 echo ""
-echo "2. Create MinIO buckets:"
-echo "   mc mb local/models local/loras local/datasets local/outputs local/backups"
-echo "   mc ilm rule add --expiry-days 90 local/outputs"
-echo ""
-echo "3. Initialize Qdrant collections:"
-echo "   python3 scripts/setup-qdrant.py"
-echo ""
-echo "4. Ingest documents:"
+echo "2. Ingest documents:"
 echo "   python3 scripts/ingest-documents.py"
 echo ""
-echo "5. Configure Open WebUI RAG:"
+echo "3. Configure Open WebUI RAG:"
 echo "   Admin → Documents → Vector Database"
 echo "   URL: http://${WORKSTATION_HOST}:6333"
 echo "   Model: nomic-embed-text"
 echo ""
-echo "6. Access services:"
+echo "4. Access services:"
 echo "   MinIO Console: http://${WORKSTATION_HOST}:9001 (admin / see docker/.env MINIO_ROOT_PASSWORD)"
 echo "   Qdrant API: http://${WORKSTATION_HOST}:6333/docs"
 echo "   Langfuse: http://${WORKSTATION_HOST}:3002"
 echo ""
-echo "7. Run validation:"
+echo "5. Run validation:"
 echo "   bash scripts/validate-phase09.sh"
