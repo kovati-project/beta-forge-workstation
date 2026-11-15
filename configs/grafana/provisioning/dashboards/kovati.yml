@@ -1,0 +1,17 @@
+apiVersion: 1
+
+# Dashboards shipped with the repo (TASK-062). Files live next to this one in
+# json/, which is already mounted via ../configs/grafana/provisioning.
+#   nvidia-dcgm.json         NVIDIA DCGM Exporter (grafana.com 12239), GPU0-GPU3
+#   node-exporter-full.json  Node Exporter Full (grafana.com 1860), host metrics
+# Both query the provisioned "Prometheus" datasource (uid: prometheus).
+providers:
+  - name: kovati
+    folder: Kovati
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false
