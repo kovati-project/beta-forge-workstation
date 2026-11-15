@@ -314,3 +314,17 @@ def test_blueprint_dir_is_mounted_into_authentik():
     mount = "../configs/authentik/blueprints:/blueprints/custom:ro"
     for svc in ("authentik", "authentik-worker"):
         assert mount in compose["services"][svc]["volumes"], svc
+
+
+def test_token_falls_back_to_docker_env(monkeypatch, tmp_path):
+    """A token saved on the Settings page (docker/.env) applies without a restart."""
+    from api import admin
+    env_file = tmp_path / ".env"
+    env_file.write_text("AUTHENTIK_TOKEN=from-dotenv\n")
+    monkeypatch.setattr(admin, "AUTHENTIK_TOKEN", "")
+    monkeypatch.setenv("ENV_FILE", str(env_file))
+    assert admin._token() == "from-dotenv"
+    assert admin._auth_headers() == {"Authorization": "Bearer from-dotenv"}
+
+    monkeypatch.setattr(admin, "AUTHENTIK_TOKEN", "from-environment")
+    assert admin._token() == "from-environment"

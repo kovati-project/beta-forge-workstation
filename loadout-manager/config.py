@@ -236,6 +236,7 @@ CONFIG_SCHEMA = [
     ("Training",        "LABEL_STUDIO_PASSWORD", "Label Studio admin password",                           True,  ["label-studio"]),
     ("Training",        "JUPYTER_TOKEN",         "JupyterLab access token",                               True,  ["jupyterlab"]),
     ("Training",        "AXOLOTL_CONFIG",        "Axolotl training config filename (e.g. qlora_4gpu.yml)", False, []),
+    ("Access",          "AUTHENTIK_TOKEN",       "Authentik API token (Directory > Tokens, intent API) for user and group management", True, []),
     ("System",          "KOVATI_OS_MODE",        "System mode: workstation or appliance",                 False, []),
 ]
 

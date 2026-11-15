@@ -8,20 +8,36 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional
 import httpx
 import os
+from pathlib import Path
+
+from .envfile import read_env
 
 router = APIRouter(tags=["admin"])
 
-AUTHENTIK_URL = os.getenv("AUTHENTIK_URL", "http://localhost:9080")
+AUTHENTIK_URL = os.getenv("AUTHENTIK_URL", "http://host.docker.internal:9080")
 AUTHENTIK_TOKEN = os.getenv("AUTHENTIK_TOKEN", "")
+
+
+def _token() -> str:
+    """The Authentik API token: the environment, else docker/.env.
+
+    Read on every call so a token saved on the Settings page applies without
+    recreating loadout-manager.
+    """
+    if AUTHENTIK_TOKEN:
+        return AUTHENTIK_TOKEN
+    env_file = Path(os.getenv("ENV_FILE", "/compose/.env"))
+    return read_env(env_file).get("AUTHENTIK_TOKEN", "")
 
 # Upper bound on pages followed when listing every group (Authentik pages at 100).
 _MAX_PAGES = 50
 
 
 def _auth_headers():
-    if not AUTHENTIK_TOKEN:
+    token = _token()
+    if not token:
         raise HTTPException(status_code=503, detail="AUTHENTIK_TOKEN not configured")
-    return {"Authorization": f"Bearer {AUTHENTIK_TOKEN}"}
+    return {"Authorization": f"Bearer {token}"}
 
 
 class UserCreate(BaseModel):
@@ -163,7 +179,7 @@ async def get_admin_status():
 @router.get("/admin/groups")
 async def list_groups():
     """List Authentik groups (the roles that can be assigned to users)."""
-    if not AUTHENTIK_TOKEN:
+    if not _token():
         return {"groups": [], "note": "AUTHENTIK_TOKEN not configured"}
 
     try:
@@ -179,7 +195,7 @@ async def list_groups():
 @router.get("/admin/users")
 async def list_users():
     """List users via Authentik API, each with its group names."""
-    if not AUTHENTIK_TOKEN:
+    if not _token():
         return {"users": [], "note": "AUTHENTIK_TOKEN not configured"}
 
     try:
@@ -322,7 +338,7 @@ async def delete_user(user_id: int):
 @router.get("/admin/oauth2-apps")
 async def list_oauth2_apps():
     """List OAuth2 applications."""
-    if not AUTHENTIK_TOKEN:
+    if not _token():
         return {
             "applications": [
                 {
@@ -349,7 +365,7 @@ async def list_oauth2_apps():
     
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            headers = {"Authorization": f"Bearer {AUTHENTIK_TOKEN}"}
+            headers = _auth_headers()
             resp = await client.get(
                 f"{AUTHENTIK_URL}/api/v3/oauth2/applications/",
                 headers=headers,
