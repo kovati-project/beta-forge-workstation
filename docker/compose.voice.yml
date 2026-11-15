@@ -92,6 +92,14 @@ services:
     container_name: piper-openai
     restart: unless-stopped
     command: ["python", "-u", "/app/piper_openai.py"]
+    # Standard-library HTTP adapter on an unprivileged port: needs no root,
+    # no capabilities and no writable filesystem (#68).
+    user: "65534:65534"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     ports:
       - "5000:8000"
     volumes:
