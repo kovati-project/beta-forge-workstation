@@ -168,7 +168,7 @@ sleep 5
 if [ -f "$BASE/compose.training.yml" ]; then
     log_step "Starting training services (Kohya, Label Studio, JupyterLab)..."
     $COMPOSE -f "$BASE/compose.training.yml" up -d --force-recreate kohya || true
-    $COMPOSE -f "$BASE/compose.training.yml" up -d label-studio || true
+    $COMPOSE -f "$BASE/compose.training.yml" up -d label-studio jupyterlab || true
     sleep 3
 fi
 
