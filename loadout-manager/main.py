@@ -173,6 +173,42 @@ def _nvlink_bridge_labels(profiles: Dict) -> Dict[int, str]:
     return labels
 
 
+def _nvlink_pairs(profiles: Dict) -> List[List[int]]:
+    """The NVLink-bridged GPU pairs, ordered by bridge letter ([[0, 3], [1, 2]])."""
+    pairs: Dict[str, List[int]] = {}
+    for idx, label in _nvlink_bridge_labels(profiles).items():
+        pairs.setdefault(label, []).append(idx)
+    return [sorted(pairs[label]) for label in sorted(pairs)]
+
+
+# Card accent per workload kind on the Loadout page; inference is the default.
+_ACCENT_BY_TYPE = {"training": "amber", "image": "purple"}
+
+
+def _profile_accent(p: Dict) -> str:
+    """`accent` from profiles.yaml if set, else from the profile's services:
+    any training service -> amber, else any image service -> purple, else cyan."""
+    if p.get("accent"):
+        return p["accent"]
+    types = {SERVICE_TYPES.get(s) for s in p.get("services") or []}
+    for kind in ("training", "image"):
+        if kind in types:
+            return _ACCENT_BY_TYPE[kind]
+    return "cyan"
+
+
+def _profile_nvlink_pairs(p: Dict, pairs: List[List[int]]) -> List[List[int]]:
+    """`nvlink_pairs` from profiles.yaml if set, else the bridged pairs whose
+    GPUs are both claimed by the profile."""
+    if "nvlink_pairs" in p:
+        return p["nvlink_pairs"] or []
+    try:
+        gpus = {int(g) for g in p.get("exclusive_gpus") or []}
+    except (TypeError, ValueError):
+        return []
+    return [pair for pair in pairs if set(pair) <= gpus]
+
+
 def _annotate_gpus(gpus: List[Dict]) -> None:
     """Add topology and profile-claim fields to each GPU dict, in place.
 
@@ -377,6 +413,7 @@ async def ws_events(websocket: WebSocket):
 def list_loadouts():
     """List all available loadout profiles."""
     profiles = load_profiles()
+    pairs = _nvlink_pairs(profiles)
     return {
         name: {
             "description": p.get("description", ""),
@@ -385,6 +422,8 @@ def list_loadouts():
             "vram_required_gb": p.get("vram_required_gb"),
             "compatible_with": p.get("compatible_with", []),
             "incompatible_with": p.get("incompatible_with", []),
+            "accent": _profile_accent(p),
+            "nvlink_pairs": _profile_nvlink_pairs(p, pairs),
             "active": name == state["active_profile"]
         }
         for name, p in profiles.items()
