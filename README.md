@@ -227,6 +227,14 @@ These cannot be automated — visit after `deploy-all.sh` finishes:
 | n8n | `http://10.10.10.2:5678` | Complete owner setup |
 | Langfuse | `http://10.10.10.2:3002` | Create admin account |
 | Grafana | `http://10.10.10.2:3001` | Import dashboards 12239, 1860, 893 |
+| Authentik | `https://auth.ai.local/if/admin/` | Set the embedded outpost's `authentik_host` to `https://auth.ai.local/` so the SSO login stays on HTTPS ([runbook](docs/runbooks/authentik-https.md)) |
+
+Clients reach the proxied services through Caddy by name. Add both names to the
+client's hosts file (`/etc/hosts`, or `C:\Windows\System32\drivers\etc\hosts`):
+
+```text
+<workstation-ip>  ai.local auth.ai.local
+```
 
 ---
 

@@ -427,8 +427,9 @@ curl -k https://ai.local/webui
 
 2. **DNS resolution failing**
    ```bash
-   # Add to /etc/hosts on jumpbox
-   echo "10.10.10.2  ai.local" | sudo tee -a /etc/hosts
+   # Add to /etc/hosts on the client (auth.ai.local serves the Authentik login,
+   # see docs/runbooks/authentik-https.md)
+   echo "10.10.10.2  ai.local auth.ai.local" | sudo tee -a /etc/hosts
 
    # Or configure DNS server if available
    nslookup ai.local <dns-server>
