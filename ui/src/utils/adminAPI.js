@@ -16,6 +16,12 @@ export const adminAPI = {
     return res.json();
   },
 
+  async listGroups() {
+    const res = await fetch('/api/admin/groups');
+    if (!res.ok) throw new Error(`Groups: ${res.status}`);
+    return res.json();
+  },
+
   async createUser(payload) {
     const res = await fetch('/api/admin/users', {
       method: 'POST',
