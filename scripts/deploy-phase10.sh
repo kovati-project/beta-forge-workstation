@@ -6,6 +6,7 @@
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -130,16 +131,16 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Monitoring stack deployed:"
 echo ""
-echo "  Prometheus (metrics DB):   http://10.10.10.2:9091"
-echo "  Grafana (dashboards):      http://10.10.10.2:3001 (admin/changeme)"
-echo "  DCGM Exporter (GPU):       http://10.10.10.2:9400/metrics"
-echo "  Node Exporter (system):    http://10.10.10.2:9100/metrics"
-echo "  cAdvisor (containers):     http://10.10.10.2:8989"
+echo "  Prometheus (metrics DB):   http://${WORKSTATION_HOST}:9091"
+echo "  Grafana (dashboards):      http://${WORKSTATION_HOST}:3001 (admin/changeme)"
+echo "  DCGM Exporter (GPU):       http://${WORKSTATION_HOST}:9400/metrics"
+echo "  Node Exporter (system):    http://${WORKSTATION_HOST}:9100/metrics"
+echo "  cAdvisor (containers):     http://${WORKSTATION_HOST}:8989"
 echo ""
 echo "Next steps:"
 echo ""
 echo "1. Access Grafana:"
-echo "   http://10.10.10.2:3001"
+echo "   http://${WORKSTATION_HOST}:3001"
 echo "   Login: admin / changeme"
 echo ""
 echo "2. Import official dashboards:"

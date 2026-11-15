@@ -16,6 +16,8 @@
 #          configs/postgres/init.sql  (rendered from init.sql.template; gitignored,
 #                                      mode 600 — SQL needs literal values)
 #          configs/searxng/settings.yml  (rendered from settings.yml.template; not a compose env var)
+#   bash scripts/init-secrets.sh --render-searxng     only re-render settings.yml (keeps its
+#                                                      key; picks up WORKSTATION_HOST)
 #
 # configs/postgres/init.sql is NEVER committed. The tracked source of truth is
 # configs/postgres/init.sql.template, which holds @..._DB_PASSWORD@ placeholders.
@@ -42,6 +44,10 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*" >&2; }
 
 ENV_FILE="docker/.env"
+
+# WORKSTATION_HOST: exported env, else docker/.env, else 10.10.10.2 (#51)
+# shellcheck source=lib/workstation-host.sh
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"
 
 # ── Arguments ─────────────────────────────────────────────────────────────────
 FORCE=0
@@ -183,22 +189,25 @@ render_postgres_init() {
 }
 
 # ── Render configs/searxng/settings.yml from its template ────────────────────
-# SearXNG's settings.yml has no env interpolation, so the key is rendered into an
-# untracked file. An existing file holding a real key is left alone unless --force
-# (so a host's private key survives re-runs and `git pull`).
+# SearXNG's settings.yml has no env interpolation, so the key and the public
+# base_url (from WORKSTATION_HOST) are rendered into an untracked file. An
+# existing file's real key is kept unless --force (so a host's private key
+# survives re-runs and `git pull`); base_url is re-rendered every time, so
+# `--render-searxng` is also how a WORKSTATION_HOST change reaches SearXNG.
 render_searxng_settings() {
     local tpl="configs/searxng/settings.yml.template" dst="configs/searxng/settings.yml"
     if [[ ! -f "$tpl" ]]; then
         warn "$tpl not found - skipping SearXNG settings"
         return 0
     fi
+    local secret=""
     if [[ -f "$dst" && $FORCE -eq 0 ]] && ! grep -qE '@SEARXNG_SECRET_KEY@|change-this-to-a-random-32-char-string' "$dst"; then
-        log "$dst already has a secret_key - left alone (use --force to regenerate)"
-        return 0
+        secret="$(sed -n 's/^[[:space:]]*secret_key:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "$dst" | head -n 1)"
+        [[ -n "$secret" ]] && log "$dst keeps its existing secret_key (use --force to regenerate)"
     fi
-    local secret tmp="$dst.tmp.$$"
-    secret="$(openssl rand -hex 16)"
-    if ! sed "s|@SEARXNG_SECRET_KEY@|${secret}|" "$tpl" > "$tmp" 2>/dev/null \
+    [[ -n "$secret" ]] || secret="$(openssl rand -hex 16)"
+    local tmp="$dst.tmp.$$"
+    if ! sed -e "s|@SEARXNG_SECRET_KEY@|${secret}|" -e "s|@WORKSTATION_HOST@|${WORKSTATION_HOST}|" "$tpl" > "$tmp" 2>/dev/null \
        || ! mv -f "$tmp" "$dst" 2>/dev/null; then
         rm -f "$tmp" 2>/dev/null || true
         err "cannot write $dst - the directory is owned by the SearXNG container user."
@@ -206,7 +215,7 @@ render_searxng_settings() {
         return 1
     fi
     chmod 664 "$dst" 2>/dev/null || true
-    log "$dst rendered from template"
+    log "$dst rendered from template (base_url host: ${WORKSTATION_HOST})"
 }
 
 # Render-only modes: no prompts, no secret generation (used by deploy scripts).
@@ -338,6 +347,10 @@ JUPYTER_TOKEN=${JUPYTER_TOKEN}
 AUTHENTIK_PG_PASSWORD=${AUTHENTIK_PG_PASSWORD}
 AUTHENTIK_REDIS_PASSWORD=${AUTHENTIK_REDIS_PASSWORD}
 AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
+
+# Address browsers/clients use to reach this host: an IP or a hostname such as
+# kovati.lan. Change it here only (README "Changing the workstation host").
+WORKSTATION_HOST=${WORKSTATION_HOST}
 EOF
 chmod 600 "$ENV_FILE"
 log "docker/.env written (chmod 600)"

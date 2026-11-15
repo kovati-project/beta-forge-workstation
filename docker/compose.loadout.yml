@@ -34,6 +34,8 @@ services:
       - COMPOSE_DIR=/compose
       - ENV_FILE=/compose/.env
       - HOST_COMPOSE_DIR=${REPO_ROOT:-/home/kasemo/ai-workstation-project}/docker
+      # browser-facing address shown in API responses (OAuth redirect URIs, runbook)
+      - WORKSTATION_HOST=${WORKSTATION_HOST:-10.10.10.2}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     deploy:

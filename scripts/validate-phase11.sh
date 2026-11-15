@@ -4,6 +4,7 @@
 # Checks: OpenHands, vLLM, Ollama, models, configuration
 
 set -e
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 echo "=== Phase 11 Validation ==="
 echo ""
@@ -145,7 +146,7 @@ echo "    python3 scripts/code-router.py"
 echo "    Should output test cases with model recommendations"
 echo ""
 echo "[ ] OpenHands autonomous tasks:"
-echo "    Visit http://10.10.10.2:3003"
+echo "    Visit http://${WORKSTATION_HOST}:3003"
 echo "    Create workspace (or use /data/openhands)"
 echo "    Run task: 'Write a Python function that adds two numbers'"
 echo "    Should execute autonomously and show results"

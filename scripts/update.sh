@@ -13,6 +13,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 BASE="$REPO_ROOT/docker"
 export REPO_ROOT
 
@@ -147,5 +148,5 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 log "Commit: $(git log --oneline -1)"
 echo ""
-echo "  UI:   http://10.10.10.2:8800"
+echo "  UI:   http://${WORKSTATION_HOST}:8800"
 echo ""

@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -50,18 +51,18 @@ echo ""
 echo "=== Deploy complete ==="
 echo ""
 echo "Services deployed (${READY}/5):"
-echo "  n8n              → http://10.10.10.2:5678"
+echo "  n8n              → http://${WORKSTATION_HOST}:5678"
 echo "  MCP filesystem   → :3100"
 echo "  MCP fetch        → :3103"
 echo "  MCP browser      → :3101"
 echo "  MCP code-exec    → :3102"
 echo ""
 echo "Next steps:"
-echo "  1. Visit http://10.10.10.2:5678 and create owner account"
-echo "  2. Configure Ollama integration: Settings → AI → OpenAI base URL: http://10.10.10.2:11434/v1"
+echo "  1. Visit http://${WORKSTATION_HOST}:5678 and create owner account"
+echo "  2. Configure Ollama integration: Settings → AI → OpenAI base URL: http://ollama:11434/v1"
 echo "  3. Add MCP server connections in n8n credentials"
 echo "  4. Build first workflow: Health Monitor (check Loadout Manager every 5 min)"
 echo ""
 echo "Optional: Deploy Dify"
 echo "  docker compose -f docker/compose.agentic.yml up -d dify-api dify-web dify-db dify-redis"
-echo "  Access at http://10.10.10.2:3010"
+echo "  Access at http://${WORKSTATION_HOST}:3010"

@@ -14,7 +14,7 @@ services:
       - /data/models/ollama:/root/.ollama
     environment:
       # Backends are addressed by container name and *internal* port on the
-      # ai-workstation network; 10.10.10.2 never existed on this host (#51).
+      # ai-workstation network, so they do not depend on WORKSTATION_HOST (#51).
       # Open WebUI keeps no saved connection settings in its DB here, so these env
       # vars are authoritative (re-check webui.db `config` if that ever changes).
 

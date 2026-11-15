@@ -4,9 +4,12 @@
 #
 #   .\scripts\test-coding-agent.ps1
 #   .\scripts\test-coding-agent.ps1 -Server 192.168.1.102 -Model qwen3-coder:30b
+#
+# -Server defaults to $env:WORKSTATION_HOST, else kovati.lan (add kovati.lan to
+# the client's hosts file, see README "Changing the workstation host").
 
 param(
-    [string]$Server = "192.168.1.102",
+    [string]$Server = $(if ($env:WORKSTATION_HOST) { $env:WORKSTATION_HOST } else { "kovati.lan" }),
     [string]$Model = "qwen3-coder:30b",
     [string[]]$RequiredModels = @("qwen3-coder:30b", "qwen2.5-coder:7b", "devstral:latest", "nomic-embed-text:latest"),
     [int]$OpenHandsPort = 3003
