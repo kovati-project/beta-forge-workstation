@@ -48,6 +48,10 @@ services:
       - "8000:8000"
     volumes:
       - /data/models/vllm:/models
+      # Same-path mounts so models registered from the Models tab (absolute
+      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
@@ -87,6 +91,10 @@ services:
       - "8001:8000"
     volumes:
       - /data/models/vllm:/models
+      # Same-path mounts so models registered from the Models tab (absolute
+      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
@@ -126,6 +134,10 @@ services:
       - "8002:8000"
     volumes:
       - /data/models/vllm:/models
+      # Same-path mounts so models registered from the Models tab (absolute
+      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
