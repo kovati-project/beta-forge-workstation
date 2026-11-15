@@ -89,7 +89,8 @@ services:
   #
   # Each server checks the HTTP Host header (DNS-rebinding protection) against
   # loopback plus: its container name, host.docker.internal (loadout-manager
-  # sits on another network) and MCP_LAN_HOST, the address LAN clients use.
+  # sits on another network) and MCP_LAN_HOST, the address LAN clients use
+  # (defaults to WORKSTATION_HOST, so one host setting covers both; #81).
 
   mcp-filesystem:
     build: ./mcp/filesystem
@@ -116,7 +117,7 @@ services:
       - --port=3100
       - --allowed-host=mcp-filesystem:3100
       - --allowed-host=host.docker.internal:3100
-      - --allowed-host=${MCP_LAN_HOST:-10.10.10.2}:3100
+      - --allowed-host=${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3100
       - --
       - mcp-server-filesystem
       - /data
@@ -141,7 +142,7 @@ services:
       - --port=3103
       - --allowed-host=mcp-fetch:3103
       - --allowed-host=host.docker.internal:3103
-      - --allowed-host=${MCP_LAN_HOST:-10.10.10.2}:3103
+      - --allowed-host=${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3103
       - --
       - /opt/fetch/bin/mcp-server-fetch
     security_opt: ["no-new-privileges:true"]
@@ -163,7 +164,7 @@ services:
       - --port=3101
       - --host=0.0.0.0
       - --isolated
-      - --allowed-hosts=localhost:3101,127.0.0.1:3101,mcp-browser:3101,host.docker.internal:3101,${MCP_LAN_HOST:-10.10.10.2}:3101
+      - --allowed-hosts=localhost:3101,127.0.0.1:3101,mcp-browser:3101,host.docker.internal:3101,${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3101
       - --output-dir=/tmp/playwright-output
     read_only: true
     tmpfs:
@@ -191,7 +192,7 @@ services:
     # Snippets run with no network (seccomp blocks non-AF_UNIX sockets), stdlib
     # only, and per-run rlimits; see docker/mcp/code-exec/server.py.
     environment:
-      - MCP_ALLOWED_HOSTS=mcp-code-exec:3102,host.docker.internal:3102,${MCP_LAN_HOST:-10.10.10.2}:3102
+      - MCP_ALLOWED_HOSTS=mcp-code-exec:3102,host.docker.internal:3102,${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3102
     read_only: true
     tmpfs:
       - /tmp:size=64m,uid=10001,gid=10001,mode=0700
