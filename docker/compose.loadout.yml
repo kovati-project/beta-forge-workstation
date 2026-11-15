@@ -23,6 +23,10 @@ services:
         bind:
           create_host_path: false
       - ../loadout-manager:/app:ro
+      # Models tab: scan /data/models and /data/checkpoints for models already on
+      # disk (read-only); /data/models/vllm stays writable for downloads/slots.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/vllm:/data/models/vllm
       # persisted active-profile state (LOADOUT_STATE_PATH default); lost on recreate without this
       - /data/loadout-manager:/data/loadout-manager

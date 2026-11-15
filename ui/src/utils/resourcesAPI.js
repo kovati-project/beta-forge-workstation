@@ -76,12 +76,36 @@ export async function activateVllmModel(slot, model) {
   return response.json();
 }
 
-export async function searchHuggingFace(query, limit = 20) {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
+export async function searchHuggingFace(query, task = '', limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query) params.set('q', query);
+  if (task) params.set('task', task);
   const response = await fetch(`/api/models/hf/search?${params}`);
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.detail || 'Hugging Face search failed');
+  }
+  return response.json();
+}
+
+export async function getLocalModels() {
+  const response = await fetch('/api/models/local');
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to scan local models');
+  }
+  return response.json();
+}
+
+export async function registerLocalModel(path, name) {
+  const response = await fetch('/api/models/local/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, name }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to register model');
   }
   return response.json();
 }
