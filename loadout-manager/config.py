@@ -216,13 +216,20 @@ REQUIRED_HOST_DIRS = {
     "axolotl":    ["/data/datasets/text", "/data/checkpoints/axolotl", "/data/models/vllm"],
 }
 
-# External service URLs
-PROMETHEUS_URL = "http://localhost:9091"
-LANGFUSE_URL = "http://localhost:3002"
-OLLAMA_URL = "http://localhost:11434"
-MINIO_URL = "http://localhost:9000"
-QDRANT_URL = "http://localhost:6333"
-AUTHENTIK_URL = "http://localhost:9000"
+# External services, as seen from inside the loadout-manager container.
+# "localhost" there is the container itself, so services on the shared
+# ai-workstation network are reached by container name and container-internal
+# port (not the host-published port). Each can be overridden with an
+# environment variable of the same name.
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090")
+LANGFUSE_URL = os.getenv("LANGFUSE_URL", "http://langfuse:3000")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434")
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")   # host:port, no scheme
+QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
+# Authentik is on its own ai-auth network, so it is reached through its
+# published port on the host (compose maps host.docker.internal to the host).
+AUTHENTIK_URL = os.getenv("AUTHENTIK_URL", "http://host.docker.internal:9080")
 
 # User-configurable settings exposed in the Settings UI.
 # Tuple: (category, key, description, sensitive, affects)

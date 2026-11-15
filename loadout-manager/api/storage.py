@@ -8,20 +8,34 @@ from fastapi import APIRouter, HTTPException
 from pathlib import Path
 
 try:
-    from config import DATA_DIR
+    from config import DATA_DIR, MINIO_ENDPOINT, POSTGRES_HOST, QDRANT_URL
 except ImportError:
-    from ..config import DATA_DIR
+    from ..config import DATA_DIR, MINIO_ENDPOINT, POSTGRES_HOST, QDRANT_URL
+from .envfile import read_env
 
 router = APIRouter()
 
-QDRANT_URL = "http://localhost:6333"
+
+def _credential(env_key: str, dotenv_key: str, default: str = "") -> str:
+    """An explicit environment variable, else the value in docker/.env.
+
+    The container gets docker/.env mounted (ENV_FILE), not its values as
+    environment variables, so credentials are read from the file.
+    """
+    value = os.getenv(env_key)
+    if value:
+        return value
+    env_file = Path(os.getenv("ENV_FILE", "/compose/.env"))
+    return read_env(env_file).get(dotenv_key) or default
+
 
 try:
     from minio import Minio
+    # Same credentials docker/compose.storage.yml gives the minio container.
     minio_client = Minio(
-        "localhost:9000",
-        access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-        secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+        MINIO_ENDPOINT,
+        access_key=os.getenv("MINIO_ACCESS_KEY", "admin"),
+        secret_key=_credential("MINIO_SECRET_KEY", "MINIO_ROOT_PASSWORD"),
         secure=False
     )
 except Exception as e:
@@ -166,10 +180,10 @@ def _get_postgres_collections(partitions: List[Dict]) -> List[Dict]:
         return []
     try:
         conn = psycopg2.connect(
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=POSTGRES_HOST,
             port=int(os.getenv("POSTGRES_PORT", "5432")),
-            user=os.getenv("POSTGRES_USER", "postgres"),
-            password=os.getenv("POSTGRES_PASSWORD", ""),
+            user=os.getenv("POSTGRES_USER", "admin"),
+            password=_credential("POSTGRES_PASSWORD", "POSTGRES_ADMIN_PASSWORD"),
             database="postgres",
             connect_timeout=2,
         )
@@ -308,10 +322,10 @@ async def get_storage_detail(type: str, name: str) -> Dict:
             raise HTTPException(status_code=503, detail="psycopg2 not installed")
         try:
             conn = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOST", "localhost"),
+                host=POSTGRES_HOST,
                 port=int(os.getenv("POSTGRES_PORT", "5432")),
-                user=os.getenv("POSTGRES_USER", "postgres"),
-                password=os.getenv("POSTGRES_PASSWORD", ""),
+                user=os.getenv("POSTGRES_USER", "admin"),
+                password=_credential("POSTGRES_PASSWORD", "POSTGRES_ADMIN_PASSWORD"),
                 database=name,
                 connect_timeout=2,
             )

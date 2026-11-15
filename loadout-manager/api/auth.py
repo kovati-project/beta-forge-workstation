@@ -4,9 +4,12 @@ from typing import Dict, List
 import httpx
 from fastapi import APIRouter, HTTPException
 
-router = APIRouter()
+try:
+    from config import AUTHENTIK_URL
+except ImportError:
+    from ..config import AUTHENTIK_URL
 
-AUTHENTIK_URL = "http://localhost:9000"
+router = APIRouter()
 
 
 @router.get("/auth/status")
