@@ -3,7 +3,8 @@
 #
 # Images are resolved with `docker manifest inspect` (registry metadata only,
 # nothing is downloaded). ${VAR:-default} references are resolved to their
-# default. Locally built images (loadout-manager) are skipped.
+# default. Services with a build: key (loadout-manager, minio, the MCP servers)
+# are built locally rather than pulled, so their images are skipped.
 #
 # KNOWN_BROKEN lists images with an open issue. They are reported, not failed,
 # and the check fails if one of them starts resolving again so the list cannot
@@ -18,24 +19,31 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 declare -A KNOWN_BROKEN=(
-    ["minio/minio:latest"]="#92 MinIO stopped publishing images"
     ["unslothai/unsloth:latest"]="#95 official image is unsloth/unsloth, needs port/password changes"
     ["pablogimenez/realesrgan-api:latest"]="#95 image removed"
 )
-SKIP_PREFIXES=("loadout-manager:")
 
-mapfile -t IMAGES < <(
-    grep -hE '^\s*image:' "$REPO_ROOT"/docker/compose.*.yml \
-        | sed -E 's/^\s*image:\s*//; s/["'"'"']//g; s/\s+#.*$//' \
-        | sed -E 's/\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}/\1/g' \
-        | sort -u
-)
+# One "<built> <image>" line per service; built=1 when the service also has a
+# build: key. Services sit at two-space indent under `services:`, keys at four.
+list_images() {
+    awk '
+        function flush() { if (img != "") print built, img; img = ""; built = 0 }
+        /^[^ #]/      { flush(); in_svc = ($0 ~ /^services:/); next }
+        !in_svc       { next }
+        /^  [^ #]/    { flush(); next }
+        /^    build:/ { built = 1 }
+        /^    image:/ { img = $0; sub(/^    image:[ \t]*/, "", img) }
+        END           { flush() }
+    ' "$REPO_ROOT"/docker/compose.*.yml \
+        | sed -E 's/["'"'"']//g; s/\s+#.*$//' \
+        | sed -E 's/\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}/\1/g'
+}
+mapfile -t BUILT < <(list_images | awk '$1 == 1 { print $2 }' | sort -u)
+mapfile -t IMAGES < <(list_images | awk '$1 == 0 { print $2 }' | sort -u)
 
 fail=0
+for img in "${BUILT[@]}"; do echo "skip    $img (built locally)"; done
 for img in "${IMAGES[@]}"; do
-    skip=0
-    for p in "${SKIP_PREFIXES[@]}"; do [[ "$img" == "$p"* ]] && skip=1; done
-    if [ "$skip" = 1 ]; then echo "skip    $img (built locally)"; continue; fi
     if [[ "$img" == *'$'* ]]; then echo "FAIL    $img (unresolved variable)"; fail=1; continue; fi
 
     if out=$(docker manifest inspect "$img" 2>&1 >/dev/null); then
