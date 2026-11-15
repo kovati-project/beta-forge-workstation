@@ -9,8 +9,9 @@ services:
     restart: unless-stopped
     ports:
       - "9091:9090"
-    # loadout-manager is on its own ai-loadout network (not shared with
-    # Prometheus), so it is scraped via the host's published port 8800.
+    # loadout-manager is scraped via the host's published port 8800 (it also
+    # joins ai-workstation now, for the Alertmanager webhook, so scraping
+    # loadout-manager:8800 directly would work too).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

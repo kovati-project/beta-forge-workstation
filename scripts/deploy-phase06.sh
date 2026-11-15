@@ -42,6 +42,9 @@ echo "  ✓ Image built"
 
 echo "[4/4] Starting loadout manager..."
 remove_orphan loadout-manager ai-loadout-mgr
+# compose.loadout.yml joins the external ai-workstation network (Alertmanager
+# reaches the alert webhook over it); create it if this runs before deploy-all.
+docker network inspect ai-workstation &>/dev/null || docker network create ai-workstation
 docker compose -f "$REPO_ROOT/docker/compose.loadout.yml" up -d
 echo "  Waiting for startup (5s)..."
 sleep 5
