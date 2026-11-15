@@ -39,6 +39,13 @@ services:
       - ALERTMANAGER_URL=http://alertmanager:9093
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Admin panel (api/admin.py). Authentik is on the ai-auth network, so it
+      # is reached through its published port on the host. AUTHENTIK_TOKEN is an
+      # API token created in Authentik (Directory -> Tokens, intent "API").
+      - AUTHENTIK_URL=${AUTHENTIK_URL:-http://host.docker.internal:9080}
+      - AUTHENTIK_TOKEN=${AUTHENTIK_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         reservations:
