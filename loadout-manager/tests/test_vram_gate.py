@@ -2,17 +2,23 @@
 TASK-025 / issue #15 — VRAM conflict gate.
 
 Assertions are on HTTP status classes and on "was anything started", never on
-message text. Tests marked xfail(strict=True) document defects found in the
-current gate; they flip to failures (XPASS) the moment the defect is fixed, so
-the marker must then be removed.
+message text. The BUG-3..BUG-6 tests were strict xfails documenting defects in
+the original gate; they are plain tests now that the defects are fixed.
+
+The gate counts free VRAM on the profile's own exclusive_gpus only (BUG-3), so
+boundary tests put the free memory on those GPUs and fill the others with
+memory the gate must ignore.
 """
 
 import datetime as _dt
 
 import pytest
 
-# Profiles that declare vram_required_gb > 0 (the only ones the gate can act on).
+# Profiles that declare vram_required_gb > 0. Every GPU profile does (BUG-5).
 GATED = [
+    ("inference-small", 16),
+    ("inference-pair-a", 44),
+    ("inference-pair-b", 44),
     ("inference-4gpu", 88),
     ("dual-stack", 96),
     ("image-studio", 72),
@@ -21,6 +27,14 @@ GATED = [
     ("training-unsloth", 48),
     ("inference-4gpu-large", 96),
 ]
+
+
+def free_on_own_gpus(h, name, per_profile_total, elsewhere):
+    """Spread `per_profile_total` GiB evenly over the profile's exclusive GPUs;
+    every other GPU reports `elsewhere` GiB free."""
+    own = [int(i) for i in h.profiles[name]["exclusive_gpus"]]
+    h.set_free([per_profile_total / len(own) if i in own else elsewhere
+                for i in range(4)])
 
 
 def is_4xx(resp):
@@ -47,7 +61,8 @@ def test_insufficient_vram_is_refused_and_starts_nothing(lm):
 
 @pytest.mark.parametrize("name,required", GATED)
 def test_just_below_requirement_is_refused(lm, name, required):
-    lm.set_free([(required - 1) / 4] * 4)
+    # Other GPUs fully free: their memory must not count towards the requirement.
+    free_on_own_gpus(lm, name, required - 1, elsewhere=24)
     r = lm.activate(name)
     assert is_4xx(r)
     assert_nothing_happened(lm)
@@ -55,8 +70,9 @@ def test_just_below_requirement_is_refused(lm, name, required):
 
 @pytest.mark.parametrize("name,required", GATED)
 def test_exactly_at_requirement_is_accepted_and_starts(lm, name, required):
-    # Boundary: the gate uses `free < required`, so free == required must pass.
-    lm.set_free([required / 4] * 4)
+    # Boundary: the gate uses `free < required`, so free == required must pass,
+    # and with nothing free on the GPUs the profile does not use.
+    free_on_own_gpus(lm, name, required, elsewhere=0)
     r = lm.activate(name)
     assert r.status_code == 200, r.text
     assert lm.docker.starts, "an accepted activation must start the profile"
@@ -110,11 +126,6 @@ def test_idle_is_not_blocked_by_missing_telemetry(lm):
     assert lm.activate("idle").status_code == 200
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-5: inference-small / inference-pair-a / inference-pair-b have no "
-           "vram_required_gb, so the gate is skipped entirely and fails OPEN when "
-           "telemetry is down (and cannot refuse on low VRAM at all).")
 @pytest.mark.parametrize("name", ["inference-small", "inference-pair-a", "inference-pair-b"])
 def test_telemetry_unavailable_fails_closed_without_declared_requirement(lm, name):
     lm.telemetry_down()
@@ -123,9 +134,6 @@ def test_telemetry_unavailable_fails_closed_without_declared_requirement(lm, nam
     assert lm.docker.starts == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-5: profiles without vram_required_gb are never refused for low VRAM.")
 @pytest.mark.parametrize("name", ["inference-small", "inference-pair-a", "inference-pair-b"])
 def test_low_vram_refused_without_declared_requirement(lm, name):
     lm.set_free(0.5)  # essentially no VRAM anywhere
@@ -136,11 +144,6 @@ def test_low_vram_refused_without_declared_requirement(lm, name):
 
 # ── Defects in how the gate computes "available" ─────────────────────────────
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-3: gate sums free VRAM across ALL GPUs, not the profile's "
-           "exclusive_gpus. training-unsloth owns GPU0+GPU3 but is admitted on "
-           "the strength of free memory on GPU1+GPU2.")
 def test_gate_counts_only_the_profiles_exclusive_gpus(lm):
     # unsloth: exclusive_gpus [0,3], needs 48. GPU0/3 have 5 free each (10),
     # GPU1/2 have 24 free each. Total 58 >= 48, but the GPUs it will use hold 10.
@@ -150,11 +153,6 @@ def test_gate_counts_only_the_profiles_exclusive_gpus(lm):
     assert lm.docker.starts == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-4: gate runs BEFORE teardown, so VRAM held by the currently "
-           "running profile (about to be stopped by the switch itself) counts "
-           "as unavailable and legitimate switches are refused.")
 @pytest.mark.parametrize("active,target", [
     ("inference-small", "image-studio"),         # the data's own 'compatible_with' pair
     ("training-lora-text", "training-lora-text"),  # plain restart of the active profile
@@ -181,7 +179,34 @@ def test_four_gpu_profiles_need_zero_headroom_on_24gb_cards(lm):
     assert lm.docker.calls == []
 
 
-# ── Gate is only on the HTTP path ────────────────────────────────────────────
+def test_outgoing_profile_still_holding_vram_after_teardown_aborts_the_start(lm):
+    """BUG-4 counterpart: with a profile running, the endpoint cannot know how
+    much VRAM teardown will free, so it accepts and do_switch re-checks after
+    teardown. If the memory is still taken then, nothing is started."""
+    lm.make_active("inference-small")
+    lm.set_free([1, 1, 1, 1])  # and it stays taken after `down`
+    assert lm.activate("image-studio").status_code == 200
+    assert len(lm.docker.downs) == 3
+    assert lm.docker.starts == []
+    assert lm.state["active_profile"] is None
+    assert lm.state["running_services"] == []
+    assert lm.state["last_error"]
+    assert lm.state["switching"] is False
+
+
+def test_requirement_that_cannot_fit_the_gpus_is_refused_even_while_switching_over(lm):
+    """With a profile running the free-memory check is deferred, but a
+    requirement larger than the profile's GPUs can ever hold is refused up front."""
+    lm.make_active("inference-small")
+    # 16 GB cards: training-lora-image's 48 GB cannot fit on GPU1+GPU2.
+    lm.set_free(16, total_gb=16.0)
+    r = lm.activate("training-lora-image")
+    assert r.status_code == 409
+    assert lm.docker.calls == []
+    assert lm.state["active_profile"] == "inference-small"
+
+
+# ── Scheduled switches go through the same gate (BUG-6) ──────────────────────
 
 class _FixedDatetime(_dt.datetime):
     @classmethod
@@ -193,10 +218,6 @@ class _StopLoop(Exception):
     pass
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-6: the VRAM gate lives only in POST /activate. Scheduled switches "
-           "call do_switch() directly and bypass VRAM and compatibility checks.")
 @pytest.mark.anyio
 async def test_scheduled_switch_is_subject_to_the_vram_gate(lm, monkeypatch):
     import asyncio as real_asyncio
@@ -219,3 +240,37 @@ async def test_scheduled_switch_is_subject_to_the_vram_gate(lm, monkeypatch):
     await real_asyncio.gather(*lm.tasks)
 
     assert lm.docker.starts == [], "scheduler started a profile that fails the VRAM gate"
+
+
+async def _run_one_scheduler_pass(lm, monkeypatch, profile):
+    import asyncio as real_asyncio
+    main = lm.main
+    monkeypatch.setattr(main, "datetime", _FixedDatetime)
+    monkeypatch.setattr(main, "schedule", [{
+        "id": "sch-test", "profile": profile,
+        "time": "03:00", "days": None, "enabled": True}])
+    main._last_fired.clear()
+
+    async def sleep(delay):
+        if delay == 30:
+            raise _StopLoop()
+
+    lm.sleep_hook = sleep
+    with pytest.raises(_StopLoop):
+        await main.scheduler_loop()
+    await real_asyncio.gather(*lm.tasks)
+
+
+@pytest.mark.anyio
+async def test_scheduled_switch_is_subject_to_the_incompatibility_gate(lm, monkeypatch):
+    lm.make_active("inference-4gpu")  # declared incompatible with training-lora-text
+    await _run_one_scheduler_pass(lm, monkeypatch, "training-lora-text")
+    assert lm.docker.calls == [], "scheduler tore down / started across an incompatible pair"
+    assert lm.state["active_profile"] == "inference-4gpu"
+
+
+@pytest.mark.anyio
+async def test_scheduled_switch_that_passes_the_gates_still_runs(lm, monkeypatch):
+    await _run_one_scheduler_pass(lm, monkeypatch, "training-lora-text")
+    assert len(lm.docker.starts) == 1
+    assert lm.state["active_profile"] == "training-lora-text"

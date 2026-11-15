@@ -2,9 +2,10 @@
 TASK-026 / issue #16 — training-vs-inference incompatibility gate.
 
 Key question: is `incompatible_with` ENFORCED by the backend, or only exposed as
-data in GET /loadouts (for the UI to grey cards out)? Answer from these tests:
-it is only data. Every "must be refused" test below is xfail(strict=True) with
-BUG-1; the data-quality tests carry BUG-2.
+data in GET /loadouts (for the UI to grey cards out)? It was only data (BUG-1)
+and the YAML had one-way declarations (BUG-2). Both are fixed: POST /activate
+and the scheduler refuse a target that is incompatible with the active profile
+in either direction, and the operator must /stop first.
 
 The VRAM gate is made irrelevant here (all GPUs fully free) so that any refusal
 could only come from a compatibility check.
@@ -51,11 +52,6 @@ def test_listing_marks_only_the_active_profile(lm):
 
 # ── ...but nothing enforces it ───────────────────────────────────────────────
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-1: incompatible_with is never consulted by POST /activate; the "
-           "only 'enforcement' is the UI disabling the card (ProfileCard.jsx). "
-           "A direct API call, curl, or a schedule entry sails through.")
 @pytest.mark.parametrize("active,target", [
     ("inference-4gpu", "training-lora-text"),      # inference -> training
     ("training-lora-text", "inference-4gpu"),      # training  -> inference
@@ -72,11 +68,6 @@ def test_incompatible_activation_is_refused_and_starts_nothing(lm, active, targe
     assert lm.state["active_profile"] == active
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-1: sweep over every (active,target) pair that the YAML declares "
-           "incompatible (target.incompatible_with contains active, the direction "
-           "the UI uses). None are refused by the API.")
 def test_every_declared_incompatible_pair_is_refused(lm):
     pairs = incompatible_pairs(lm.profiles, "target_lists_active")
     assert len(pairs) > 40, "sanity: data should declare dozens of pairs"
@@ -89,12 +80,6 @@ def test_every_declared_incompatible_pair_is_refused(lm):
     assert accepted == [], f"{len(accepted)}/{len(pairs)} incompatible pairs accepted"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-2: incompatible_with is declared one-way for 8 pairs. Neither the "
-           "UI nor any future gate that reads only the target's list would stop "
-           "inference-small being activated over training-unsloth (both own "
-           "GPU0+GPU3) although unsloth lists inference-small.")
 def test_reverse_direction_of_an_asymmetric_pair_is_also_refused(lm):
     lm.make_active("training-unsloth")
     r = lm.activate("inference-small")
@@ -133,7 +118,7 @@ def test_activating_the_already_active_profile_restarts_it(lm):
     Characterisation. Re-activating the active profile is neither refused nor a
     no-op: it tears the stacks down and brings the same profile back up. That is
     a restart, which is a defensible reading of 'same profile'. (The VRAM gate
-    can still wrongly refuse it — see BUG-4 in test_vram_gate.py.)
+    no longer counts the restarting profile's own memory against it, BUG-4.)
     """
     lm.make_active("inference-small")
     r = lm.activate("inference-small")
@@ -155,11 +140,6 @@ def test_incompatible_with_references_only_known_profiles(lm):
             assert set(p.get(key, [])) <= known, (name, key)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-2: 8 incompatible_with declarations have no mirror entry "
-           "(e.g. training-unsloth lists inference-small, inference-small lists "
-           "nothing). Fix the YAML or have the gate use the symmetric closure.")
 def test_incompatible_with_is_symmetric(lm):
     asym = [(a, b) for a, b in incompatible_pairs(lm.profiles, "either")
             if not (a in lm.profiles[b].get("incompatible_with", [])
@@ -167,10 +147,6 @@ def test_incompatible_with_is_symmetric(lm):
     assert asym == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG-2: inference-small and image-studio are mutually compatible_with "
-           "yet both claim exclusive GPU0. Exclusive means no sharing.")
 def test_compatible_with_pairs_do_not_share_exclusive_gpus(lm):
     clashes = []
     for a, pa in lm.profiles.items():
@@ -194,3 +170,20 @@ def test_compatible_with_cannot_be_honoured_because_every_switch_tears_down(lm):
     assert {f for c in downs_before_up for f in c.compose_files} == {
         "compose.inference.yml", "compose.training.yml", "compose.studio.yml"}
     assert lm.state["running_services"] == lm.profiles["image-studio"]["services"]
+
+
+def test_idle_is_reachable_from_every_profile(lm):
+    """idle is the way out of any profile, so nothing may declare it incompatible."""
+    for name in lm.profiles:
+        lm.docker.calls.clear()
+        lm.make_active(name)
+        assert lm.activate("idle").status_code == 200, name
+        assert lm.state["active_profile"] == "idle"
+
+
+def test_activation_after_stop_is_not_blocked_by_the_previous_profile(lm):
+    lm.make_active("inference-4gpu")
+    assert is_4xx(lm.activate("training-lora-text"))
+    assert lm.client.post("/stop").status_code == 200
+    assert lm.activate("training-lora-text").status_code == 200
+    assert lm.state["active_profile"] == "training-lora-text"
