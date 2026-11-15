@@ -7,6 +7,10 @@ services:
     image: minio/minio:latest
     container_name: minio
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "9000:9000"      # S3 API
       - "9001:9001"      # Web console
@@ -28,6 +32,10 @@ services:
     image: qdrant/qdrant:latest
     container_name: qdrant
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "6333:6333"      # REST API
       - "6334:6334"      # gRPC
@@ -43,6 +51,18 @@ services:
     image: postgres:16-alpine
     container_name: postgres
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns PGDATA as root (DAC_OVERRIDE to traverse an existing
+    # 0700 data dir, FOWNER for its chmods), then drops to postgres via su-exec
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     ports:
       - "5432:5432"
     volumes:
@@ -57,6 +77,10 @@ services:
     image: langfuse/langfuse:2
     container_name: langfuse
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "3002:3000"
     environment:

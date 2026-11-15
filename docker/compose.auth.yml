@@ -7,6 +7,18 @@ services:
     image: docker.io/library/postgres:15-alpine
     container_name: authentik-postgres
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns PGDATA as root (DAC_OVERRIDE to traverse an existing
+    # 0700 data dir, FOWNER for its chmods), then drops to postgres via su-exec
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     environment:
       - POSTGRES_DB=authentik
       - POSTGRES_USER=authentik
@@ -26,6 +38,15 @@ services:
     image: docker.io/library/redis:7-alpine
     container_name: authentik-redis
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns /data as root, then drops to redis via setpriv
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     command: redis-server --requirepass ${AUTHENTIK_REDIS_PASSWORD}
     volumes:
       - /data/authentik/redis:/data
@@ -42,6 +63,10 @@ services:
     image: ghcr.io/goauthentik/server:latest
     container_name: authentik
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     command: server
     ports:
       - "9080:9000"
@@ -81,6 +106,10 @@ services:
     image: ghcr.io/goauthentik/server:latest
     container_name: authentik-worker
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     command: worker
     environment:
       - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}

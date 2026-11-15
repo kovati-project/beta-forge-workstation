@@ -7,6 +7,9 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3000:8080"
     volumes:
@@ -77,6 +80,15 @@ services:
     image: searxng/searxng:latest
     container_name: searxng
     restart: unless-stopped
+    # The image runs granian as root unless told otherwise; its entrypoint
+    # supports non-root (skips the chown and update-ca-certificates). 977 is the
+    # image's searxng user. settings.yml must already exist and be readable by
+    # it (init-secrets.sh renders it 0664), since 977 cannot create it.
+    user: "977:977"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "8080:8080"
     volumes:

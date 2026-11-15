@@ -7,6 +7,9 @@ services:
     image: n8nio/n8n:1.68.0
     container_name: n8n
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "5678:5678"
     volumes:
@@ -32,6 +35,9 @@ services:
     image: langgenius/dify-api:latest
     container_name: dify-api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     environment:
       - MODE=api
       - SECRET_KEY=${DIFY_SECRET_KEY}
@@ -54,6 +60,9 @@ services:
     image: langgenius/dify-web:latest
     container_name: dify-web
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3010:3000"
     environment:
@@ -65,6 +74,18 @@ services:
     image: postgres:15-alpine
     container_name: dify-db
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns PGDATA as root (DAC_OVERRIDE to traverse an existing
+    # 0700 data dir, FOWNER for its chmods), then drops to postgres via su-exec
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     environment:
       - POSTGRES_USER=dify
       - POSTGRES_PASSWORD=${DIFY_DB_PASSWORD}
@@ -76,6 +97,15 @@ services:
     image: redis:7-alpine
     container_name: dify-redis
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns /data as root, then drops to redis via setpriv
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     volumes:
       - dify-redis-data:/data
 
@@ -97,6 +127,9 @@ services:
     image: kovati/mcp-filesystem:2.1.0
     container_name: mcp-filesystem
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3100:3100"
     # Sandbox root is /data inside the container, read-only. Only user content
@@ -131,6 +164,9 @@ services:
     image: kovati/mcp-fetch:2026.10.28
     container_name: mcp-fetch
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3103:3103"
     read_only: true
@@ -154,6 +190,9 @@ services:
     image: mcr.microsoft.com/playwright/mcp:v0.0.83
     container_name: mcp-browser
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3101:3101"
     # The image entrypoint already runs headless Chromium with --no-sandbox
@@ -187,6 +226,9 @@ services:
     image: kovati/mcp-code-exec:1
     container_name: mcp-code-exec
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3102:3102"
     # Snippets run with no network (seccomp blocks non-AF_UNIX sockets), stdlib

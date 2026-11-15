@@ -9,6 +9,9 @@ services:
     image: ghcr.io/ai-dock/comfyui:latest-cuda
     container_name: comfyui
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "8188:8188"
     volumes:
@@ -40,6 +43,9 @@ services:
     image: ghcr.io/invoke-ai/invokeai:latest
     container_name: invokeai
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "9090:9090"
     volumes:
@@ -78,6 +84,9 @@ services:
     image: pablogimenez/realesrgan-api:latest
     container_name: realesrgan
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "8189:8000"
     volumes:
@@ -99,6 +108,9 @@ services:
     image: danielgatis/rembg:latest
     container_name: rembg
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "8190:5000"
     volumes:

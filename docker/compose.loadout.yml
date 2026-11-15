@@ -9,6 +9,9 @@ services:
     image: loadout-manager:latest
     container_name: loadout-manager
     restart: unless-stopped
+    # no no-new-privileges/cap_drop (#68): starts and stops other containers
+    # through the Docker socket, which is root-equivalent on the host anyway
+    # (`:ro` does not limit the API). Accepted exception (#43).
     ports:
       - "8800:8800"
     volumes:
