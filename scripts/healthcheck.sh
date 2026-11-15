@@ -227,7 +227,7 @@ else
 fi
 
 if curl -sf http://localhost:3010 &>/dev/null; then
-    check_service "Dify" "http://localhost:3010" "200"
+    check_service "Dify" "http://localhost:3010" "200|307"
 else
     echo -e "  ${YELLOW}◇${NC} Dify (not running)"
 fi
@@ -254,7 +254,7 @@ fi
 echo ""
 echo -e "${BLUE}Observability:${NC}"
 if curl -sf http://localhost:3002 &>/dev/null; then
-    check_service "Langfuse" "http://localhost:3002" "200"
+    check_service "Langfuse" "http://localhost:3002" "200|307"
 else
     echo -e "  ${YELLOW}◇${NC} Langfuse (not running)"
 fi
