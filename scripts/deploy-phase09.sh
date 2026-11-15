@@ -6,6 +6,7 @@
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -186,13 +187,13 @@ echo "   python3 scripts/ingest-documents.py"
 echo ""
 echo "5. Configure Open WebUI RAG:"
 echo "   Admin → Documents → Vector Database"
-echo "   URL: http://10.10.10.2:6333"
+echo "   URL: http://${WORKSTATION_HOST}:6333"
 echo "   Model: nomic-embed-text"
 echo ""
 echo "6. Access services:"
-echo "   MinIO Console: http://10.10.10.2:9001 (admin / see docker/.env MINIO_ROOT_PASSWORD)"
-echo "   Qdrant API: http://10.10.10.2:6333/docs"
-echo "   Langfuse: http://10.10.10.2:3002"
+echo "   MinIO Console: http://${WORKSTATION_HOST}:9001 (admin / see docker/.env MINIO_ROOT_PASSWORD)"
+echo "   Qdrant API: http://${WORKSTATION_HOST}:6333/docs"
+echo "   Langfuse: http://${WORKSTATION_HOST}:3002"
 echo ""
 echo "7. Run validation:"
 echo "   bash scripts/validate-phase09.sh"

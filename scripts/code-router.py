@@ -3,15 +3,21 @@
 Code model routing: Select the best model for code requests based on language/task.
 Integrates with Continue.dev and OpenHands for optimal performance.
 """
+import os
 import re
 from enum import Enum
 from typing import Optional
+
+# Address of the workstation as seen from where this runs (an IP or a hostname
+# such as kovati.lan); same variable as docker/.env (#51).
+HOST = os.environ.get("WORKSTATION_HOST", "10.10.10.2")
+
 
 class CodeModel(Enum):
     """Available code models and their characteristics."""
     QWEN_32B = {
         "name": "qwen2.5-coder:32b",
-        "endpoint": "http://10.10.10.2:8000/v1",
+        "endpoint": f"http://{HOST}:8000/v1",
         "context": 32768,
         "speed": "medium",
         "quality": "high",
@@ -19,7 +25,7 @@ class CodeModel(Enum):
     }
     DEEPSEEK_16B = {
         "name": "deepseek-coder-v2:16b",
-        "endpoint": "http://10.10.10.2:11434",
+        "endpoint": f"http://{HOST}:11434",
         "context": 16384,
         "speed": "fast",
         "quality": "high",
@@ -27,7 +33,7 @@ class CodeModel(Enum):
     }
     CODELLAMA_70B = {
         "name": "codellama:70b",
-        "endpoint": "http://10.10.10.2:8002/v1",
+        "endpoint": f"http://{HOST}:8002/v1",
         "context": 100000,
         "speed": "slow",
         "quality": "highest",
@@ -35,7 +41,7 @@ class CodeModel(Enum):
     }
     QWEN_14B = {
         "name": "qwen2.5-coder:14b",
-        "endpoint": "http://10.10.10.2:11434",
+        "endpoint": f"http://{HOST}:11434",
         "context": 16384,
         "speed": "fast",
         "quality": "good",
@@ -43,7 +49,7 @@ class CodeModel(Enum):
     }
     QWEN_7B = {
         "name": "qwen2.5-coder:7b",
-        "endpoint": "http://10.10.10.2:11434",
+        "endpoint": f"http://{HOST}:11434",
         "context": 4096,
         "speed": "fastest",
         "quality": "good",

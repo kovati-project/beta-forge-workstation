@@ -19,6 +19,7 @@ COMPOSE="docker compose"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$(dirname "$SCRIPT_DIR")/docker"
 export REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 # Verify docker is running
 if ! docker info &>/dev/null; then
@@ -192,10 +193,10 @@ echo ""
 log_step "=== Startup Complete ==="
 echo ""
 echo "Service URLs:"
-echo "  Open WebUI:     http://10.10.10.2:3000"
-echo "  Grafana:        http://10.10.10.2:3001"
-echo "  n8n:            http://10.10.10.2:5678"
-echo "  Loadout Status: http://10.10.10.2:8800/status"
+echo "  Open WebUI:     http://${WORKSTATION_HOST}:3000"
+echo "  Grafana:        http://${WORKSTATION_HOST}:3001"
+echo "  n8n:            http://${WORKSTATION_HOST}:5678"
+echo "  Loadout Status: http://${WORKSTATION_HOST}:8800/status"
 echo ""
 log_step "Running health check..."
 if [ -f "./scripts/healthcheck.sh" ]; then
