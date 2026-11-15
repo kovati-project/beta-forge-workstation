@@ -7,8 +7,9 @@ function MiniGpuDiagram({ profile }) {
   const claimedGpus = profile.gpus || [];
   const gpuList = [0, 1, 2, 3];
 
-  // Check if profile uses NVLink pair
-  const nvlinkPair = profile.nvlink_pairs?.[0];
+  // NVLink bridges the profile spans (from /loadouts): A joins GPU0+GPU3, B joins GPU1+GPU2.
+  const bridges = (profile.nvlink_pairs || []).map((pair) =>
+    pair.includes(0) || pair.includes(3) ? 'Bridge A' : 'Bridge B');
 
   return (
     <div className="mini-gpu-diagram">
@@ -22,9 +23,9 @@ function MiniGpuDiagram({ profile }) {
           </div>
         ))}
       </div>
-      {nvlinkPair && (
+      {bridges.length > 0 && (
         <div className="mini-bridge-indicator">
-          {profile.accent === 'amber' ? 'Bridge A' : 'Bridge B'}
+          {bridges.join(' + ')}
           {' '}━━━━━
         </div>
       )}
