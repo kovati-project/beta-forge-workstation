@@ -5,9 +5,13 @@ from typing import Dict, Optional
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 
+try:
+    from config import LANGFUSE_URL
+except ImportError:
+    from ..config import LANGFUSE_URL
+
 router = APIRouter()
 
-LANGFUSE_URL = os.getenv("LANGFUSE_URL", "http://localhost:3002")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 

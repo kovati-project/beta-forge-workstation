@@ -48,10 +48,10 @@ echo ""
 
 # Start services
 echo "Starting monitoring stack..."
-for _c in prometheus grafana dcgm-exporter node-exporter cadvisor; do
+for _c in prometheus alertmanager grafana dcgm-exporter node-exporter cadvisor; do
     remove_orphan "$_c" ai-monitoring
 done
-docker compose -f docker/compose.monitoring.yml up -d prometheus grafana dcgm-exporter node-exporter cadvisor
+docker compose -f docker/compose.monitoring.yml up -d prometheus alertmanager grafana dcgm-exporter node-exporter cadvisor
 echo "✓ Containers started"
 echo ""
 
