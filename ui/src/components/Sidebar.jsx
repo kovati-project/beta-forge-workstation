@@ -6,7 +6,7 @@ import { DotStatus } from './DotStatus';
 export function Sidebar() {
   const { state } = useApp();
   const { metrics } = useSystemMetrics();
-  const productName = process.env.VITE_PRODUCT_NAME || 'Kovati OS';
+  const productName = import.meta.env.VITE_PRODUCT_NAME || 'Kovati OS';
 
   // Determine uptime display
   const formatUptime = (seconds) => {
