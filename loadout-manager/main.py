@@ -6,7 +6,7 @@ Extends with Kovati OS backend API for all frontend operations.
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import subprocess
@@ -49,8 +49,10 @@ async def auth_middleware(request: Request, call_next):
     # Allow health checks and setup endpoints without auth. The Alertmanager
     # webhook is called container-to-container, never through Authentik, so it
     # carries no forward-auth headers; it can only append to the alert history.
+    # /metrics is the Prometheus scrape target, likewise container-to-container
+    # (prometheus -> loadout-manager:8800 over ai-workstation) and read-only.
     if (request.url.path.startswith("/health") or request.url.path.startswith("/api/setup")
-            or request.url.path == "/api/alerts/webhook"):
+            or request.url.path in ("/api/alerts/webhook", "/metrics")):
         response = await call_next(request)
         return response
     
@@ -230,6 +232,9 @@ def read_gpu_telemetry() -> Dict:
                 "vram_used_gb": round(mem.used / 1024**3, 1),
                 "vram_total_gb": round(mem.total / 1024**3, 1),
                 "vram_free_gb": round(mem.free / 1024**3, 1),
+                # unrounded, for GET /metrics (Prometheus wants base units)
+                "vram_used_bytes": int(mem.used),
+                "vram_total_bytes": int(mem.total),
                 "utilization_pct": util.gpu,
                 "temp_c": temp,
                 "power_w": power_w,
@@ -560,6 +565,79 @@ def health():
     telemetry = get_gpu_telemetry()
     return {"status": "ok", "gpus": telemetry["gpus"],
             "gpu_telemetry": _telemetry_summary(telemetry)}
+
+# ── Prometheus exposition ────────────────────────────────────────────────────
+# Scraped by configs/prometheus/prometheus.yml (job loadout-manager). Hand-written
+# text exposition format 0.0.4; prometheus_client is not a dependency.
+#
+# loadout_service_expected is what the ProfileServiceDown alert joins against:
+# one series per service (= container name) the active profile runs, so a
+# profile-gated scrape target alerts only while its profile is active. It is
+# empty while a switch is in progress, because services are being stopped and
+# started on purpose.
+
+_METRICS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
+
+
+def _label_value(v) -> str:
+    return str(v).replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+
+
+def _labels(**labels) -> str:
+    if not labels:
+        return ""
+    return "{" + ",".join(f'{k}="{_label_value(v)}"' for k, v in labels.items()) + "}"
+
+
+def expected_services() -> List[str]:
+    """Services (container names) the active profile should be running, from
+    profiles.yaml. Empty with no active profile or while switching."""
+    active = state["active_profile"]
+    if not active or state["switching"]:
+        return []
+    try:
+        profile = load_profiles().get(active)
+    except Exception as e:
+        logger.warning(f"/metrics: cannot read profiles: {e}")
+        return []
+    return list((profile or {}).get("services") or [])
+
+
+def render_metrics() -> str:
+    out: List[str] = []
+
+    def metric(name: str, help_: str, samples) -> None:
+        out.append(f"# HELP {name} {help_}")
+        out.append(f"# TYPE {name} gauge")
+        for labels, value in samples:
+            out.append(f"{name}{_labels(**labels)} {value}")
+
+    metric("loadout_manager_up", "1 while the loadout-manager API is serving.", [({}, 1)])
+    metric("loadout_switching", "1 while a profile switch is in progress.",
+           [({}, 1 if state["switching"] else 0)])
+    active = state["active_profile"]
+    metric("loadout_active_profile_info",
+           "The active loadout profile (no series when none is active).",
+           [({"profile": active}, 1)] if active else [])
+    metric("loadout_service_expected",
+           "1 for each service (container name) the active profile should be running.",
+           [({"profile": active, "service": svc}, 1) for svc in expected_services()])
+
+    telemetry = read_gpu_telemetry()
+    gpus = telemetry["gpus"]
+    metric("loadout_gpu_telemetry_available", "1 if NVML could be read.",
+           [({}, 1 if telemetry["available"] else 0)])
+    metric("loadout_gpu_vram_used_bytes", "VRAM in use per GPU, from NVML.",
+           [({"gpu": g["index"]}, g["vram_used_bytes"]) for g in gpus])
+    metric("loadout_gpu_vram_total_bytes", "Total VRAM per GPU, from NVML.",
+           [({"gpu": g["index"]}, g["vram_total_bytes"]) for g in gpus])
+    return "\n".join(out) + "\n"
+
+
+@app.get("/metrics", response_class=PlainTextResponse)
+def prometheus_metrics():
+    """Prometheus scrape endpoint (text exposition format)."""
+    return PlainTextResponse(render_metrics(), media_type=_METRICS_CONTENT_TYPE)
 
 # ── Static Files (React Build) ───────────────────────────────────────────────
 
