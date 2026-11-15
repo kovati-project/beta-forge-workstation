@@ -176,10 +176,17 @@ def test_voices_and_models(adapter):
     assert [m["id"] for m in json.loads(body)["data"]] == ["piper"]
 
 
-def test_health_follows_wyoming_port(adapter):
+def test_health_follows_wyoming_port(adapter, monkeypatch):
     mod, wy, call = adapter
     assert call("GET", "/health")[0] == 200
-    wy.close()
+    # Point the adapter at a port nothing listens on. (Closing the fake server's
+    # socket is not enough on Linux: a thread blocked in accept() keeps the
+    # port accepting connections until it returns.)
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    free_port = probe.getsockname()[1]
+    probe.close()
+    monkeypatch.setattr(mod, "PIPER_PORT", free_port)
     assert call("GET", "/health")[0] == 503
 
 
