@@ -40,7 +40,11 @@ check "n8n HTTP responding" "curl -sf http://localhost:5678/"
 check "MCP filesystem answers initialize on :3100/mcp" "mcp_init 3100"
 check "MCP fetch answers initialize on :3103/mcp" "mcp_init 3103"
 check "MCP browser answers initialize on :3101/mcp" "mcp_init 3101"
-check "MCP code-exec answers initialize on :3102/mcp" "mcp_init 3102"
+if docker ps --format '{{.Names}}' | grep -qx mcp-code-exec; then
+    check "MCP code-exec answers initialize on :3102/mcp" "mcp_init 3102"
+else
+    echo "  - MCP code-exec disabled (compose profile code-exec), not checked"
+fi
 
 # Docker compose validation
 echo ""

@@ -27,12 +27,22 @@ echo "  ✓ n8n files and MCP sandbox directories ready"
 
 # ── 3. Start agentic services ─────────────────────────────────────────────────
 echo "[3/4] Starting agentic services..."
-for _c in n8n mcp-filesystem mcp-fetch mcp-browser mcp-code-exec; do
+# mcp-code-exec is behind the "code-exec" compose profile until the sandbox
+# fixes from the PR #93 review land; ENABLE_MCP_CODE_EXEC=1 opts in.
+SERVICES=(n8n mcp-filesystem mcp-fetch mcp-browser)
+PROFILE_ARGS=()
+if [ "${ENABLE_MCP_CODE_EXEC:-0}" = 1 ]; then
+    SERVICES+=(mcp-code-exec)
+    PROFILE_ARGS=(--profile code-exec)
+else
+    echo "  (mcp-code-exec disabled; set ENABLE_MCP_CODE_EXEC=1 to start it)"
+fi
+for _c in "${SERVICES[@]}"; do
     remove_orphan "$_c" ai-agentic
 done
 # --build: the MCP images are built locally from docker/mcp/* (pinned versions)
-docker compose -f "$REPO_ROOT/docker/compose.agentic.yml" up -d --build \
-  n8n mcp-filesystem mcp-fetch mcp-browser mcp-code-exec
+docker compose -f "$REPO_ROOT/docker/compose.agentic.yml" "${PROFILE_ARGS[@]}" up -d --build \
+  "${SERVICES[@]}"
 echo "  Waiting for startup (15s)..."
 sleep 15
 
@@ -40,7 +50,7 @@ sleep 15
 echo "[4/4] Verifying services..."
 
 READY=0
-for svc in n8n mcp-filesystem mcp-fetch mcp-browser mcp-code-exec; do
+for svc in "${SERVICES[@]}"; do
     if docker ps --filter name=$svc --filter status=running | grep -q $svc; then
         echo "  ✓ $svc running"
         READY=$(( READY + 1 ))
@@ -52,7 +62,7 @@ done
 echo ""
 echo "=== Deploy complete ==="
 echo ""
-echo "Services deployed (${READY}/5):"
+echo "Services deployed (${READY}/${#SERVICES[@]}):"
 echo "  n8n              → http://10.10.10.2:5678"
 echo "  MCP filesystem   → :3100/mcp (streamable HTTP)"
 echo "  MCP fetch        → :3103/mcp"

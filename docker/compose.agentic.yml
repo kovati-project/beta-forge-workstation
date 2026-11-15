@@ -173,6 +173,12 @@ services:
     pids_limit: 512
 
   mcp-code-exec:
+    # Off by default (compose profile "code-exec"). The security review on
+    # PR #93 found that a snippet can wedge the server (an orphaned child
+    # holding stdout open) and, running as the server's own uid, can signal
+    # it. Enable only after those are fixed: ENABLE_MCP_CODE_EXEC=1 for
+    # deploy-phase08.sh, or `docker compose --profile code-exec up -d`.
+    profiles: ["code-exec"]
     build: ./mcp/code-exec
     image: kovati/mcp-code-exec:1
     container_name: mcp-code-exec
