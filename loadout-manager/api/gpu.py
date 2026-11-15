@@ -90,6 +90,9 @@ def read_gpu_telemetry() -> Dict:
                 "vram_used_gb": round(mem.used / 1024**3, 1),
                 "vram_total_gb": round(mem.total / 1024**3, 1),
                 "vram_free_gb": round(mem.free / 1024**3, 1),
+                # unrounded, for GET /metrics (Prometheus wants base units)
+                "vram_used_bytes": int(mem.used),
+                "vram_total_bytes": int(mem.total),
                 "utilization_pct": util.gpu,
                 "temp_c": temp,
                 "power_w": power_w,

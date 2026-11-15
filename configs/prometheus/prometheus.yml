@@ -15,15 +15,26 @@ alerting:
 
 # Scrape addressing
 # Prometheus runs inside a container, so targets are addressed from the
-# container's point of view (never the host's LAN/10.x address):
-#   - Services on the shared external Docker network `ai-workstation` are
-#     reached by container_name:<container-internal-port> (NOT the host-published
-#     port, which can differ, e.g. open-webui 3000->8080, vllm-pair-b 8001->8000).
-#   - loadout-manager lives only on its own `ai-loadout` network, so it is
-#     reached via host.docker.internal:<published-port>; the prometheus service
-#     in docker/compose.monitoring.yml maps that name to the host gateway.
-# Targets whose container is not running (e.g. profile-gated vllm-pair-b /
-# vllm-4gpu) will show DOWN with a DNS error; that is expected.
+# container's point of view (never the host's LAN/10.x address): every target
+# is on the shared external Docker network `ai-workstation` and is reached by
+# container_name:<container-internal-port> (NOT the host-published port, which
+# can differ, e.g. vllm-pair-b 8001->8000). loadout-manager joined
+# ai-workstation for the Alertmanager webhook, so it is scraped the same way.
+#
+# Every job here serves real Prometheus exposition format (TASK-060 / #28).
+# Services whose stock image has no /metrics (ollama, comfyui, open-webui) are
+# deliberately NOT scraped; see the note at the end of scrape_configs.
+#
+# Profile-gated targets
+# Some containers only run while the loadout profile that owns them is active
+# (loadout-manager/profiles.yaml), so their target is DOWN (DNS error) the rest
+# of the time. Those jobs carry:
+#   profile_gated: "true"      ServiceDown (alerts.yml) ignores them
+#   service: <container name>  joined with loadout-manager's
+#                              loadout_service_expected{service=...} by
+#                              ProfileServiceDown, which fires only while the
+#                              active profile is supposed to be running them.
+# A new profile-gated job must set both labels.
 
 scrape_configs:
 
@@ -55,26 +66,16 @@ scrape_configs:
   - job_name: 'loadout-manager'
     scrape_interval: 10s
     scrape_timeout: 5s
-    # FIXME(TASK-060): loadout-manager exposes no Prometheus-format endpoint.
-    # /health returns JSON, so this target will be reachable but still report
-    # DOWN (text format parse error) until a real /metrics endpoint exists.
-    # Address fixed here; the endpoint itself is intentionally not changed.
-    metrics_path: /health
+    # GET /metrics: loadout_manager_up, loadout_switching,
+    # loadout_active_profile_info, loadout_service_expected, per-GPU VRAM.
+    # No `service` target label here: loadout_service_expected carries its own
+    # `service` label (the container it expects), which a target label of the
+    # same name would rename to exported_service.
+    metrics_path: /metrics
     static_configs:
-      - targets: ['host.docker.internal:8800']
+      - targets: ['loadout-manager:8800']
         labels:
-          service: gpu-orchestrator
-
-  - job_name: 'ollama'
-    scrape_interval: 15s
-    scrape_timeout: 10s
-    static_configs:
-      # NOTE: stock Ollama has no /metrics endpoint (404); needs a sidecar
-      # exporter before this target can ever be UP.
-      - targets: ['ollama:11434']
-        labels:
-          service: ollama
-          type: inference
+          component: gpu-orchestrator
 
   - job_name: 'vllm-pair-a'
     scrape_interval: 15s
@@ -82,8 +83,9 @@ scrape_configs:
     static_configs:
       - targets: ['vllm-pair-a:8000']
         labels:
-          service: vllm
-          profile: pair-a
+          service: vllm-pair-a
+          engine: vllm
+          profile_gated: "true"
           gpus: "0,3"
 
   - job_name: 'vllm-pair-b'
@@ -92,8 +94,9 @@ scrape_configs:
     static_configs:
       - targets: ['vllm-pair-b:8000']   # host port 8001 -> container 8000
         labels:
-          service: vllm
-          profile: pair-b
+          service: vllm-pair-b
+          engine: vllm
+          profile_gated: "true"
           gpus: "1,2"
 
   - job_name: 'vllm-4gpu'
@@ -102,31 +105,18 @@ scrape_configs:
     static_configs:
       - targets: ['vllm-4gpu:8000']     # host port 8002 -> container 8000
         labels:
-          service: vllm
-          profile: 4gpu
+          service: vllm-4gpu
+          engine: vllm
+          profile_gated: "true"
           gpus: "0,1,2,3"
 
-  - job_name: 'comfyui'
-    scrape_interval: 15s
-    scrape_timeout: 10s
-    static_configs:
-      # NOTE: stock ComfyUI has no /metrics endpoint (404); needs a custom
-      # node/exporter before this target can ever be UP.
-      - targets: ['comfyui:8188']
-        labels:
-          service: comfyui
-          type: image-gen
-
-  - job_name: 'open-webui'
-    scrape_interval: 20s
-    scrape_timeout: 10s
-    static_configs:
-      # NOTE: container-internal port is 8080 (host 3000 -> 8080). Open WebUI
-      # does not serve a Prometheus pull endpoint at /metrics in stock config
-      # (telemetry is OpenTelemetry/OTLP push), so this is expected DOWN.
-      - targets: ['open-webui:8080']
-        labels:
-          service: webui
+  # Not scraped: ollama, comfyui, open-webui. Their stock images serve no
+  # Prometheus endpoint (/metrics is a 404 or the web UI's HTML; Open WebUI's
+  # telemetry is OTLP push), so a job for them could never be UP and only kept
+  # ServiceDown firing. Container liveness and resource use for all three are
+  # already covered by cadvisor (docker-containers job, `name` label). Add a
+  # job back only together with an exporter that serves real metrics; if the
+  # service is profile-gated, give it the profile_gated/service labels above.
 
   - job_name: 'prometheus'
     scrape_interval: 15s

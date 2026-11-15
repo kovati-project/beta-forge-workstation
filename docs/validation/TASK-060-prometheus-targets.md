@@ -111,3 +111,23 @@ Not changed: `ServiceDown` (`up == 0`) semantics; a comment now lists the jobs
 expected to be down. `NetworkInterfaceDown`'s device regex is unverified (needs
 `ip -br link` on the host, and node-exporter is not on the host network
 namespace). Unit tests: `configs/prometheus/tests/alerts_test.yml`.
+
+## Follow-up: no permanently-down targets (#28)
+
+Branch `fix/prometheus-targets-noise`. Live check after the address fix showed
+six `ServiceDown` alerts firing permanently: loadout-manager (DNS for
+`host.docker.internal` failed in the prometheus container, and `/health` is
+JSON anyway), ollama / comfyui / open-webui (no Prometheus endpoint), and
+vllm-pair-a / vllm-pair-b (profile-gated, not running). Decision taken:
+
+| Job | Now |
+| --- | --- |
+| loadout-manager | scraped at `loadout-manager:8800/metrics` (new Prometheus endpoint) |
+| ollama, comfyui, open-webui | removed from `prometheus.yml`; cadvisor covers container liveness |
+| vllm-pair-a / pair-b / 4gpu | labelled `profile_gated="true"`, `service=<container>` |
+
+`ServiceDown` now ignores profile-gated targets. `ProfileServiceDown` fires
+when loadout-manager's `loadout_service_expected{service=...}` says the active
+profile should be running a gated service and its target has been down for
+10 minutes. Expected after deploy: every always-on target UP, the gated job of
+the active profile UP, the other gated jobs DOWN without alerting.
