@@ -1,0 +1,31 @@
+name: caddy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "configs/caddy/**"
+      - "docker/compose.caddy.yml"
+      - ".github/workflows/caddy.yml"
+  pull_request:
+    paths:
+      - "configs/caddy/**"
+      - "docker/compose.caddy.yml"
+      - ".github/workflows/caddy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: caddy (validate Caddyfile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Same image as docker/compose.caddy.yml. `caddy validate` adapts the
+      # Caddyfile and provisions every module (unknown directives, bad matchers
+      # and snippet errors fail) without binding ports or issuing certificates.
+      - name: caddy validate
+        run: |
+          docker run --rm -v "$PWD/configs/caddy:/work:ro" caddy:2-alpine \
+            caddy validate --adapter caddyfile --config /work/Caddyfile.security

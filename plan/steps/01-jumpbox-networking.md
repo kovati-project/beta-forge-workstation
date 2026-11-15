@@ -246,6 +246,6 @@ ipmitool -I lanplus -H <bmc-ip> -U admin -P <password> chassis status
 
 ## Notes
 - The workstation should have **no open ports to the general LAN** — all traffic enters via Caddy on the jumpbox
-- Add `10.10.10.2 ai.local` to `/etc/hosts` on any client machines
+- Add `10.10.10.2 ai.local auth.ai.local` to `/etc/hosts` on any client machines (`auth.ai.local` serves the Authentik login over HTTPS, see `docs/runbooks/authentik-https.md`)
 - WebSocket support is automatic in Caddy — required for Open WebUI and JupyterLab
 - Revisit auth in Phase 13 to replace basic auth with a proper IdP (Authentik or Authelia)
