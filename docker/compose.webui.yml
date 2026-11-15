@@ -35,6 +35,12 @@ services:
       - COMFYUI_BASE_URL=http://comfyui:8188
 
       # RAG
+      # Store knowledge-base vectors in the shared Qdrant (compose.storage.yml)
+      # instead of the default Chroma inside this container. Open WebUI keeps
+      # its own "open-webui_*" collections, separate from the RAG collections
+      # scripts/setup-qdrant.py creates. Env-only setting: recreate to apply.
+      - VECTOR_DB=qdrant
+      - QDRANT_URI=http://qdrant:6333
       - RAG_EMBEDDING_MODEL=nomic-embed-text
       - RAG_EMBEDDING_ENGINE=ollama
       - CHUNK_SIZE=1000
