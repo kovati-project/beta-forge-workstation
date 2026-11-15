@@ -36,6 +36,12 @@ services:
       - HOST_COMPOSE_DIR=${REPO_ROOT:-/home/kasemo/ai-workstation-project}/docker
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # api/voice.py. This container is only on ai-loadout, so "localhost" is
+      # itself; reach the voice services through their published host ports.
+      - WHISPER_URL=http://host.docker.internal:9099
+      - PIPER_URL=http://host.docker.internal:5000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         reservations:

@@ -37,21 +37,20 @@ fi
 # Create storage directories
 echo "Creating storage directories..."
 sudo mkdir -p /data/models/whisper
-sudo mkdir -p /data/models/piper/voices
+sudo mkdir -p /data/models/piper
 sudo mkdir -p /data/audio
 sudo chmod -R 755 /data/audio
 echo "✓ Directories created"
 echo ""
 
 # Check if models are available
-if [ ! -d "/data/models/whisper/Systran" ]; then
+if [ -z "$(ls -d /data/models/whisper/hub/models--* 2>/dev/null)" ]; then
     echo "WARNING: Whisper model not found"
     echo "Pull models first: bash scripts/pull-voice-models.sh"
 fi
 
-if [ ! -f "/data/models/piper/voices/en_US-lessac-high.onnx" ]; then
-    echo "WARNING: Piper voice not found"
-    echo "Pull models first: bash scripts/pull-voice-models.sh"
+if [ -z "$(ls /data/models/piper/*.onnx 2>/dev/null)" ]; then
+    echo "NOTE: no Piper voice in /data/models/piper yet; piper downloads PIPER_VOICE on first start"
 fi
 echo ""
 
@@ -69,6 +68,7 @@ echo ""
 echo "Starting voice services..."
 remove_orphan whisper ai-voice
 remove_orphan piper ai-voice
+remove_orphan piper-openai ai-voice
 docker compose -f docker/compose.voice.yml up -d
 echo "✓ Voice services starting"
 echo ""
@@ -76,7 +76,7 @@ echo ""
 # Wait for services to initialize
 echo "Waiting for services to initialize..."
 for i in {1..30}; do
-    if curl -sf http://localhost:9099/v1/models > /dev/null 2>&1; then
+    if curl -sf http://localhost:9099/health > /dev/null 2>&1; then
         break
     fi
     if [ $i -eq 30 ]; then
@@ -87,11 +87,11 @@ done
 
 echo ""
 echo "Waiting for Piper..."
-for i in {1..20}; do
-    if curl -sf http://localhost:5000/docs > /dev/null 2>&1; then
+for i in {1..120}; do
+    if curl -sf http://localhost:5000/health > /dev/null 2>&1; then
         break
     fi
-    if [ $i -eq 20 ]; then
+    if [ $i -eq 120 ]; then
         echo "WARNING: Piper still initializing"
     fi
     sleep 1
@@ -99,14 +99,14 @@ done
 
 echo ""
 echo "Verifying services..."
-if curl -sf http://localhost:9099/v1/models > /dev/null 2>&1; then
+if curl -sf http://localhost:9099/health > /dev/null 2>&1; then
     echo "✓ Whisper STT responding on :9099"
 else
     echo "⊘ Whisper STT initializing (might need more time)"
 fi
 
-if curl -sf http://localhost:5000/docs > /dev/null 2>&1; then
-    echo "✓ Piper TTS responding on :5000"
+if curl -sf http://localhost:5000/health > /dev/null 2>&1; then
+    echo "✓ Piper TTS (piper-openai adapter) responding on :5000"
 else
     echo "⊘ Piper TTS initializing (might need more time)"
 fi
@@ -122,21 +122,18 @@ echo ""
 echo "Next steps:"
 echo ""
 echo "1. Test Whisper (speech-to-text):"
-echo "   curl http://localhost:9099/v1/models"
+echo "   curl http://localhost:9099/api/ps   # loaded model (after one request)"
 echo ""
 echo "2. Test Piper (text-to-speech):"
-echo "   curl http://localhost:5000/docs"
+echo "   curl -X POST http://localhost:5000/v1/audio/speech -H 'Content-Type: application/json' -d '{\"input\":\"hello\"}' -o hello.wav"
 echo ""
-echo "3. Configure Open WebUI voice:"
-echo "   Settings → Audio:"
-echo "     Speech to Text → OpenAI (compatible)"
-echo "       API Base: http://10.10.10.2:9099/v1"
-echo "       API Key: EMPTY"
-echo "       Model: whisper-1"
-echo "     Text to Speech → OpenAI (compatible)"
-echo "       API Base: http://10.10.10.2:5000/v1"
-echo "       API Key: EMPTY"
-echo "       Model: piper"
+echo "3. Open WebUI voice is pre-wired in docker/compose.webui.yml"
+echo "   (STT http://whisper:8000/v1, TTS http://piper-openai:8000/v1)."
+echo "   Recreate open-webui after this deploy so it picks the env up:"
+echo "     docker compose -f docker/compose.webui.yml up -d open-webui"
+echo "   If Admin → Settings → Audio was ever saved, set the same values there:"
+echo "     STT: OpenAI, http://whisper:8000/v1, key EMPTY, model whisper-1"
+echo "     TTS: OpenAI, http://piper-openai:8000/v1, key EMPTY, model piper"
 echo ""
 echo "4. Test voice in Open WebUI:"
 echo "   Click microphone icon → speak → verify transcription"

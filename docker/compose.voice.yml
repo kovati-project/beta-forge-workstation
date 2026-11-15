@@ -17,10 +17,19 @@ services:
       # faster-whisper-server (latest-cuda == v0.5.0) reads nested settings with a
       # DOUBLE underscore (pydantic env_nested_delimiter="__"). The previous
       # single-underscore WHISPER_* names were silently ignored. The model must be
-      # the Hugging Face repo id. whisper-1 requests resolve to this model.
-      - WHISPER__MODEL=Systran/faster-whisper-large-v3
+      # the Hugging Face repo id. whisper-1 requests (Open WebUI, Loadout Manager)
+      # resolve to this model, so this is the ONE place the STT model is chosen.
+      # Set WHISPER_MODEL in docker/.env to change it; scripts/pull-voice-models.sh
+      # reads the same variable to pre-seed the cache.
+      # Note: GET /v1/models in this image lists Hugging Face Hub models sorted by
+      # downloads (faster-whisper-small first). It is NOT the loaded model; use
+      # GET /api/ps for that.
+      - WHISPER__MODEL=${WHISPER_MODEL:-Systran/faster-whisper-large-v3}
       - WHISPER__INFERENCE_DEVICE=cuda
-      - WHISPER__COMPUTE_TYPE=float16
+      # int8_float16 keeps large-v3 at ~1.6 GB of VRAM. GPU 0 is shared with
+      # vllm-4gpu (--gpu-memory-utilization 0.82) and has ~3.5 GB free, which
+      # float16 large-v3 (~3.1 GB weights plus working memory) does not fit in.
+      - WHISPER__COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8_float16}
       - DEFAULT_LANGUAGE=en
       # beam size and VAD are not server-level settings in this image version;
       # VAD is a per-request `vad_filter` form field on /v1/audio/transcriptions.
@@ -42,18 +51,20 @@ services:
       retries: 3
       start_period: 60s
 
-  # ── Piper TTS: fast local text-to-speech ─────────────────────────────────
+  # ── Piper TTS: Wyoming server (raw TCP, NOT HTTP) ────────────────────────
+  # linuxserver/piper only speaks the Wyoming protocol on 10200. It is reachable
+  # on the ai-workstation network as piper:10200; HTTP clients use piper-openai.
   piper:
     image: ghcr.io/linuxserver/piper:latest
     container_name: piper
     restart: unless-stopped
-    ports:
-      - "5000:10200"
+    expose:
+      - "10200"
     volumes:
       - /data/models/piper:/config
       - /data/audio:/audio
     environment:
-      - PIPER_VOICE=en_US-lessac-high
+      - PIPER_VOICE=${PIPER_VOICE:-en_US-lessac-high}
       # linuxserver/piper variable names (the previous PIPER_*_SCALE / PIPER_NOISE_W
       # names are not read by the image and were silently ignored).
       - PIPER_LENGTH=1.0
@@ -69,6 +80,45 @@ services:
       retries: 3
       # First start downloads the voice model from Hugging Face before listening.
       start_period: 120s
+
+  # ── piper-openai: OpenAI-compatible /v1/audio/speech in front of Piper ──────
+  # Open WebUI (AUDIO_TTS_ENGINE=openai), the Loadout Manager voice API and
+  # scripts/validate-phase12.sh all speak HTTP. This stdlib-only adapter turns
+  # POST /v1/audio/speech into a Wyoming `synthesize` call and returns WAV.
+  # It owns host port 5000 (the port the repo, UFW and the UI always called
+  # "Piper TTS"); before this, 5000 was mapped straight to the Wyoming socket.
+  piper-openai:
+    image: python:3.12-slim
+    container_name: piper-openai
+    restart: unless-stopped
+    command: ["python", "-u", "/app/piper_openai.py"]
+    # Standard-library HTTP adapter on an unprivileged port: needs no root,
+    # no capabilities and no writable filesystem (#68).
+    user: "65534:65534"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports:
+      - "5000:8000"
+    volumes:
+      - ./piper-openai/piper_openai.py:/app/piper_openai.py:ro
+    environment:
+      - PIPER_HOST=piper
+      - PIPER_PORT=10200
+      - PIPER_VOICE=${PIPER_VOICE:-en_US-lessac-high}
+      - PORT=8000
+    depends_on:
+      piper:
+        condition: service_started
+    healthcheck:
+      # /health returns 503 unless the Wyoming port answers.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   default:

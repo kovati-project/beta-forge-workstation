@@ -35,22 +35,24 @@ else
     check_fail "Whisper container not running"
 fi
 
-# 2. Piper container running
-if docker ps | grep -q piper; then
-    check_pass "Piper container running"
-else
-    check_fail "Piper container not running"
-fi
+# 2. Piper (Wyoming) and its OpenAI-compatible HTTP adapter running
+for c in piper piper-openai; do
+    if docker ps --format '{{.Names}}' | grep -qx "$c"; then
+        check_pass "$c container running"
+    else
+        check_fail "$c container not running"
+    fi
+done
 
 # 3. Whisper API responding
-if curl -sf http://localhost:9099/v1/models > /dev/null 2>&1; then
+if curl -sf http://localhost:9099/health > /dev/null 2>&1; then
     check_pass "Whisper API responding on :9099"
 else
     check_fail "Whisper API not responding on :9099"
 fi
 
-# 4. Piper API responding
-if curl -sf http://localhost:5000/docs > /dev/null 2>&1; then
+# 4. Piper API responding (piper-openai /health is 200 only if Wyoming answers)
+if curl -sf http://localhost:5000/health > /dev/null 2>&1; then
     check_pass "Piper API responding on :5000"
 else
     check_fail "Piper API not responding on :5000"
@@ -64,7 +66,7 @@ else
 fi
 
 # 6. Model directories exist
-for dir in /data/models/whisper /data/models/piper/voices /data/audio; do
+for dir in /data/models/whisper /data/models/piper /data/audio; do
     if [ -d "$dir" ]; then
         check_pass "Directory exists: $dir"
     else
@@ -72,16 +74,17 @@ for dir in /data/models/whisper /data/models/piper/voices /data/audio; do
     fi
 done
 
-# 7. Whisper model files exist
-if [ -f "/data/models/whisper/Systran/faster-whisper-large-v3/model.safetensors" ] || \
-   [ -d "/data/models/whisper/Systran/faster-whisper-large-v3" ]; then
-    check_pass "Whisper large-v3 model available"
+# 7. Whisper model files exist (HF cache layout: hub/models--<org>--<name>)
+WHISPER_MODEL=$(sed -n 's/^WHISPER_MODEL=//p' docker/.env 2>/dev/null | tail -1)
+WHISPER_MODEL=${WHISPER_MODEL:-Systran/faster-whisper-large-v3}
+if [ -d "/data/models/whisper/hub/models--${WHISPER_MODEL//\//--}/snapshots" ]; then
+    check_pass "Whisper model $WHISPER_MODEL in cache"
 else
     check_warn "Whisper model not found (pull with: bash scripts/pull-voice-models.sh)"
 fi
 
 # 8. Piper voice files exist
-VOICE_COUNT=$(find /data/models/piper/voices -name "*.onnx" | wc -l)
+VOICE_COUNT=$(find /data/models/piper -name "*.onnx" | wc -l)
 if [ "$VOICE_COUNT" -gt 0 ]; then
     check_pass "Piper voice models available ($VOICE_COUNT voice(s))"
 else
@@ -124,6 +127,25 @@ else
     check_warn "Piper TTS test inconclusive"
 fi
 
+# 11. Round trip: Piper speech -> Whisper text (uses the configured model)
+echo ""
+echo "Testing TTS -> STT round trip..."
+if curl -sf -X POST http://localhost:5000/v1/audio/speech \
+    -H "Content-Type: application/json" \
+    -d '{"model":"piper","input":"The quick brown fox jumps over the lazy dog.","response_format":"wav"}' \
+    -o /tmp/test_roundtrip.wav 2>/dev/null; then
+    RT=$(curl -sf -m 600 -F "file=@/tmp/test_roundtrip.wav" -F "model=whisper-1" \
+        http://localhost:9099/v1/audio/transcriptions 2>/dev/null)
+    if echo "$RT" | grep -qi "quick brown fox"; then
+        check_pass "Round trip transcribed: $RT"
+    else
+        check_fail "Round trip mismatch: ${RT:-no response}"
+    fi
+    echo "    loaded whisper model(s): $(curl -s http://localhost:9099/api/ps)"
+else
+    check_warn "Round trip skipped (TTS failed)"
+fi
+
 echo ""
 echo "Automated checks: $PASSED passed, $FAILED failed"
 echo ""
@@ -135,13 +157,13 @@ echo "[ ] Whisper model loading:"
 echo "    docker logs whisper | tail -20 (should see 'Model loaded')"
 echo ""
 echo "[ ] GPU0 VRAM usage:"
-echo "    nvidia-smi (should show ~6GB used by whisper)"
+echo "    nvidia-smi (large-v3 int8_float16 adds ~1.6-2.5GB on GPU0 while loaded)"
 echo ""
 echo "[ ] Whisper API detailed check:"
-echo "    curl -s http://localhost:9099/v1/models | jq"
+echo "    curl -s http://localhost:9099/api/ps | jq   (loaded model; /v1/models lists HF Hub, not this)"
 echo ""
 echo "[ ] Piper voice list:"
-echo "    curl -s http://localhost:5000/api/voices | jq"
+echo "    curl -s http://localhost:5000/v1/audio/voices | jq"
 echo ""
 echo "[ ] Open WebUI voice integration:"
 echo "    Open WebUI → Settings → Audio"
