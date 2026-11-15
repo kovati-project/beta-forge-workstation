@@ -103,6 +103,7 @@ sudo bash scripts/setup-systemd-service.sh
 
 | Script | Purpose |
 | ------ | ------- |
+| `setup-minio-buckets.sh` | Create the 5 MinIO buckets and the 90-day expiry on `outputs` (idempotent; `--check` to verify only). Run by `deploy-phase09.sh` |
 | `setup-qdrant.py` | Create the 4 Qdrant collections (768-dim, `nomic-embed-text`) |
 | `ingest-documents.py` | Chunk and embed documents from `/data/documents/` into Qdrant |
 | `code-router.py` | Route coding tasks to the appropriate model by complexity |
