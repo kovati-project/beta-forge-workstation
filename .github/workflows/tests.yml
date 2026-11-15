@@ -25,6 +25,17 @@ jobs:
       - run: python -m pytest -q -rxXs
         working-directory: loadout-manager
 
+  scripts:
+    name: shell scripts (stubbed harness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: syntax check
+        run: for f in scripts/backup.sh configs/drivers/verify-drivers.sh scripts/tests/*.sh; do bash -n "$f"; done
+      # Stub docker / mc / nvidia-smi on PATH; no daemon or GPU needed.
+      - run: bash scripts/tests/test-backup.sh
+      - run: bash scripts/tests/test-verify-drivers.sh
+
   promtool:
     name: prometheus alert rules (promtool)
     runs-on: ubuntu-latest
