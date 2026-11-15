@@ -60,7 +60,7 @@ services:
 
   # ── Authentik: Identity Provider with OAuth2/OIDC/LDAP ─────────────────
   authentik:
-    image: ghcr.io/goauthentik/server:latest
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2025.2.4}
     container_name: authentik
     restart: unless-stopped
     security_opt:
@@ -103,7 +103,7 @@ services:
 
   # ── Authentik worker (background tasks) ────────────────────────────────
   authentik-worker:
-    image: ghcr.io/goauthentik/server:latest
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2025.2.4}
     container_name: authentik-worker
     restart: unless-stopped
     security_opt:

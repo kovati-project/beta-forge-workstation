@@ -4,7 +4,12 @@ services:
 
   # ── Kohya_ss: image LoRA and Dreambooth ───────────────────────────────────
   kohya:
-    image: ghcr.io/bmaltais/kohya-ss:latest
+    # Upstream publishes the GUI image as kohya-ss-gui; the old
+    # ghcr.io/bmaltais/kohya-ss name no longer resolves (access denied).
+    # The image runs as uid 1000 and its CMD already starts the GUI headless on
+    # 0.0.0.0:7860 (ENTRYPOINT dumb-init), so there is no command override:
+    # passing only flags would replace that CMD and nothing would start.
+    image: ghcr.io/bmaltais/kohya-ss-gui:v26.0.0
     container_name: kohya
     restart: unless-stopped
     security_opt:
@@ -20,10 +25,9 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=1,2
       - KOHYA_LOG_LEVEL=INFO
-    command: >
-      --listen 0.0.0.0
-      --server_port 7860
-      --headless
+      - SAFETENSORS_FAST_GPU=1
+    tmpfs:
+      - /tmp
     deploy:
       resources:
         reservations:
