@@ -118,7 +118,10 @@ $rsyncArgs = @(
     "--exclude=distro/",
     "--exclude=node_modules/",
     "--exclude=.pytest_cache/",
-    "--exclude=*.egg-info/"
+    "--exclude=*.egg-info/",
+    # Rendered on the host by scripts/init-secrets.sh (holds real DB passwords);
+    # never overwrite the host's copy with a local one.
+    "--exclude=/configs/postgres/init.sql"
 )
 
 if ($DryRun) { $rsyncArgs += "--dry-run" }

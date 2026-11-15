@@ -18,7 +18,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List
-import pynvml
 import logging
 import os
 
@@ -27,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Import API routers
 from api import create_router
+from api.gpu import read_gpu_telemetry
 
 app = FastAPI(title="Loadout Manager", version="1.0.0")
 
@@ -129,10 +129,8 @@ def load_profiles() -> Dict:
         return yaml.safe_load(f)["profiles"]
 
 # ── GPU telemetry ────────────────────────────────────────────────────────────
-# NVML failure used to be swallowed and reported as an empty GPU list, which the
-# UI could not tell apart from "no GPUs" (TASK-010 / #5). The reader below returns
-# an explicit availability flag and error string instead. `gpus` is still always a
-# list, so consumers written against the old shape keep working.
+# The NVML reader itself lives in api/gpu.py (shared with api/metrics.py); this
+# section adds topology and profile-claim annotations on top of it.
 
 # Workload kind per service name; drives the colour of the per-GPU service tag.
 # Services not listed here render with the neutral tag colour.
@@ -156,93 +154,6 @@ SERVICE_TYPES = {
 # physical topology (`nvidia-smi topo -m` shows NV4 only between 0-3 and 1-2).
 _PAIR_PROFILE_RE = re.compile(r"^inference-pair-([a-z])$")
 
-# Repeated polls must not flood the log with an identical failure every 3s.
-_GPU_ERROR_RELOG_SECS = 300
-_gpu_last_error: Optional[str] = None
-_gpu_last_error_logged = 0.0
-
-
-def _log_gpu_telemetry(error: Optional[str], exc: Optional[BaseException] = None) -> None:
-    """Log availability transitions; re-log a persisting failure only occasionally."""
-    global _gpu_last_error, _gpu_last_error_logged
-    if error is None:
-        if _gpu_last_error is not None:
-            logger.info(f"GPU telemetry recovered (was: {_gpu_last_error})")
-            _gpu_last_error = None
-        return
-    now = time.monotonic()
-    if error != _gpu_last_error or now - _gpu_last_error_logged >= _GPU_ERROR_RELOG_SECS:
-        logger.error(f"GPU telemetry unavailable: {error}", exc_info=exc)
-        _gpu_last_error = error
-        _gpu_last_error_logged = now
-
-
-def _gpu_unavailable(stage: str, exc: Optional[BaseException] = None,
-                     message: Optional[str] = None) -> Dict:
-    if message is None:
-        message = f"{type(exc).__name__}: {exc}"
-    error = f"{stage}: {message}"[:300]
-    _log_gpu_telemetry(error, exc)
-    return {"available": False, "gpus": [], "error": error}
-
-
-def read_gpu_telemetry() -> Dict:
-    """Read raw per-GPU metrics from NVML.
-
-    Returns {"available": bool, "gpus": [...], "error": str | None}. When NVML
-    cannot be initialised, enumerated or queried, `available` is False, `gpus`
-    is [] and `error` says why. Zero visible devices is also reported as
-    unavailable: on this workstation it means the container cannot see the GPUs.
-    """
-    try:
-        pynvml.nvmlInit()
-    except Exception as e:
-        return _gpu_unavailable("nvmlInit", e)
-
-    stage = "enumerate devices"
-    try:
-        count = pynvml.nvmlDeviceGetCount()
-        if count == 0:
-            return _gpu_unavailable(
-                stage, message="NVML initialised but reports 0 GPU devices "
-                               "(check NVIDIA_VISIBLE_DEVICES and the device reservation)")
-        gpus = []
-        for i in range(count):
-            stage = f"query GPU {i}"
-            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-            mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-            try:
-                power_w = round(pynvml.nvmlDeviceGetPowerUsage(handle) / 1000, 1)
-            except Exception:
-                power_w = 0
-            try:
-                _pci = pynvml.nvmlDeviceGetPciInfo(handle)
-                bus_id = _pci.busId.decode() if isinstance(_pci.busId, bytes) else _pci.busId
-            except Exception:
-                bus_id = None
-            gpus.append({
-                "index": i,
-                "vram_used_gb": round(mem.used / 1024**3, 1),
-                "vram_total_gb": round(mem.total / 1024**3, 1),
-                "vram_free_gb": round(mem.free / 1024**3, 1),
-                "utilization_pct": util.gpu,
-                "temp_c": temp,
-                "power_w": power_w,
-                "bus_id": bus_id,
-            })
-    except Exception as e:
-        return _gpu_unavailable(stage, e)
-    finally:
-        try:
-            pynvml.nvmlShutdown()
-        except Exception:
-            pass
-
-    _log_gpu_telemetry(None)
-    return {"available": True, "gpus": gpus, "error": None}
-
 
 def _nvlink_bridge_labels(profiles: Dict) -> Dict[int, str]:
     """Map GPU index -> "Bridge X" from the inference-pair-X profiles."""
@@ -260,6 +171,42 @@ def _nvlink_bridge_labels(profiles: Dict) -> Dict[int, str]:
         for idx in pair:
             labels[idx] = f"Bridge {m.group(1).upper()}"
     return labels
+
+
+def _nvlink_pairs(profiles: Dict) -> List[List[int]]:
+    """The NVLink-bridged GPU pairs, ordered by bridge letter ([[0, 3], [1, 2]])."""
+    pairs: Dict[str, List[int]] = {}
+    for idx, label in _nvlink_bridge_labels(profiles).items():
+        pairs.setdefault(label, []).append(idx)
+    return [sorted(pairs[label]) for label in sorted(pairs)]
+
+
+# Card accent per workload kind on the Loadout page; inference is the default.
+_ACCENT_BY_TYPE = {"training": "amber", "image": "purple"}
+
+
+def _profile_accent(p: Dict) -> str:
+    """`accent` from profiles.yaml if set, else from the profile's services:
+    any training service -> amber, else any image service -> purple, else cyan."""
+    if p.get("accent"):
+        return p["accent"]
+    types = {SERVICE_TYPES.get(s) for s in p.get("services") or []}
+    for kind in ("training", "image"):
+        if kind in types:
+            return _ACCENT_BY_TYPE[kind]
+    return "cyan"
+
+
+def _profile_nvlink_pairs(p: Dict, pairs: List[List[int]]) -> List[List[int]]:
+    """`nvlink_pairs` from profiles.yaml if set, else the bridged pairs whose
+    GPUs are both claimed by the profile."""
+    if "nvlink_pairs" in p:
+        return p["nvlink_pairs"] or []
+    try:
+        gpus = {int(g) for g in p.get("exclusive_gpus") or []}
+    except (TypeError, ValueError):
+        return []
+    return [pair for pair in pairs if set(pair) <= gpus]
 
 
 def _annotate_gpus(gpus: List[Dict]) -> None:
@@ -466,6 +413,7 @@ async def ws_events(websocket: WebSocket):
 def list_loadouts():
     """List all available loadout profiles."""
     profiles = load_profiles()
+    pairs = _nvlink_pairs(profiles)
     return {
         name: {
             "description": p.get("description", ""),
@@ -474,6 +422,8 @@ def list_loadouts():
             "vram_required_gb": p.get("vram_required_gb"),
             "compatible_with": p.get("compatible_with", []),
             "incompatible_with": p.get("incompatible_with", []),
+            "accent": _profile_accent(p),
+            "nvlink_pairs": _profile_nvlink_pairs(p, pairs),
             "active": name == state["active_profile"]
         }
         for name, p in profiles.items()

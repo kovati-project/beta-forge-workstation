@@ -78,6 +78,22 @@ export function GPUTelemetrySection() {
   // NVLink pair order: active pair (0,3) first, idle pair (1,2) second
   const orderedGPUs = ['GPU0', 'GPU3', 'GPU1', 'GPU2'];
 
+  // The backend sets `available: false` (with `error`) when NVML cannot be read;
+  // an empty response means the API itself was unreachable. Either way the GPU
+  // state is unknown, so show that instead of rendering zeros.
+  const reachable = orderedGPUs.some((gpuId) => gpuData[gpuId]);
+  if (gpuData.available === false || !reachable) {
+    const reason = reachable
+      ? gpuData.error || 'NVML could not be read'
+      : 'Could not reach /api/metrics/gpu';
+    return (
+      <div className="gpu-section unavailable" role="status" title={reason}>
+        <div className="unavailable-title">GPU telemetry unavailable</div>
+        <div className="unavailable-reason">{reason}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="gpu-section">
       {/* VRAM sparkline charts */}
@@ -109,7 +125,7 @@ export function GPUTelemetrySection() {
                   {gpu.temp ?? 0}°C
                 </span>
                 <span className="chart-stat">
-                  {gpu.power_w ?? 0} W
+                  {gpu.power_w ?? '—'} W
                 </span>
               </div>
             </div>
