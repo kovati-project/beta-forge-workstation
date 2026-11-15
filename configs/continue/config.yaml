@@ -1,6 +1,10 @@
 # Continue.dev (v1+ YAML format) — copy to ~/.continue/config.yaml on the client.
 # Same models as config.json, which older Continue releases read instead.
 # All models are served by Ollama on the workstation (GPU1+GPU2).
+# kovati.lan must resolve to the workstation on this client: add a hosts entry
+# (C:\Windows\System32\drivers\etc\hosts or /etc/hosts), e.g.
+#   192.168.1.102  kovati.lan
+# so an IP change is one hosts edit, not an edit of every apiBase (#51).
 name: Kovati Workstation
 version: 1.0.0
 schema: v1
@@ -9,7 +13,7 @@ models:
   - name: Qwen3-Coder 30B [Primary]
     provider: ollama
     model: qwen3-coder:30b
-    apiBase: http://192.168.1.102:11434
+    apiBase: http://kovati.lan:11434
     roles: [chat, edit, apply]
     capabilities: [tool_use]
     defaultCompletionOptions:
@@ -20,7 +24,7 @@ models:
   - name: Devstral 24B [Agent alt]
     provider: ollama
     model: devstral
-    apiBase: http://192.168.1.102:11434
+    apiBase: http://kovati.lan:11434
     roles: [chat, edit, apply]
     capabilities: [tool_use]
     defaultCompletionOptions:
@@ -30,7 +34,7 @@ models:
   - name: Qwen2.5-Coder 7B [Autocomplete]
     provider: ollama
     model: qwen2.5-coder:7b
-    apiBase: http://192.168.1.102:11434
+    apiBase: http://kovati.lan:11434
     roles: [autocomplete]
     defaultCompletionOptions:
       contextLength: 4096
@@ -39,7 +43,7 @@ models:
   - name: Nomic Embed
     provider: ollama
     model: nomic-embed-text
-    apiBase: http://192.168.1.102:11434
+    apiBase: http://kovati.lan:11434
     roles: [embed]
 
 context:

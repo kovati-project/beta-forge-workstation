@@ -74,6 +74,9 @@ app.include_router(api_router)
 # ── Configuration ────────────────────────────────────────────────────────────
 CONFIG_PATH = Path(__file__).parent / "profiles.yaml"
 COMPOSE_BASE = Path(__file__).parent.parent / "docker"
+# docker/.env (bind-mounted at /compose/.env); passed explicitly so ${VAR}
+# references in the compose files resolve (#51)
+ENV_FILE = Path(os.environ.get("ENV_FILE", "/compose/.env"))
 REPO_ROOT = Path(__file__).parent
 
 # ── State ────────────────────────────────────────────────────────────────────
@@ -504,6 +507,8 @@ async def do_switch(profile_name: str):
         services = profile.get("services") or []
         if services:
             cmd = ["docker", "compose"]
+            if ENV_FILE.exists():
+                cmd += ["--env-file", str(ENV_FILE)]
             for cf in profile["compose_files"]:
                 cf_name = cf.split("/")[-1]
                 cmd += ["-f", str(COMPOSE_BASE / cf_name)]

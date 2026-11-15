@@ -16,14 +16,16 @@ services:
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://10.10.10.2:5678/
+      # Browser-facing URLs use WORKSTATION_HOST from docker/.env (#51)
+      - WEBHOOK_URL=http://${WORKSTATION_HOST:-10.10.10.2}:5678/
       - DB_TYPE=sqlite
       - EXECUTIONS_PROCESS=main
       # LLM integration via OpenAI-compatible endpoint (Ollama)
       - N8N_AI_ENABLED=true
       - N8N_AI_PROVIDER=openai
       - N8N_AI_OPENAI_API_KEY=EMPTY
-      - N8N_AI_OPENAI_BASE_URL=http://10.10.10.2:11434/v1
+      # Container-to-container: ollama by name on the ai-workstation network
+      - N8N_AI_OPENAI_BASE_URL=http://ollama:11434/v1
 
   # ── Dify: LLM app development platform ────────────────────────────────────
   dify-api:
@@ -39,7 +41,7 @@ services:
       - DB_DATABASE=dify
       - REDIS_HOST=dify-redis
       - STORAGE_TYPE=local
-      - OPENAI_API_BASE=http://10.10.10.2:11434/v1
+      - OPENAI_API_BASE=http://ollama:11434/v1
     depends_on:
       - dify-db
       - dify-redis
@@ -55,8 +57,9 @@ services:
     ports:
       - "3010:3000"
     environment:
-      - NEXT_PUBLIC_API_PREFIX=http://10.10.10.2:5001/v1
-      - NEXT_PUBLIC_APP_API_PREFIX=http://10.10.10.2:5001/api
+      # Read by the browser, so these must be the host address, not a container name
+      - NEXT_PUBLIC_API_PREFIX=http://${WORKSTATION_HOST:-10.10.10.2}:5001/v1
+      - NEXT_PUBLIC_APP_API_PREFIX=http://${WORKSTATION_HOST:-10.10.10.2}:5001/api
 
   dify-db:
     image: postgres:15-alpine

@@ -19,6 +19,9 @@ except ImportError:
 
 router = APIRouter(tags=["operations"])
 
+# Workstation address shown in the runbook (IP or hostname), from docker/.env (#51)
+WORKSTATION_HOST = os.getenv("WORKSTATION_HOST", "10.10.10.2")
+
 @router.get("/operations/health")
 async def system_health():
     """Get comprehensive system health status."""
@@ -150,7 +153,7 @@ async def get_runbook():
                 "steps": [
                     "1. Power on workstation and wait for bootloader",
                     "2. Check BIOS POST messages for GPU detection (4x A5500 expected)",
-                    "3. SSH into workstation: ssh kasemo@10.10.10.2",
+                    f"3. SSH into workstation: ssh kasemo@{WORKSTATION_HOST}",
                     "4. Verify Docker daemon: docker ps",
                     "5. Run health check: bash scripts/healthcheck.sh",
                     "6. Activate loadout profile: curl -X POST http://localhost:8800/activate/inference-4gpu",

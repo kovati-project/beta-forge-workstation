@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -44,13 +45,13 @@ sleep 10
 
 # Verify startup
 if curl -sf http://localhost:8081 &>/dev/null; then
-    echo "  ✓ Label Studio running at http://10.10.10.2:8081"
+    echo "  ✓ Label Studio running at http://${WORKSTATION_HOST}:8081"
 else
     echo "  ⚠  Label Studio not responding yet — check: docker logs label-studio"
 fi
 
 if curl -sf http://localhost:8888 &>/dev/null; then
-    echo "  ✓ JupyterLab running at http://10.10.10.2:8888"
+    echo "  ✓ JupyterLab running at http://${WORKSTATION_HOST}:8888"
 else
     echo "  ⚠  JupyterLab not responding yet — check: docker logs jupyterlab"
 fi
@@ -66,7 +67,7 @@ echo "   - Text: /data/datasets/text/raw/"
 echo ""
 echo "2. Image LoRA workflow:"
 echo "   - Activate Loadout Manager profile: curl -X POST http://localhost:8800/activate/training-lora-image"
-echo "   - Access Kohya at http://10.10.10.2:7860"
+echo "   - Access Kohya at http://${WORKSTATION_HOST}:7860"
 echo "   - Tag images with WD14 tagger or use Label Studio"
 echo "   - Configure TOML file at configs/kohya/sdxl_lora.toml"
 echo "   - Start training from Kohya UI"
@@ -77,13 +78,13 @@ echo "   - Activate profile: curl -X POST http://localhost:8800/activate/trainin
 echo "   - Run: docker compose -f docker/compose.training.yml --profile training run axolotl accelerate launch -m axolotl.cli.train configs/axolotl/qlora_4gpu.yml"
 echo ""
 echo "4. Label Studio (annotation):"
-echo "   - http://10.10.10.2:8081"
+echo "   - http://${WORKSTATION_HOST}:8081"
 echo "   - Default: admin@local.dev / changeme"
 echo "   - Create project with Image Captioning template"
 echo "   - Import images from /data/datasets/images/raw/"
 echo ""
 echo "5. JupyterLab (experimentation):"
-echo "   - http://10.10.10.2:8888"
+echo "   - http://${WORKSTATION_HOST}:8888"
 echo "   - Token: check 'docker logs jupyterlab' for URL with token"
 echo ""
 echo "Troubleshooting:"

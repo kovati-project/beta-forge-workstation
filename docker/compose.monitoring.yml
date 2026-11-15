@@ -40,7 +40,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD}
-      - GF_SERVER_ROOT_URL=http://10.10.10.2:3001/
+      - GF_SERVER_ROOT_URL=http://${WORKSTATION_HOST:-10.10.10.2}:3001/
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
     depends_on:

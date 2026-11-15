@@ -6,6 +6,7 @@
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -98,9 +99,9 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Code generation stack ready:"
 echo ""
-echo "  OpenHands (autonomous agent):      http://10.10.10.2:3003"
-echo "  vLLM primary (Qwen 32B):           http://10.10.10.2:8000"
-echo "  Ollama (fast models):              http://10.10.10.2:11434"
+echo "  OpenHands (autonomous agent):      http://${WORKSTATION_HOST}:3003"
+echo "  vLLM primary (Qwen 32B):           http://${WORKSTATION_HOST}:8000"
+echo "  Ollama (fast models):              http://${WORKSTATION_HOST}:11434"
 echo ""
 echo "Next steps:"
 echo ""
@@ -127,7 +128,7 @@ echo "5. Test tab autocomplete:"
 echo "   Type incomplete code, wait for suggestions (should be instant)"
 echo ""
 echo "6. Test OpenHands:"
-echo "   Visit http://10.10.10.2:3003"
+echo "   Visit http://${WORKSTATION_HOST}:3003"
 echo "   Create workspace and run tasks like:"
 echo "   - 'Implement a FastAPI endpoint for X with tests'"
 echo "   - 'Fix the failing test in test_module.py'"

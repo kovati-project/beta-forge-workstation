@@ -6,6 +6,7 @@
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -116,8 +117,8 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Voice I/O services ready:"
 echo ""
-echo "  Whisper STT (transcription):  http://10.10.10.2:9099"
-echo "  Piper TTS (synthesis):        http://10.10.10.2:5000"
+echo "  Whisper STT (transcription):  http://${WORKSTATION_HOST}:9099"
+echo "  Piper TTS (synthesis):        http://${WORKSTATION_HOST}:5000"
 echo ""
 echo "Next steps:"
 echo ""
@@ -130,11 +131,11 @@ echo ""
 echo "3. Configure Open WebUI voice:"
 echo "   Settings → Audio:"
 echo "     Speech to Text → OpenAI (compatible)"
-echo "       API Base: http://10.10.10.2:9099/v1"
+echo "       API Base: http://${WORKSTATION_HOST}:9099/v1"
 echo "       API Key: EMPTY"
 echo "       Model: whisper-1"
 echo "     Text to Speech → OpenAI (compatible)"
-echo "       API Base: http://10.10.10.2:5000/v1"
+echo "       API Base: http://${WORKSTATION_HOST}:5000/v1"
 echo "       API Key: EMPTY"
 echo "       Model: piper"
 echo ""

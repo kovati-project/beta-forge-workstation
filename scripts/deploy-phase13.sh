@@ -6,6 +6,7 @@
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -189,7 +190,7 @@ echo "2. Audit existing services for security:"
 echo "   bash scripts/security-hardening-audit.sh"
 echo ""
 echo "3. Configure Authentik applications (manual):"
-echo "   Visit http://10.10.10.2:9080/if/flow/initial-setup/"
+echo "   Visit http://${WORKSTATION_HOST}:9080/if/flow/initial-setup/"
 echo ""
 
 # Firewall setup instructions
@@ -208,14 +209,14 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Authentik services ready:"
 echo ""
-echo "  Authentik (admin):     http://10.10.10.2:9080/if/flow/initial-setup/"
+echo "  Authentik (admin):     http://${WORKSTATION_HOST}:9080/if/flow/initial-setup/"
 echo "  PostgreSQL:            localhost:5432 (internal only)"
 echo "  Redis:                 localhost:6379 (internal only)"
 echo ""
 echo "Next steps:"
 echo ""
 echo "1. Initial Authentik Setup (FIRST TIME ONLY):"
-echo "   Visit: http://10.10.10.2:9080/if/flow/initial-setup/"
+echo "   Visit: http://${WORKSTATION_HOST}:9080/if/flow/initial-setup/"
 echo "   Create admin account"
 echo "   Log in with your credentials"
 echo ""
