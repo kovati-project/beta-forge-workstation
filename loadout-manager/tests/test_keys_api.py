@@ -4,8 +4,7 @@ API key lifecycle (TASK-113, #61): generate / list / touch / delete.
 Checks that the key is returned exactly once, never stored or listed in the
 clear, persisted with mode 0600, and that old plaintext stores are upgraded.
 
-Not covered: enforcement. No endpoint checks API keys today; verify_api_key()
-exists for when one does.
+Enforcement (LOADOUT_REQUIRE_AUTH) is covered in test_api_access.py.
 """
 
 import json
