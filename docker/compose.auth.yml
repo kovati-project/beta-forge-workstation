@@ -61,6 +61,8 @@ services:
     volumes:
       - /data/authentik/media:/media
       - /data/authentik/custom-templates:/templates
+      # Kovati blueprints (RBAC groups, #54); the worker applies them.
+      - ../configs/authentik/blueprints:/blueprints/custom:ro
     depends_on:
       - postgres
       - redis
@@ -92,6 +94,8 @@ services:
     volumes:
       - /data/authentik/media:/media
       - /data/authentik/custom-templates:/templates
+      # Kovati blueprints (RBAC groups, #54); the worker applies them.
+      - ../configs/authentik/blueprints:/blueprints/custom:ro
     depends_on:
       - postgres
       - redis
