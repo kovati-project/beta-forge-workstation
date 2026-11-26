@@ -270,6 +270,8 @@ CONFIG_SCHEMA = [
     ("Training",        "AXOLOTL_CONFIG",        "Axolotl training config filename (e.g. qlora_4gpu.yml)", False, []),
     ("Access",          "AUTHENTIK_TOKEN",       "Authentik API token (Directory > Tokens, intent API) for user and group management", True, []),
     ("System",          "KOVATI_OS_MODE",        "System mode: workstation or appliance",                 False, []),
+    ("System",          "LOADOUT_REQUIRE_AUTH",  "Require an API key or Authentik sign-in for Loadout API writes and sensitive reads (true/false)", False, []),
+    ("System",          "LOADOUT_TRUSTED_PROXIES", "Comma-separated CIDRs whose X-Authentik-Username header is trusted (default 172.16.0.0/12)", False, []),
 ]
 
 CONFIG_SCHEMA_MAP = {

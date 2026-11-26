@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Import API routers
 from api import create_router
+from api import access as api_access
 from api.gpu import read_gpu_telemetry
 from api import secrets as secrets_api
 
@@ -41,10 +42,17 @@ app.add_middleware(CORSMiddleware,
     allow_credentials=True
 )
 
-# Auth middleware for appliance mode
+# Auth middleware: opt-in API enforcement (LOADOUT_REQUIRE_AUTH, api/access.py)
+# and the older appliance-mode identity check.
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    """Validate auth in appliance mode."""
+    """Enforce API keys / forward-auth when enabled; validate auth in appliance mode."""
+    # Enforcement runs before the exemptions below: they predate it, and the
+    # setup wizard's writes must not stay open once the operator turns it on.
+    denied = api_access.check_request(request)
+    if denied is not None:
+        return denied
+
     appliance_mode = os.getenv("KOVATI_OS_MODE", "workstation") == "appliance"
     
     # Allow health checks and setup endpoints without auth. The Alertmanager
@@ -56,15 +64,24 @@ async def auth_middleware(request: Request, call_next):
             or request.url.path in ("/api/alerts/webhook", "/metrics")):
         response = await call_next(request)
         return response
-    
+
     if appliance_mode:
-        # Check for Authentik forward-auth headers
-        user = request.headers.get("X-Authentik-Username")
-        if not user:
-            return HTMLResponse(content="Unauthorized", status_code=401)
-        request.state.user = user
+        if getattr(request.state, "auth_method", None) is None:
+            if api_access.require_auth_enabled():
+                # Same trust model as enforcement: a key, or the identity
+                # header only when it arrives from a trusted proxy.
+                who = api_access.authenticate(request)
+                if who is None:
+                    return HTMLResponse(content="Unauthorized", status_code=401)
+                request.state.auth_method, request.state.user = who
+            else:
+                # Check for Authentik forward-auth headers
+                user = request.headers.get("X-Authentik-Username")
+                if not user:
+                    return HTMLResponse(content="Unauthorized", status_code=401)
+                request.state.user = user
         request.state.role = request.headers.get("X-Authentik-Groups", "user")
-    
+
     response = await call_next(request)
     return response
 

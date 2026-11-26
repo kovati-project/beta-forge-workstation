@@ -5,8 +5,8 @@ prefix are stored, in a JSON file under the persisted /data/loadout-manager
 mount (mode 0600, written atomically). Older stores holding the raw key are
 upgraded to hashes the first time they are read.
 
-verify_api_key() checks a presented key and records its use. Nothing calls it
-yet: no endpoint enforces API keys today (see the follow-up issue to #61).
+verify_api_key() checks a presented key and records its use. api/access.py
+calls it when LOADOUT_REQUIRE_AUTH is on (#102).
 """
 
 import hashlib
