@@ -58,12 +58,14 @@ def _config_urls(env: dict) -> dict:
 
 
 def test_vllm_urls_use_container_names_and_internal_port():
-    """Containers all listen on 8000 inside ai-workstation; 8001-8003 are host ports."""
+    """Containers all listen on 8000 inside ai-workstation; 8001-8005 are host ports."""
     assert _config_urls({}) == {
         "vllm-pair-a": "http://vllm-pair-a:8000",
         "vllm-pair-b": "http://vllm-pair-b:8000",
         "vllm-4gpu": "http://vllm-4gpu:8000",
         "vllm-embed": "http://vllm-embed:8000",
+        "vllm-huihui": "http://vllm-huihui:8000",
+        "vllm-huihui-coder": "http://vllm-huihui-coder:8000",
     }
 
 

@@ -9,6 +9,8 @@ const OPENAI_ENDPOINTS = [
   { name: 'vllm-embed', port: 8003, path: '/v1' },
   { name: 'vllm-pair-a', port: 8000, path: '/v1' },
   { name: 'vllm-pair-b', port: 8001, path: '/v1' },
+  { name: 'vllm-huihui', port: 8004, path: '/v1' },
+  { name: 'vllm-huihui-coder', port: 8005, path: '/v1' },
   { name: 'whisper-stt', port: 9099, path: '/v1/audio' },
   { name: 'piper-tts', port: 5000, path: '/v1/audio/speech' },
 ];

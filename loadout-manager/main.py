@@ -184,6 +184,44 @@ def load_state() -> None:
 
 load_state()
 
+
+def reconcile_state() -> None:
+    """Adopt a profile whose services are already running.
+
+    A stack started by hand with docker compose (or one that kept running
+    while loadout-manager was replaced) otherwise shows as "no active
+    profile" while its GPUs are fully in use, and the incompatibility gate
+    cannot see it. Only an exact match against exactly one profile is
+    adopted; a recorded profile is never overridden. Read-only towards
+    docker: nothing is started or stopped.
+    """
+    if state["active_profile"] or state["switching"]:
+        return
+    try:
+        out = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
+                             capture_output=True, text=True, timeout=15)
+    except Exception as e:
+        logger.warning(f"reconcile: docker ps failed: {e}")
+        return
+    if out.returncode != 0:
+        return
+    profiles = load_profiles()
+    managed = {s for p in profiles.values() for s in p.get("services") or []}
+    live = set(out.stdout.split()) & managed
+    if not live:
+        return
+    matches = [n for n, p in profiles.items()
+               if p.get("services") and set(p["services"]) == live]
+    if len(matches) != 1:
+        logger.info(f"reconcile: running {sorted(live)} match "
+                    f"{matches or 'no profile'}; not adopting")
+        return
+    name = matches[0]
+    state["active_profile"] = name
+    state["running_services"] = list(profiles[name]["services"])
+    save_state()
+    logger.info(f"reconcile: adopted already-running profile {name}")
+
 def load_profiles() -> Dict:
     """Load and parse profiles.yaml."""
     with open(CONFIG_PATH) as f:
@@ -200,6 +238,8 @@ SERVICE_TYPES = {
     "vllm-pair-b": "inference",
     "vllm-4gpu": "inference",
     "vllm-embed": "inference",
+    "vllm-huihui": "inference",
+    "vllm-huihui-coder": "inference",
     "axolotl": "training",
     "kohya": "training",
     "unsloth": "training",
@@ -1035,6 +1075,7 @@ async def delete_schedule(entry_id: str):
 @app.on_event("startup")
 async def _start_scheduler():
     global _scheduler_task
+    await asyncio.to_thread(reconcile_state)
     load_schedule()
     _scheduler_task = asyncio.create_task(scheduler_loop())
     logger.info("Scheduler started")

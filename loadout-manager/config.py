@@ -22,6 +22,8 @@ SERVICE_MAP = {
     "vllm-pair-b": "vllm-pair-b",
     "vllm-4gpu": "vllm-4gpu",
     "vllm-embed": "vllm-embed",
+    "vllm-huihui": "vllm-huihui",
+    "vllm-huihui-coder": "vllm-huihui-coder",
     "open-webui": "open-webui",
     "axolotl": "axolotl",
     "kohya": "kohya",
@@ -47,6 +49,8 @@ PORT_MAP = {
     "vllm-pair-b": 8001,
     "vllm-4gpu": 8002,
     "vllm-embed": 8003,
+    "vllm-huihui": 8004,
+    "vllm-huihui-coder": 8005,
     "open-webui": 3000,
     "axolotl": None,
     "kohya": 7860,
@@ -72,6 +76,8 @@ COMPOSE_FILES = {
     "vllm-pair-b": "compose.inference.yml",
     "vllm-4gpu":   "compose.inference.yml",
     "vllm-embed":  "compose.inference.yml",
+    "vllm-huihui": "compose.inference.yml",
+    "vllm-huihui-coder": "compose.inference.yml",
     "open-webui":  "compose.webui.yml",
     "axolotl":     "compose.training.yml",
     "kohya":       "compose.training.yml",
@@ -102,6 +108,8 @@ SERVICE_PROFILES = {
     # vllm-4gpu and vllm-embed are the default stack (no profile).
     "vllm-pair-a": "pair-a",
     "vllm-pair-b": "pair-b",
+    "vllm-huihui": "huihui",
+    "vllm-huihui-coder": "huihui",
     "axolotl":     "training",
     "unsloth":     "training",
     "jupyterlab":  "notebook",
@@ -113,6 +121,8 @@ GPU_ASSIGNMENT = {
     "vllm-pair-b": [1, 2],
     "vllm-4gpu": [0, 1, 2, 3],
     "vllm-embed": [1],
+    "vllm-huihui": [0, 3],
+    "vllm-huihui-coder": [1, 2],
     "axolotl": [0, 1, 2, 3],
     "kohya": [1, 2],
     "comfyui": [0],
@@ -230,11 +240,15 @@ VLLM_PAIR_A_URL = os.getenv("VLLM_PAIR_A_URL", "http://vllm-pair-a:8000")
 VLLM_PAIR_B_URL = os.getenv("VLLM_PAIR_B_URL", "http://vllm-pair-b:8000")
 VLLM_4GPU_URL = os.getenv("VLLM_4GPU_URL", "http://vllm-4gpu:8000")
 VLLM_EMBED_URL = os.getenv("VLLM_EMBED_URL", "http://vllm-embed:8000")
+VLLM_HUIHUI_URL = os.getenv("VLLM_HUIHUI_URL", "http://vllm-huihui:8000")
+VLLM_HUIHUI_CODER_URL = os.getenv("VLLM_HUIHUI_CODER_URL", "http://vllm-huihui-coder:8000")
 VLLM_URLS = {
     "vllm-pair-a": VLLM_PAIR_A_URL,
     "vllm-pair-b": VLLM_PAIR_B_URL,
     "vllm-4gpu": VLLM_4GPU_URL,
     "vllm-embed": VLLM_EMBED_URL,
+    "vllm-huihui": VLLM_HUIHUI_URL,
+    "vllm-huihui-coder": VLLM_HUIHUI_CODER_URL,
 }
 # Authentik is on its own ai-auth network, so it is reached through its
 # published port on the host (compose maps host.docker.internal to the host).

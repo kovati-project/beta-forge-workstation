@@ -1,7 +1,7 @@
 export const SERVICE_GROUPS = [
   {
     name: 'Text Inference',
-    services: ['vllm-4gpu', 'vllm-embed', 'vllm-pair-a', 'vllm-pair-b'],
+    services: ['vllm-4gpu', 'vllm-embed', 'vllm-pair-a', 'vllm-pair-b', 'vllm-huihui', 'vllm-huihui-coder'],
   },
   {
     name: 'Image Studio',
@@ -42,6 +42,8 @@ export const SERVICE_URLS = {
   'vllm-pair-b': 'http://{host}:8001',
   'vllm-4gpu': 'http://{host}:8002',
   'vllm-embed': 'http://{host}:8003',
+  'vllm-huihui': 'http://{host}:8004',
+  'vllm-huihui-coder': 'http://{host}:8005',
   'comfyui': 'http://{host}:8188',
   'invokeai': 'http://{host}:9090',
   'rembg': 'http://{host}:5000',
