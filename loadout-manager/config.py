@@ -27,7 +27,6 @@ SERVICE_MAP = {
     "kohya": "kohya",
     "comfyui": "comfyui",
     "invokeai": "invokeai",
-    "real-esrgan": "real-esrgan",
     "rembg": "rembg",
     "whisper-stt": "whisper",
     "piper-tts":   "piper",
@@ -53,7 +52,6 @@ PORT_MAP = {
     "kohya": 7860,
     "comfyui": 8188,
     "invokeai": 9090,
-    "real-esrgan": 8189,
     "rembg": 8190,
     "whisper-stt": 9099,
     "piper-tts": 5000,
@@ -79,7 +77,6 @@ COMPOSE_FILES = {
     "kohya":       "compose.training.yml",
     "comfyui":     "compose.studio.yml",
     "invokeai":    "compose.studio.yml",
-    "real-esrgan": "compose.studio.yml",
     "rembg":       "compose.studio.yml",
     "whisper-stt": "compose.voice.yml",
     "piper-tts":   "compose.voice.yml",
@@ -98,9 +95,7 @@ COMPOSE_FILES = {
 # Maps UI service name → actual compose service name when they differ.
 # Only needed when the UI name differs from the compose service key.
 # whisper-stt and piper-tts are handled by SERVICE_MAP directly now.
-COMPOSE_SERVICE_NAME = {
-    "real-esrgan": "realesrgan",
-}
+COMPOSE_SERVICE_NAME: dict[str, str] = {}
 
 # Services that are gated behind a compose profile — must pass --profile when starting
 SERVICE_PROFILES = {
@@ -110,7 +105,6 @@ SERVICE_PROFILES = {
     "unsloth":     "training",
     "jupyterlab":  "notebook",
     "invokeai":    "studio",
-    "real-esrgan": "studio",
 }
 
 GPU_ASSIGNMENT = {
@@ -121,7 +115,6 @@ GPU_ASSIGNMENT = {
     "kohya": [1, 2],
     "comfyui": [0],
     "invokeai": [0],
-    "real-esrgan": [0],
     "whisper-stt": [0],
     "ollama": [0],
 }
@@ -185,7 +178,10 @@ MANAGED_SECRETS = {
 
 # Generated once by the setup wizard alongside MANAGED_SECRETS. These two are
 # user-editable afterwards via the Settings page (CONFIG_SCHEMA), not rotated.
-GENERATED_SECRETS = list(MANAGED_SECRETS) + ["JUPYTER_TOKEN", "LABEL_STUDIO_PASSWORD"]
+GENERATED_SECRETS = list(MANAGED_SECRETS) + [
+    "JUPYTER_TOKEN", "LABEL_STUDIO_PASSWORD",
+    "UNSLOTH_STUDIO_PASSWORD", "UNSLOTH_JUPYTER_PASSWORD",
+]
 
 # Secrets that must be non-empty in docker/.env before a service can start.
 SECRETS_REQUIRED = {
@@ -207,13 +203,14 @@ BATCH_SERVICES = {"axolotl", "unsloth"}
 REQUIRED_HOST_DIRS = {
     "comfyui":    ["/data/outputs/comfyui", "/data/models/comfyui/checkpoints"],
     "invokeai":   ["/data/outputs/invokeai", "/data/models/invokeai"],
-    "real-esrgan": ["/data/outputs/upscaled"],
     "rembg":      ["/data/outputs/rembg"],
     "whisper-stt": ["/data/models/whisper", "/data/audio"],
     "piper-tts":  ["/data/models/piper", "/data/audio"],
     "kohya":      ["/data/datasets/images", "/data/models/comfyui/loras",
                    "/data/checkpoints/kohya", "/data/models/comfyui/checkpoints"],
     "axolotl":    ["/data/datasets/text", "/data/checkpoints/axolotl", "/data/models/vllm"],
+    "unsloth":    ["/data/datasets/text", "/data/checkpoints/unsloth", "/data/models/vllm",
+                   "/data/unsloth/workspace", "/data/unsloth/studio"],
 }
 
 # External services, as seen from inside the loadout-manager container.
@@ -242,6 +239,8 @@ CONFIG_SCHEMA = [
     ("AI Providers",    "WANDB_API_KEY",         "Weights & Biases API key for training run logging",    True,  ["axolotl", "unsloth"]),
     ("Training",        "LABEL_STUDIO_PASSWORD", "Label Studio admin password",                           True,  ["label-studio"]),
     ("Training",        "JUPYTER_TOKEN",         "JupyterLab access token",                               True,  ["jupyterlab"]),
+    ("Training",        "UNSLOTH_STUDIO_PASSWORD", "Unsloth Studio login password",                       True,  ["unsloth"]),
+    ("Training",        "UNSLOTH_JUPYTER_PASSWORD", "Unsloth JupyterLab password",                        True,  ["unsloth"]),
     ("Training",        "AXOLOTL_CONFIG",        "Axolotl training config filename (e.g. qlora_4gpu.yml)", False, []),
     ("Access",          "AUTHENTIK_TOKEN",       "Authentik API token (Directory > Tokens, intent API) for user and group management", True, []),
     ("System",          "KOVATI_OS_MODE",        "System mode: workstation or appliance",                 False, []),

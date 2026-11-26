@@ -16,6 +16,8 @@ sudo mkdir -p /data/datasets/audio/{raw,processed}
 # Create checkpoint directories
 echo "Creating checkpoint directories..."
 sudo mkdir -p /data/checkpoints/{kohya,axolotl,unsloth}
+# Unsloth image state: notebooks/HF cache (/workspace) and Studio data (#95)
+sudo mkdir -p /data/unsloth/{workspace,studio}
 
 # Create model directories required by training and studio services
 echo "Creating model directories..."

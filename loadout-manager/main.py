@@ -155,8 +155,6 @@ SERVICE_TYPES = {
     "unsloth": "training",
     "comfyui": "image",
     "invokeai": "image",
-    "realesrgan": "image",
-    "real-esrgan": "image",
     "rembg": "image",
 }
 

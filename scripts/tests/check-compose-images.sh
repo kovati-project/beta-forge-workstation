@@ -19,8 +19,6 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 declare -A KNOWN_BROKEN=(
-    ["unslothai/unsloth:latest"]="#95 official image is unsloth/unsloth, needs port/password changes"
-    ["pablogimenez/realesrgan-api:latest"]="#95 image removed"
 )
 
 # One "<built> <image>" line per service; built=1 when the service also has a
