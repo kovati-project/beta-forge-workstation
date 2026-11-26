@@ -81,8 +81,8 @@ def test_every_declared_incompatible_pair_is_refused(lm):
 
 
 def test_reverse_direction_of_an_asymmetric_pair_is_also_refused(lm):
-    lm.make_active("training-unsloth")
-    r = lm.activate("inference-small")
+    lm.make_active("inference-pair-a")
+    r = lm.activate("training-lora-image")
     assert is_4xx(r)
     assert lm.docker.starts == []
 
@@ -90,10 +90,9 @@ def test_reverse_direction_of_an_asymmetric_pair_is_also_refused(lm):
 # ── Compatible combinations and same-profile activation ─────────────────────
 
 @pytest.mark.parametrize("active,target", [
-    ("inference-small", "training-lora-image"),   # GPU0/3 vs GPU1/2, listed by neither
-    ("training-lora-image", "inference-small"),
+    ("inference-pair-a", "inference-pair-b"),     # GPU0/3 vs GPU1/2, listed by neither
+    ("inference-pair-b", "inference-pair-a"),
     ("training-unsloth", "inference-pair-b"),     # GPU0/3 vs GPU1/2, listed by neither
-    ("inference-small", "image-studio"),          # declared compatible_with
 ])
 def test_compatible_combination_is_accepted(lm, active, target):
     # Must keep passing once a gate exists: these are NOT declared incompatible
@@ -107,8 +106,8 @@ def test_compatible_combination_is_accepted(lm, active, target):
 
 def test_compat_fixture_pairs_really_are_undeclared(lm):
     p = lm.profiles
-    assert "inference-small" not in p["training-lora-image"].get("incompatible_with", [])
-    assert "training-lora-image" not in p["inference-small"].get("incompatible_with", [])
+    assert "inference-pair-a" not in p["inference-pair-b"].get("incompatible_with", [])
+    assert "inference-pair-b" not in p["inference-pair-a"].get("incompatible_with", [])
     assert "inference-pair-b" not in p["training-unsloth"].get("incompatible_with", [])
     assert "training-unsloth" not in p["inference-pair-b"].get("incompatible_with", [])
 
@@ -120,12 +119,12 @@ def test_activating_the_already_active_profile_restarts_it(lm):
     a restart, which is a defensible reading of 'same profile'. (The VRAM gate
     no longer counts the restarting profile's own memory against it, BUG-4.)
     """
-    lm.make_active("inference-small")
-    r = lm.activate("inference-small")
+    lm.make_active("inference-pair-a")
+    r = lm.activate("inference-pair-a")
     assert r.status_code == 200
     assert len(lm.docker.downs) == 3
     assert len(lm.docker.starts) == 1
-    assert lm.state["active_profile"] == "inference-small"
+    assert lm.state["active_profile"] == "inference-pair-a"
 
 
 def test_no_profile_lists_itself_as_incompatible(lm):
@@ -148,6 +147,8 @@ def test_incompatible_with_is_symmetric(lm):
 
 
 def test_compatible_with_pairs_do_not_share_exclusive_gpus(lm):
+    """Was BUG-2 (inference-small and image-studio, both on GPU0); that pair
+    went with the Ollama-only inference-small profile."""
     clashes = []
     for a, pa in lm.profiles.items():
         for b in pa.get("compatible_with", []):
@@ -161,15 +162,16 @@ def test_compatible_with_cannot_be_honoured_because_every_switch_tears_down(lm):
     """
     Semantic finding, passes today: a switch always runs `down` on all three
     managed stacks, so 'compatible_with: can run simultaneously' (plan step 06)
-    is unrealisable through /activate. Activating image-studio over inference-small
-    stops inference-small; the two never co-exist.
+    is unrealisable through /activate. Activating inference-pair-b over
+    training-unsloth (disjoint GPUs, declared incompatible by neither) stops
+    training-unsloth; the two never co-exist.
     """
-    lm.make_active("inference-small")
-    assert lm.activate("image-studio").status_code == 200
+    lm.make_active("training-unsloth")
+    assert lm.activate("inference-pair-b").status_code == 200
     downs_before_up = [c for c in lm.docker.downs if c.seq < lm.docker.starts[0].seq]
     assert {f for c in downs_before_up for f in c.compose_files} == {
         "compose.inference.yml", "compose.training.yml", "compose.studio.yml"}
-    assert lm.state["running_services"] == lm.profiles["image-studio"]["services"]
+    assert lm.state["running_services"] == lm.profiles["inference-pair-b"]["services"]
 
 
 def test_idle_is_reachable_from_every_profile(lm):

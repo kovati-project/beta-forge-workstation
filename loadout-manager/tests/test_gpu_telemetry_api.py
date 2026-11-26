@@ -13,7 +13,6 @@ import pytest
 # ── /loadouts: accent + nvlink_pairs ─────────────────────────────────────────
 
 @pytest.mark.parametrize("name,accent,pairs", [
-    ("inference-small",     "cyan",   [[0, 3]]),
     ("inference-pair-a",    "cyan",   [[0, 3]]),
     ("inference-pair-b",    "cyan",   [[1, 2]]),
     ("dual-stack",          "cyan",   [[0, 3], [1, 2]]),

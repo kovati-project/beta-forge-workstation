@@ -106,7 +106,6 @@ sudo bash scripts/setup-systemd-service.sh
 | `setup-minio-buckets.sh` | Create the 5 MinIO buckets and the 90-day expiry on `outputs` (idempotent; `--check` to verify only). Run by `deploy-phase09.sh` |
 | `setup-qdrant.py` | Create the 4 Qdrant collections (768-dim, `nomic-embed-text`); idempotent, standard library only, `--check` to verify. Run by `deploy-phase09.sh` |
 | `ingest-documents.py` | Chunk and embed documents from `/data/documents/` into Qdrant |
-| `code-router.py` | Route coding tasks to the appropriate model by complexity |
 | `whisper-realtime.py` | Stream microphone audio to Whisper over WebSocket |
 | `convert_labelstudio_to_alpaca.py` | Convert Label Studio exports to Alpaca fine-tuning format |
 
@@ -142,8 +141,8 @@ huggingface-cli download Qwen/Qwen2.5-32B-Instruct \
   --local-dir /data/models/vllm/qwen2.5-32b --exclude '*.gguf'
 ln -sf /data/models/vllm/qwen2.5-32b /data/models/vllm/current
 
-# Ollama — minimum set
-docker exec ollama ollama pull nomic-embed-text
-docker exec ollama ollama pull qwen2.5-coder:7b
-docker exec ollama ollama pull qwen2.5-coder:14b
+# vLLM — Qwen3.8-27B for the default 4-GPU stack (deploy-phase03.sh does this)
+huggingface-cli download Qwen/Qwen3.8-27B-FP8   --local-dir /data/models/vllm/qwen3.8-27b-fp8 --exclude '*.gguf'
+ln -sfn qwen3.8-27b-fp8 /data/models/vllm/large
+# nomic-embed-text (vllm-embed) downloads itself into /data/models/hf-cache
 ```

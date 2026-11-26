@@ -20,7 +20,7 @@ def _no_localhost(value: str) -> bool:
 
 def test_service_url_defaults_do_not_point_at_the_container_itself(lm, monkeypatch):
     import config
-    for name in ("PROMETHEUS_URL", "LANGFUSE_URL", "OLLAMA_URL", "MINIO_ENDPOINT",
+    for name in ("PROMETHEUS_URL", "LANGFUSE_URL", "MINIO_ENDPOINT",
                  "QDRANT_URL", "POSTGRES_HOST", "AUTHENTIK_URL"):
         monkeypatch.delenv(name, raising=False)
         assert _no_localhost(getattr(config, name)), f"{name}={getattr(config, name)}"

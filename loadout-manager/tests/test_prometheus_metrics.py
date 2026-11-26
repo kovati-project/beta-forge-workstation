@@ -167,4 +167,4 @@ def test_profile_gated_jobs_are_labelled_with_their_container(main_module):
             assert host not in in_profiles, \
                 f"{name} scrapes profile-managed {host} but is not profile_gated"
     assert gated == {"vllm-pair-a": "vllm-pair-a", "vllm-pair-b": "vllm-pair-b",
-                     "vllm-4gpu": "vllm-4gpu"}
+                     "vllm-4gpu": "vllm-4gpu", "vllm-embed": "vllm-embed"}

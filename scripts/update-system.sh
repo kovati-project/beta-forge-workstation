@@ -27,8 +27,8 @@ ${YELLOW}Usage:${NC}
 ${YELLOW}Commands:${NC}
   driver [VERSION]       Update NVIDIA driver (e.g., 560, 555, or latest)
   images [SERVICE]       Update Docker images (all or specific service)
-  model-add <MODEL>      Add new inference model
-  model-remove <MODEL>   Remove inference model
+  model-add <REPO> [NAME]  Download a Hugging Face model for vLLM
+  model-remove <NAME>      Remove a vLLM model directory
   check                  Check for available updates
   help                   Show this message
 
@@ -36,7 +36,7 @@ ${YELLOW}Examples:${NC}
   bash scripts/update-system.sh driver latest
   bash scripts/update-system.sh images
   bash scripts/update-system.sh images compose.inference.yml
-  bash scripts/update-system.sh model-add mistral:7b
+  bash scripts/update-system.sh model-add Qwen/Qwen3.8-27B-FP8 qwen3.8-27b-fp8
   bash scripts/update-system.sh check
 
 EOF
@@ -184,58 +184,73 @@ cmd_images() {
     docker image prune -f
 }
 
-# Add new model via Ollama
+# Add a vLLM model: download a Hugging Face repo into /data/models/vllm/<name>.
+# Serving it means pointing a slot at it (loadout manager Models page, or
+# ln -sfn <name> /data/models/vllm/{current,current-b,large}) and restarting
+# that vLLM service.
+VLLM_MODELS=/data/models/vllm
 cmd_model_add() {
-    local model="${1:-}"
-    
-    if [ -z "$model" ]; then
-        log_error "Model name required: bash scripts/update-system.sh model-add <model>"
+    local repo="${1:-}"
+    local name="${2:-}"
+
+    if [ -z "$repo" ] || [[ "$repo" != */* ]]; then
+        log_error "Hugging Face repo required: bash scripts/update-system.sh model-add <org/repo> [local-name]"
         exit 1
     fi
-    
-    echo -e "${BLUE}=== Adding Model: $model ===${NC}"
-    
-    # Check if Ollama is running
-    if ! curl -sf http://localhost:11434/api/tags &>/dev/null; then
-        log_error "Ollama is not running"
+    name="${name:-$(basename "$repo" | tr '[:upper:]' '[:lower:]')}"
+    if [[ "$name" == */* || "$name" == .* ]]; then
+        log_error "Invalid local name: $name"
         exit 1
     fi
-    
-    log_step "Pulling model: $model (this may take several minutes)..."
-    if docker exec ollama ollama pull "$model"; then
-        log_step "${GREEN}✓${NC} Model '$model' added successfully"
-        
-        # List available models
-        log_step "Available models:"
-        docker exec ollama ollama list | awk 'NR>1 {printf "  %s\n", $1}'
+
+    echo -e "${BLUE}=== Adding Model: $repo -> $VLLM_MODELS/$name ===${NC}"
+    if ! command -v huggingface-cli &>/dev/null; then
+        log_step "Installing huggingface_hub..."
+        pip3 install -q huggingface_hub || { log_error "pip3 install huggingface_hub failed"; return 1; }
+    fi
+
+    log_step "Downloading $repo (this may take a while)..."
+    if huggingface-cli download "$repo" --local-dir "$VLLM_MODELS/$name" --exclude '*.gguf'; then
+        log_step "${GREEN}✓${NC} Model '$repo' is in $VLLM_MODELS/$name"
+        log_step "Serve it by pointing a slot at it, e.g.: ln -sfn $name $VLLM_MODELS/current"
     else
-        log_error "Failed to pull model: $model"
+        log_error "Failed to download: $repo"
         return 1
     fi
 }
 
-# Remove model via Ollama
+# Remove a vLLM model directory. Refuses while a slot symlink points at it.
 cmd_model_remove() {
-    local model="${1:-}"
-    
-    if [ -z "$model" ]; then
-        log_error "Model name required: bash scripts/update-system.sh model-remove <model>"
+    local name="${1:-}"
+
+    if [ -z "$name" ] || [[ "$name" == */* || "$name" == .* ]]; then
+        log_error "Local model name required: bash scripts/update-system.sh model-remove <name>"
+        log_error "Models: $(ls "$VLLM_MODELS" 2>/dev/null | tr '\n' ' ')"
         exit 1
     fi
-    
-    echo -e "${BLUE}=== Removing Model: $model ===${NC}"
-    
-    echo -n "Remove '$model'? (yes/no): "
+    if [ ! -d "$VLLM_MODELS/$name" ] || [ -L "$VLLM_MODELS/$name" ]; then
+        log_error "No model directory $VLLM_MODELS/$name"
+        exit 1
+    fi
+    for slot in current current-b large; do
+        if [ "$(readlink "$VLLM_MODELS/$slot" 2>/dev/null)" = "$name" ]; then
+            log_error "'$name' is active in slot '$slot'; point the slot at another model first"
+            exit 1
+        fi
+    done
+
+    echo -e "${BLUE}=== Removing Model: $VLLM_MODELS/$name ===${NC}"
+    echo -n "Remove '$name' ($(du -sh "$VLLM_MODELS/$name" 2>/dev/null | cut -f1))? (yes/no): "
     read -r confirm
     if [ "$confirm" != "yes" ]; then
         log_step "Cancelled"
         return 0
     fi
-    
-    if docker exec ollama ollama rm "$model"; then
-        log_step "${GREEN}✓${NC} Model '$model' removed"
+
+    if rm -rf "${VLLM_MODELS:?}/$name"; then
+        log_step "${GREEN}✓${NC} Model '$name' removed"
     else
-        log_error "Failed to remove model: $model"
+        log_error "Failed to remove model: $name"
         return 1
     fi
 }
@@ -249,7 +264,7 @@ case "$COMMAND" in
         cmd_images "$2"
         ;;
     model-add)
-        cmd_model_add "$2"
+        cmd_model_add "$2" "$3"
         ;;
     model-remove)
         cmd_model_remove "$2"

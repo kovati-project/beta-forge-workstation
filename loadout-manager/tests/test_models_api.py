@@ -262,21 +262,3 @@ def test_register_rejects_paths_outside_the_roots(models_api, tmp_path):
     r = models_api.client.post("/api/models/local/register",
                                json={"path": str(outside), "name": "x"})
     assert r.status_code == 400
-
-
-# ── Ollama pull accepts the body the UI sends ────────────────────────────────
-
-def test_pull_accepts_json_body(models_api, monkeypatch):
-    sent = []
-
-    async def fake(endpoint, method="GET", **kw):
-        sent.append((endpoint, kw.get("json")))
-    monkeypatch.setattr(models_api.models, "_ollama_request", fake)
-    r = models_api.client.post("/api/models/pull",
-                               json={"name": "hf.co/bartowski/Qwen2.5-7B-Instruct-GGUF"})
-    assert r.status_code == 200, r.text
-    assert sent == [("/api/pull", {"name": "hf.co/bartowski/Qwen2.5-7B-Instruct-GGUF"})]
-
-
-def test_pull_requires_a_name(models_api):
-    assert models_api.client.post("/api/models/pull", json={"name": " "}).status_code == 400

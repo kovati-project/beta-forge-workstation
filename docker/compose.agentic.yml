@@ -23,12 +23,12 @@ services:
       - WEBHOOK_URL=http://${WORKSTATION_HOST:-10.10.10.2}:5678/
       - DB_TYPE=sqlite
       - EXECUTIONS_PROCESS=main
-      # LLM integration via OpenAI-compatible endpoint (Ollama)
+      # LLM integration via OpenAI-compatible endpoint (vLLM, Qwen3.8-27B)
       - N8N_AI_ENABLED=true
       - N8N_AI_PROVIDER=openai
       - N8N_AI_OPENAI_API_KEY=EMPTY
-      # Container-to-container: ollama by name on the ai-workstation network
-      - N8N_AI_OPENAI_BASE_URL=http://ollama:11434/v1
+      # Container-to-container: vllm-4gpu by name on the ai-workstation network
+      - N8N_AI_OPENAI_BASE_URL=http://vllm-4gpu:8000/v1
 
   # ── Dify: LLM app development platform ────────────────────────────────────
   dify-api:
@@ -47,7 +47,7 @@ services:
       - DB_DATABASE=dify
       - REDIS_HOST=dify-redis
       - STORAGE_TYPE=local
-      - OPENAI_API_BASE=http://ollama:11434/v1
+      - OPENAI_API_BASE=http://vllm-4gpu:8000/v1
     depends_on:
       - dify-db
       - dify-redis

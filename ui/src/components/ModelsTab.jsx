@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  getModels, deleteModel, pullModel,
   getVllmLocalModels, activateVllmModel, downloadVllmModel, getVllmDownloadStatus,
   searchHuggingFace, getLocalModels, registerLocalModel,
 } from '../utils/resourcesAPI';
@@ -118,123 +117,6 @@ function DownloadStatus({ dl }) {
         <div className="error-message">Download failed: {dlStatus.error}</div>
       )}
     </>
-  );
-}
-
-function OllamaSection({ refreshKey }) {
-  const [models, setModels] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [pullInput, setPullInput] = useState('');
-  const [pulling, setPulling] = useState(false);
-  const [pullError, setPullError] = useState(null);
-  const [pullNote, setPullNote] = useState(null);
-
-  const loadModels = useCallback(async () => {
-    setLoading(true);
-    const data = await getModels();
-    // GET /api/models returns { models: [...] }.
-    setModels(data?.models || []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { loadModels(); }, [loadModels, refreshKey]);
-
-  const handlePull = async () => {
-    const name = pullInput.trim();
-    if (!name) return;
-
-    setPulling(true);
-    setPullError(null);
-    setPullNote(null);
-    try {
-      await pullModel(name);
-      setPullInput('');
-      // The pull runs in the background on the host; it appears once Ollama finishes.
-      setPullNote(`Pulling ${name} in the background. Refresh to see it once Ollama finishes.`);
-      await loadModels();
-    } catch (error) {
-      setPullError(error.message);
-    } finally {
-      setPulling(false);
-    }
-  };
-
-  const handleDelete = async (name) => {
-    if (!confirm(`Delete model "${name}"?`)) return;
-
-    try {
-      await deleteModel(name);
-      await loadModels();
-    } catch (error) {
-      console.error('Delete failed:', error);
-    }
-  };
-
-  return (
-    <div className="models-section">
-      <div className="vllm-section-header">Ollama Models</div>
-      <div className="pull-section">
-        <div className="pull-input-group">
-          <input
-            type="text"
-            placeholder="e.g. qwen2.5:32b or hf.co/bartowski/Qwen2.5-7B-Instruct-GGUF"
-            value={pullInput}
-            onChange={(e) => setPullInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handlePull()}
-            disabled={pulling}
-          />
-          <Btn onClick={handlePull} disabled={!pullInput.trim() || pulling} size="sm">
-            Pull
-          </Btn>
-          <Btn onClick={loadModels} disabled={loading} size="sm">Refresh</Btn>
-        </div>
-        {pullError && <div className="error-message">{pullError}</div>}
-        {pullNote && <div className="dl-status">{pullNote}</div>}
-      </div>
-
-      {loading ? (
-        <div className="loading">Loading models...</div>
-      ) : (
-        <table className="models-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Size</th>
-              <th>Quantization</th>
-              <th>Modified</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {models.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="empty">
-                  No Ollama models (or Ollama is not running)
-                </td>
-              </tr>
-            ) : (
-              models.map((model) => (
-                <tr key={model.name}>
-                  <td className="model-name">{model.name}</td>
-                  <td>{formatBytes(model.size)}</td>
-                  <td>{model.quantization || '—'}</td>
-                  <td>{formatDate(model.modified) || '—'}</td>
-                  <td>
-                    <button
-                      className="action-btn"
-                      onClick={() => handleDelete(model.name)}
-                      title="Delete model"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      )}
-    </div>
   );
 }
 
@@ -545,7 +427,7 @@ function LocalModelsSection({ refreshKey, onRegistered }) {
   );
 }
 
-function HfBrowseSection({ dl, onOllamaPulled }) {
+function HfBrowseSection({ dl }) {
   const [query, setQuery]         = useState('');
   const [task, setTask]           = useState('text-generation');
   const [results, setResults]     = useState(null);
@@ -575,18 +457,6 @@ function HfBrowseSection({ dl, onOllamaPulled }) {
     setNote(null);
     if (await dl.start(r.id, r.suggested_name || deriveLocalName(r.id).toLowerCase())) {
       setNote(`Downloading ${r.id} for vLLM. It appears under Installed → Ready for vLLM when done.`);
-    }
-  };
-
-  const handleOllamaPull = async (r) => {
-    setError(null);
-    setNote(null);
-    try {
-      await pullModel(`hf.co/${r.id}`);
-      setNote(`Ollama is pulling hf.co/${r.id} in the background.`);
-      onOllamaPulled?.();
-    } catch (e) {
-      setError(e.message);
     }
   };
 
@@ -654,9 +524,12 @@ function HfBrowseSection({ dl, onOllamaPulled }) {
               </div>
               <div className="hf-result-actions">
                 {r.gguf ? (
-                  <Btn size="sm" onClick={() => handleOllamaPull(r)} title={`ollama pull hf.co/${r.id}`}>
-                    Pull to Ollama
-                  </Btn>
+                  <span
+                    className="hf-result-meta"
+                    title="This repo ships GGUF files, which this vLLM setup does not serve. Pick the safetensors repo of the same model."
+                  >
+                    GGUF only
+                  </span>
                 ) : (
                   <Btn
                     size="sm"
@@ -676,6 +549,8 @@ function HfBrowseSection({ dl, onOllamaPulled }) {
   );
 }
 
+// Ollama was removed: every model is a vLLM checkpoint under /data/models/vllm,
+// downloaded from Hugging Face and assigned to a slot below.
 export function ModelsTab() {
   const [mode, setMode] = useState('installed');   // 'installed' | 'hf'
   const [refreshKey, setRefreshKey] = useState(0);
@@ -705,12 +580,11 @@ export function ModelsTab() {
 
       {mode === 'installed' ? (
         <>
-          <OllamaSection refreshKey={refreshKey} />
           <VllmModelsSection refreshKey={refreshKey} dl={dl} />
           <LocalModelsSection refreshKey={refreshKey} onRegistered={refresh} />
         </>
       ) : (
-        <HfBrowseSection dl={dl} onOllamaPulled={refresh} />
+        <HfBrowseSection dl={dl} />
       )}
     </div>
   );
