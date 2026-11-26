@@ -438,21 +438,38 @@ fi
 # Generate backup manifest (before the MinIO sync so it is mirrored too)
 write_manifest
 
-# Sync backups to MinIO (if available)
+# Sync backups to MinIO (if available). The only mc is the one inside the minio
+# container (docker/minio/Dockerfile; there is no host install), with an alias
+# named "local" that scripts/setup-minio-buckets.sh sets up. Archives are
+# streamed in with `mc pipe` rather than docker-cp'd: a copy would first land
+# in the container's writable layer, doubling the disk a large run needs.
+# The MinIO password is never read or printed here; mc uses its saved alias.
+MINIO_CONTAINER="${MINIO_CONTAINER:-minio}"
 echo -e "${BLUE}MinIO Sync:${NC}"
-if command -v mc &>/dev/null && mc ls local &>/dev/null; then
+if ! command -v docker &>/dev/null \
+   || [ "$(docker inspect -f '{{.State.Running}}' "$MINIO_CONTAINER" 2>/dev/null || true)" != "true" ]; then
+    log_warn "MinIO container '$MINIO_CONTAINER' is not running (skipping sync)"
+elif ! docker exec "$MINIO_CONTAINER" mc ls local &>/dev/null; then
+    log_warn "MinIO alias 'local' is not configured in '$MINIO_CONTAINER' (skipping sync; run scripts/setup-minio-buckets.sh)"
+else
     log_step "Syncing backup to MinIO..."
-    if mc mirror --overwrite "$BACKUP_DIR/" "local/backups/$DATE/"; then
+    minio_failed=()
+    for f in "$BACKUP_DIR"/*; do
+        [ -f "$f" ] || continue
+        if ! docker exec -i "$MINIO_CONTAINER" mc pipe "local/backups/$DATE/$(basename "$f")" < "$f"; then
+            log_error "  MinIO upload failed: $(basename "$f")"
+            minio_failed+=("$(basename "$f")")
+        fi
+    done
+    if [ "${#minio_failed[@]}" -eq 0 ]; then
         log_step "  → Synced to MinIO: local/backups/$DATE/"
     else
-        # mc is configured, so a failed mirror means no offsite copy: not a silent warning
-        log_error "MinIO sync failed (local backup is intact)"
+        # mc is configured, so a failed upload means no offsite copy: not a silent warning
+        log_error "MinIO sync failed for ${#minio_failed[@]} file(s) (local backup is intact)"
         FAILED+=("minio-sync")
         # Re-write the local manifest so the run is recorded as failed
         write_manifest
     fi
-else
-    log_warn "MinIO client not configured (skipping sync)"
 fi
 
 echo ""
