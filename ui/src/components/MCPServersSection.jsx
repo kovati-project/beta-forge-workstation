@@ -73,7 +73,7 @@ export function MCPServersSection() {
       const result = await testMCP(name);
       setTestResults((prev) => ({
         ...prev,
-        [name]: { success: true, message: result.message },
+        [name]: { success: true, message: result.message || `up on port ${result.port}` },
       }));
       setTimeout(
         () =>

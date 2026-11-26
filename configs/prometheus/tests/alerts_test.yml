@@ -134,3 +134,109 @@ tests:
             exp_annotations:
               summary: "NVLink errors on GPU 0"
               description: "NVLink CRC/FLIT errors detected — interconnect degradation"
+
+  # ── ServiceDown / ProfileServiceDown (TASK-060, #28) ──────────────────────
+  # Target labels below are the ones prometheus.yml attaches: always-on jobs
+  # have no profile_gated label; profile-gated vLLM jobs carry
+  # profile_gated="true" and service=<container name>.
+
+  # An always-on target that stops answering still fires ServiceDown.
+  - name: service_down_fires_for_always_on_target
+    interval: 1m
+    input_series:
+      - series: 'up{job="node-metrics", instance="node-exporter:9100", service="node"}'
+        values: '0+0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              component: service
+              job: node-metrics
+              instance: "node-exporter:9100"
+              service: node
+            exp_annotations:
+              summary: "Service node-metrics unavailable"
+              description: "Service node-metrics (node-exporter:9100) is not responding to scrape"
+
+  # Profile-gated targets whose container is not running (DNS error -> up 0)
+  # never fire ServiceDown, and fire nothing at all while no profile expects them.
+  - name: service_down_ignores_profile_gated_targets
+    interval: 1m
+    input_series:
+      - series: 'up{job="vllm-pair-a", instance="vllm-pair-a:8000", service="vllm-pair-a", engine="vllm", profile_gated="true", gpus="0,3"}'
+        values: '0+0x20'
+      - series: 'up{job="vllm-pair-b", instance="vllm-pair-b:8000", service="vllm-pair-b", engine="vllm", profile_gated="true", gpus="1,2"}'
+        values: '0+0x20'
+      - series: 'up{job="loadout-manager", instance="loadout-manager:8800", component="gpu-orchestrator"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ServiceDown
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: ProfileServiceDown
+        exp_alerts: []
+
+  # Active profile inference-4gpu expects vllm-4gpu, which cannot be scraped:
+  # ProfileServiceDown fires for it (after for: 10m), and only for it -- not
+  # for vllm-pair-a (down, not expected) and not for kohya (expected by some
+  # profiles but has no scrape job, so there is no `up` to join).
+  - name: profile_service_down_fires_for_expected_gated_service
+    interval: 1m
+    input_series:
+      - series: 'loadout_service_expected{job="loadout-manager", instance="loadout-manager:8800", component="gpu-orchestrator", profile="inference-4gpu", service="vllm-4gpu"}'
+        values: '1+0x20'
+      - series: 'loadout_service_expected{job="loadout-manager", instance="loadout-manager:8800", component="gpu-orchestrator", profile="inference-4gpu", service="kohya"}'
+        values: '1+0x20'
+      - series: 'up{job="vllm-4gpu", instance="vllm-4gpu:8000", service="vllm-4gpu", engine="vllm", profile_gated="true", gpus="0,1,2,3"}'
+        values: '0+0x20'
+      - series: 'up{job="vllm-pair-a", instance="vllm-pair-a:8000", service="vllm-pair-a", engine="vllm", profile_gated="true", gpus="0,3"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 5m    # model may still be loading: within for: 10m
+        alertname: ProfileServiceDown
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ProfileServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              component: service
+              profile: inference-4gpu
+              service: vllm-4gpu
+            exp_annotations:
+              summary: "Profile service vllm-4gpu unavailable"
+              description: "vllm-4gpu should be running for loadout profile inference-4gpu but has not answered a scrape for 10 minutes"
+      - eval_time: 12m
+        alertname: ServiceDown
+        exp_alerts: []
+
+  # Expected and answering: silent.
+  - name: profile_service_down_quiet_when_expected_service_is_up
+    interval: 1m
+    input_series:
+      - series: 'loadout_service_expected{job="loadout-manager", instance="loadout-manager:8800", profile="inference-pair-a", service="vllm-pair-a"}'
+        values: '1+0x20'
+      - series: 'up{job="vllm-pair-a", instance="vllm-pair-a:8000", service="vllm-pair-a", engine="vllm", profile_gated="true", gpus="0,3"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ProfileServiceDown
+        exp_alerts: []
+
+  # A profile switch: loadout-manager stops exporting loadout_service_expected
+  # while switching (series goes stale), so the target going down mid-switch
+  # does not fire even after 10 minutes of it.
+  - name: profile_service_down_quiet_after_profile_stops_expecting_it
+    interval: 1m
+    input_series:
+      - series: 'loadout_service_expected{job="loadout-manager", instance="loadout-manager:8800", profile="inference-pair-b", service="vllm-pair-b"}'
+        values: '1 1 1 stale'
+      - series: 'up{job="vllm-pair-b", instance="vllm-pair-b:8000", service="vllm-pair-b", engine="vllm", profile_gated="true", gpus="1,2"}'
+        values: '1 1 0+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ProfileServiceDown
+        exp_alerts: []

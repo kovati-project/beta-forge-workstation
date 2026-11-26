@@ -7,6 +7,9 @@ services:
     image: n8nio/n8n:1.68.0
     container_name: n8n
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "5678:5678"
     volumes:
@@ -16,20 +19,25 @@ services:
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://10.10.10.2:5678/
+      # Browser-facing URLs use WORKSTATION_HOST from docker/.env (#51)
+      - WEBHOOK_URL=http://${WORKSTATION_HOST:-10.10.10.2}:5678/
       - DB_TYPE=sqlite
       - EXECUTIONS_PROCESS=main
-      # LLM integration via OpenAI-compatible endpoint (Ollama)
+      # LLM integration via OpenAI-compatible endpoint (vLLM, Qwen3.8-27B)
       - N8N_AI_ENABLED=true
       - N8N_AI_PROVIDER=openai
       - N8N_AI_OPENAI_API_KEY=EMPTY
-      - N8N_AI_OPENAI_BASE_URL=http://10.10.10.2:11434/v1
+      # Container-to-container: vllm-4gpu by name on the ai-workstation network
+      - N8N_AI_OPENAI_BASE_URL=http://vllm-4gpu:8000/v1
 
   # ── Dify: LLM app development platform ────────────────────────────────────
   dify-api:
     image: langgenius/dify-api:latest
     container_name: dify-api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     environment:
       - MODE=api
       - SECRET_KEY=${DIFY_SECRET_KEY}
@@ -39,7 +47,7 @@ services:
       - DB_DATABASE=dify
       - REDIS_HOST=dify-redis
       - STORAGE_TYPE=local
-      - OPENAI_API_BASE=http://10.10.10.2:11434/v1
+      - OPENAI_API_BASE=http://vllm-4gpu:8000/v1
     depends_on:
       - dify-db
       - dify-redis
@@ -52,16 +60,32 @@ services:
     image: langgenius/dify-web:latest
     container_name: dify-web
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3010:3000"
     environment:
-      - NEXT_PUBLIC_API_PREFIX=http://10.10.10.2:5001/v1
-      - NEXT_PUBLIC_APP_API_PREFIX=http://10.10.10.2:5001/api
+      # Read by the browser, so these must be the host address, not a container name
+      - NEXT_PUBLIC_API_PREFIX=http://${WORKSTATION_HOST:-10.10.10.2}:5001/v1
+      - NEXT_PUBLIC_APP_API_PREFIX=http://${WORKSTATION_HOST:-10.10.10.2}:5001/api
 
   dify-db:
     image: postgres:15-alpine
     container_name: dify-db
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns PGDATA as root (DAC_OVERRIDE to traverse an existing
+    # 0700 data dir, FOWNER for its chmods), then drops to postgres via su-exec
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     environment:
       - POSTGRES_USER=dify
       - POSTGRES_PASSWORD=${DIFY_DB_PASSWORD}
@@ -73,6 +97,15 @@ services:
     image: redis:7-alpine
     container_name: dify-redis
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # entrypoint chowns /data as root, then drops to redis via setpriv
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     volumes:
       - dify-redis-data:/data
 
@@ -86,7 +119,8 @@ services:
   #
   # Each server checks the HTTP Host header (DNS-rebinding protection) against
   # loopback plus: its container name, host.docker.internal (loadout-manager
-  # sits on another network) and MCP_LAN_HOST, the address LAN clients use.
+  # sits on another network) and MCP_LAN_HOST, the address LAN clients use
+  # (defaults to WORKSTATION_HOST, so one host setting covers both; #81).
 
   mcp-filesystem:
     build: ./mcp/filesystem
@@ -113,7 +147,7 @@ services:
       - --port=3100
       - --allowed-host=mcp-filesystem:3100
       - --allowed-host=host.docker.internal:3100
-      - --allowed-host=${MCP_LAN_HOST:-10.10.10.2}:3100
+      - --allowed-host=${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3100
       - --
       - mcp-server-filesystem
       - /data
@@ -162,7 +196,7 @@ services:
       - --port=3101
       - --host=0.0.0.0
       - --isolated
-      - --allowed-hosts=localhost:3101,127.0.0.1:3101,mcp-browser:3101,host.docker.internal:3101,${MCP_LAN_HOST:-10.10.10.2}:3101
+      - --allowed-hosts=localhost:3101,127.0.0.1:3101,mcp-browser:3101,host.docker.internal:3101,${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3101
       - --output-dir=/tmp/playwright-output
     read_only: true
     tmpfs:

@@ -19,6 +19,9 @@ except ImportError:
 
 router = APIRouter(tags=["operations"])
 
+# Workstation address shown in the runbook (IP or hostname), from docker/.env (#51)
+WORKSTATION_HOST = os.getenv("WORKSTATION_HOST", "10.10.10.2")
+
 @router.get("/operations/health")
 async def system_health():
     """Get comprehensive system health status."""
@@ -67,8 +70,8 @@ async def system_health():
 async def service_status():
     """Get status of all deployed services."""
     services = [
-        {"name": "Ollama", "port": 11434, "status": "running"},
-        {"name": "vLLM (Pair A)", "port": 8000, "status": "running"},
+        {"name": "vLLM Qwen3.8-27B (4-GPU)", "port": 8002, "status": "running"},
+        {"name": "vLLM embeddings", "port": 8003, "status": "running"},
         {"name": "Open WebUI", "port": 3000, "status": "running"},
         {"name": "Grafana", "port": 3001, "status": "running"},
         {"name": "Langfuse", "port": 3002, "status": "running"},
@@ -150,17 +153,17 @@ async def get_runbook():
                 "steps": [
                     "1. Power on workstation and wait for bootloader",
                     "2. Check BIOS POST messages for GPU detection (4x A5500 expected)",
-                    "3. SSH into workstation: ssh kasemo@10.10.10.2",
+                    f"3. SSH into workstation: ssh kasemo@{WORKSTATION_HOST}",
                     "4. Verify Docker daemon: docker ps",
                     "5. Run health check: bash scripts/healthcheck.sh",
                     "6. Activate loadout profile: curl -X POST http://localhost:8800/activate/inference-4gpu",
-                    "7. Verify services: curl http://localhost:11434/api/tags (Ollama)",
+                    "7. Verify services: curl http://localhost:8002/v1/models (vLLM, Qwen3.8-27B)",
                 ]
             },
             {
                 "section": "Common Tasks",
                 "steps": [
-                    "Pull a model: docker exec ollama ollama pull mistral:7b",
+                    "Download a model: Models page (Hugging Face) or huggingface-cli download <repo> --local-dir /data/models/vllm/<name>",
                     "View GPU status: nvidia-smi (watch -n 1 for continuous)",
                     "Check service logs: docker logs -f <container_name>",
                     "Restart all services: bash scripts/start-all.sh",

@@ -1,46 +1,12 @@
-import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { GpuCard } from './GpuCard';
 import './GpuStatusRow.css';
 
-// /status carries `gpu_telemetry: { available, error }`, but the shared reducer
-// only keeps the fields it knows about, so the signal never reaches app state.
-// While there are no GPUs to show (the only time the signal matters) ask /status
-// directly. Polling stops as soon as real GPU data arrives.
-function useGpuTelemetryStatus(enabled) {
-  const [telemetry, setTelemetry] = useState(null);
-
-  useEffect(() => {
-    if (!enabled) {
-      setTelemetry(null);
-      return undefined;
-    }
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const response = await fetch('/status');
-        if (!response.ok) return;
-        const data = await response.json();
-        if (!cancelled) setTelemetry(data.gpu_telemetry || null);
-      } catch (error) {
-        // Backend unreachable: keep whatever we last knew (skeleton if nothing).
-      }
-    };
-    poll();
-    const id = setInterval(poll, 3000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [enabled]);
-
-  return telemetry;
-}
-
 export function GpuStatusRow() {
   const { state } = useApp();
   const hasGpus = Boolean(state.gpus && state.gpus.length > 0);
-  const telemetry = useGpuTelemetryStatus(!hasGpus);
+  // `gpu_telemetry` from /status, kept by the shared reducer (null before the first poll).
+  const telemetry = state.gpuTelemetry;
 
   if (hasGpus) {
     return (

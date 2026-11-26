@@ -4,9 +4,12 @@ from typing import Dict, List
 import httpx
 from fastapi import APIRouter, HTTPException
 
-router = APIRouter()
+try:
+    from config import QDRANT_URL
+except ImportError:
+    from ..config import QDRANT_URL
 
-QDRANT_URL = "http://localhost:6333"
+router = APIRouter()
 
 
 @router.get("/vectors/collections")
@@ -15,7 +18,8 @@ async def list_collections() -> Dict:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{QDRANT_URL}/collections")
-            return await response.json()
+            response.raise_for_status()
+            return response.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Qdrant unavailable: {e}")
 
@@ -29,6 +33,7 @@ async def search_vectors(collection: str, query: List[float], limit: int = 10) -
                 f"{QDRANT_URL}/collections/{collection}/points/search",
                 json={"vector": query, "limit": limit}
             )
-            return await response.json()
+            response.raise_for_status()
+            return response.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

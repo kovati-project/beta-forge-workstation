@@ -16,9 +16,12 @@ export function LogViewerSection() {
 
   const services = [
     'axolotl',
+    'vllm-4gpu',
+    'vllm-embed',
     'vllm-pair-a',
     'vllm-pair-b',
-    'ollama',
+    'vllm-huihui',
+    'vllm-huihui-coder',
     'whisper-stt',
     'piper-tts',
   ];

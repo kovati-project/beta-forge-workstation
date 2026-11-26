@@ -61,7 +61,11 @@ export async function getInitialLogs(serviceName, lines = 200) {
 export async function getAlerts() {
   try {
     const response = await fetch('/api/alerts');
-    if (response.ok) return await response.json();
+    if (response.ok) {
+      // GET /api/alerts returns a plain array of firing alerts.
+      const data = await response.json();
+      return Array.isArray(data) ? { active: data, total: data.length } : data;
+    }
     return { active: [], total: 0 };
   } catch (error) {
     console.error('Failed to fetch alerts:', error);

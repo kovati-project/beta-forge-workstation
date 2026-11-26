@@ -40,28 +40,16 @@ export function ActiveLoadoutBanner() {
     }
   };
 
-  if (!state.activeProfile) {
-    return (
-      <div className="loadout-banner loadout-banner-empty">
-        <div className="loadout-banner-content">
-          <div className="loadout-empty-text">
-            No active profile — select a loadout to begin
-          </div>
-          <Btn variant="cyan" onClick={() => navigate('/#/loadout')}>
-            Go to Loadout
-          </Btn>
-        </div>
-      </div>
-    );
-  }
-
+  // Checked first: a switch from "no profile" (or a stop) is still a switch.
   if (state.switching) {
     return (
       <div className="loadout-banner loadout-banner-switching">
         <div className="loadout-banner-content">
           <div className="loadout-switching-header">
             <span className="loadout-switching-icon">⟳</span>
-            <span>SWITCHING PROFILE</span>
+            <span>
+              {state.switchTarget ? `SWITCHING TO ${state.switchTarget.name}` : 'SWITCHING PROFILE'}
+            </span>
           </div>
           <div className="loadout-switching-desc">
             stopping services → draining VRAM → starting services
@@ -69,6 +57,21 @@ export function ActiveLoadoutBanner() {
           <div className="loadout-progress-bar">
             <div className="loadout-progress-fill"></div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!state.activeProfile) {
+    return (
+      <div className="loadout-banner loadout-banner-empty">
+        <div className="loadout-banner-content">
+          <div className="loadout-empty-text">
+            No active profile — select a loadout to begin
+          </div>
+          <Btn variant="cyan" onClick={() => navigate('/loadout')}>
+            Go to Loadout
+          </Btn>
         </div>
       </div>
     );
@@ -84,7 +87,7 @@ export function ActiveLoadoutBanner() {
         <div className="loadout-profile-name">{state.activeProfile}</div>
         
         <div className="loadout-profile-meta">
-          Tensor-parallel 32B–40B · 48 GB · switched {timeSince}
+          {timeSince ? `switched ${timeSince}` : ''}
         </div>
 
         <div className="loadout-services">
@@ -96,7 +99,7 @@ export function ActiveLoadoutBanner() {
         </div>
 
         <div className="loadout-banner-buttons">
-          <Btn variant="cyan" onClick={() => navigate('/#/loadout')}>
+          <Btn variant="cyan" onClick={() => navigate('/loadout')}>
             Switch Profile →
           </Btn>
           <Btn variant="red" onClick={handleStopAll}>

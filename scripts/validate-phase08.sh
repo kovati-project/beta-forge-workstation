@@ -2,6 +2,7 @@
 [ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Validate Phase 08: Agentic Workflows & MCP
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 PASS=0; FAIL=0; WARN=0
@@ -62,8 +63,8 @@ check "n8n files directory exists" "[[ -d /data/n8n-files ]]"
 
 # Manual checks
 echo ""
-warn "n8n owner account created (visit http://10.10.10.2:5678)"
-warn "n8n Ollama integration configured (Settings → AI)"
+warn "n8n owner account created (visit http://${WORKSTATION_HOST}:5678)"
+warn "n8n LLM integration configured (Settings → AI, http://vllm-4gpu:8000/v1)"
 warn "Can create and save n8n workflows"
 warn "MCP tool calls work (docs/validation/TASK-101-mcp-filesystem.md, re-run section)"
 warn "First n8n workflow executes end-to-end"

@@ -43,23 +43,53 @@ route:
       receiver: training
       repeat_interval: 30m
 
+# Notification channel
+# ────────────────────
+# Default: the in-app channel. Every receiver posts to the Loadout Manager
+# webhook (loadout-manager:8800, container name on the shared ai-workstation
+# network), which records firing and resolved alerts in the alert history and
+# activity feed shown on the Monitor page. For a single-user box that is the
+# whole notification path: check the dashboard. If you want alerts to reach you
+# off the box, add an external channel to the receivers below (example at the
+# bottom of this file).
 receivers:
-  # Fallback: no notification, just logs in AlertManager
+  # Fallback for unmatched alerts
   - name: log-only
+    webhook_configs:
+      - &in_app
+        url: http://loadout-manager:8800/api/alerts/webhook
+        send_resolved: true
 
   # Critical GPU faults (ECC errors, NVLink failures)
   - name: critical-gpu
+    webhook_configs:
+      - *in_app
 
   # All other critical alerts
   - name: critical-all
+    webhook_configs:
+      - *in_app
 
   # Training-specific alerts
   - name: training
+    webhook_configs:
+      - *in_app
 
-# To add webhook/email/Slack receivers, add them here and configure secrets in .env.
-# Example Slack receiver:
-# - name: slack-alerts
+# Example external channel (ntfy push to a phone). Alertmanager does not expand
+# environment variables, so put the topic URL in directly. Add it as a second
+# webhook_configs entry on any receiver above, e.g. critical-gpu:
+#
+#   - name: critical-gpu
+#     webhook_configs:
+#       - *in_app
+#       # Posts the raw Alertmanager JSON to the topic; use ntfy's message
+#       # templating (see its docs) for a readable title/body.
+#       - url: https://ntfy.sh/<your-private-topic>
+#         send_resolved: true
+#
+# Example Slack receiver (incoming-webhook URL pasted in, not ${...}):
 #   slack_configs:
-#     - api_url: ${SLACK_WEBHOOK_URL}
+#     - api_url: https://hooks.slack.com/services/XXX/YYY/ZZZ
 #       channel: '#ai-workstation-alerts'
 #       title: 'AI Workstation Alert: {{ .GroupLabels.alertname }}'
+#       send_resolved: true
