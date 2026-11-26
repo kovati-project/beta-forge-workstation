@@ -1,42 +1,5 @@
 // Resources API utilities
 
-export async function getModels() {
-  try {
-    const response = await fetch('/api/models');
-    if (response.ok) return await response.json();
-    return [];
-  } catch (error) {
-    console.error('Failed to fetch models:', error);
-    return [];
-  }
-}
-
-export async function deleteModel(name) {
-  try {
-    const response = await fetch(`/api/models/${name}`, { method: 'DELETE' });
-    if (response.ok) return await response.json();
-    throw new Error('Failed to delete model');
-  } catch (error) {
-    console.error('Failed to delete model:', error);
-    throw error;
-  }
-}
-
-export async function pullModel(name) {
-  try {
-    const response = await fetch('/api/models/pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (response.ok) return await response.json();
-    throw new Error('Failed to pull model');
-  } catch (error) {
-    console.error('Failed to pull model:', error);
-    throw error;
-  }
-}
-
 export async function loadLoRA(path, baseModel) {
   try {
     const response = await fetch('/api/models/load-lora', {
@@ -76,12 +39,36 @@ export async function activateVllmModel(slot, model) {
   return response.json();
 }
 
-export async function searchHuggingFace(query, limit = 20) {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
+export async function searchHuggingFace(query, task = '', limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query) params.set('q', query);
+  if (task) params.set('task', task);
   const response = await fetch(`/api/models/hf/search?${params}`);
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.detail || 'Hugging Face search failed');
+  }
+  return response.json();
+}
+
+export async function getLocalModels() {
+  const response = await fetch('/api/models/local');
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to scan local models');
+  }
+  return response.json();
+}
+
+export async function registerLocalModel(path, name) {
+  const response = await fetch('/api/models/local/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, name }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to register model');
   }
   return response.json();
 }
@@ -99,14 +86,18 @@ export async function downloadVllmModel(repoId, localName) {
   return response.json();
 }
 
+// Resolves to the status object, or null when the request failed. Callers must
+// treat null as "unknown" and keep what they last knew: {} is a real answer
+// ("no download"), so returning it on a failed poll made a blip look like the
+// download had vanished.
 export async function getVllmDownloadStatus() {
   try {
     const response = await fetch('/api/models/vllm/download/status');
     if (response.ok) return await response.json();
-    return {};
+    return null;
   } catch (error) {
     console.error('Failed to fetch download status:', error);
-    return {};
+    return null;
   }
 }
 

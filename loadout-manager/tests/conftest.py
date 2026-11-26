@@ -137,7 +137,7 @@ class Call:
 
     @property
     def verb(self):
-        for v in ("up", "down", "start", "stop", "run", "create"):
+        for v in ("up", "down", "pull", "start", "stop", "run", "create"):
             if v in self.cmd:
                 return v
         return None
@@ -203,6 +203,10 @@ class FakeDocker:
     @property
     def downs(self):
         return [c for c in self.calls if c.is_down]
+
+    @property
+    def pulls(self):
+        return [c for c in self.calls if c.cmd[:2] == ["docker", "compose"] and c.verb == "pull"]
 
     def fail(self, verb, rc=1, stderr="boom"):
         def rule(c):
@@ -330,7 +334,7 @@ def lm(main_module, monkeypatch, tmp_path):
     monkeypatch.delenv("KOVATI_OS_MODE", raising=False)
     monkeypatch.setattr(main, "STATE_PATH", tmp_path / "state.json")
     main.state.update(active_profile=None, switching=False,
-                      last_switched=None, running_services=[])
+                      last_switched=None, running_services=[], last_error=None)
     main._ws_clients.clear()
 
     docker = FakeDocker(main)
@@ -349,7 +353,7 @@ def lm(main_module, monkeypatch, tmp_path):
     main._ws_clients.clear()
     NVML.reset()
     main.state.update(active_profile=None, switching=False,
-                      last_switched=None, running_services=[])
+                      last_switched=None, running_services=[], last_error=None)
 
 
 # ── api/* router harness ─────────────────────────────────────────────────────

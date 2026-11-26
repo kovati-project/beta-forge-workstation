@@ -131,11 +131,11 @@ export const SERVICES_MOCK = [
   },
   // Profile-managed services
   {
-    name: 'ollama',
+    name: 'vllm-embed',
     category: SERVICE_CATEGORIES.INFERENCE,
-    description: 'Local LLM inference',
+    description: 'vLLM embeddings (nomic-embed-text, GPU 1)',
     status: 'stopped',
-    port: 11434,
+    port: 8003,
     always_on: false,
   },
   {

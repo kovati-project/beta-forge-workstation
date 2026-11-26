@@ -5,7 +5,6 @@
 # Safe to re-run — uses mkdir -p throughout.
 set -euo pipefail
 
-sudo mkdir -p /data/models/ollama
 sudo mkdir -p /data/loadout-manager
 sudo mkdir -p /data/models/vllm
 sudo mkdir -p /data/models/hf-cache

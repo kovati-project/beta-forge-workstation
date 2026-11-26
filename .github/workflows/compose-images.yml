@@ -1,0 +1,30 @@
+name: compose images
+
+# Every image in docker/compose.*.yml must still be pullable. Registries do
+# remove images (MinIO, #92; Unsloth and Real-ESRGAN, #95), and a deployed host
+# only notices when it next pulls. Runs on compose changes and weekly.
+
+on:
+  pull_request:
+    paths:
+      - "docker/compose.*.yml"
+      - "scripts/tests/check-compose-images.sh"
+      - ".github/workflows/compose-images.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docker/compose.*.yml"
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: every compose image resolves
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/tests/check-compose-images.sh

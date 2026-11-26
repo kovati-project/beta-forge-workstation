@@ -2,29 +2,21 @@ profiles:
 
   # ── INFERENCE PROFILES ────────────────────────────────────────────────────
 
-  inference-small:
-    description: "Single GPU chat — 7B-13B models, lowest latency"
-    compose_files:
-      - compose.inference.yml
-    services:
-      - ollama
-    gpu_assignment:
-      ollama: ["0", "3"]
-    exclusive_gpus: ["0", "3"]
-    compatible_with: [image-studio]
-
   inference-pair-a:
     description: "NVLink pair A [GPU0,GPU3] — 32B-40B models, fast"
     compose_files:
       - compose.inference.yml
     services:
       - vllm-pair-a
-      - ollama
+      - vllm-embed
     gpu_assignment:
       vllm-pair-a: ["0", "3"]
-      ollama: ["1", "2"]
+      vllm-embed: ["1"]
     exclusive_gpus: ["0", "3"]
-    incompatible_with: [inference-small, inference-4gpu, inference-4gpu-large,
+    # vLLM --gpu-memory-utilization 0.92 on 2 x 24 GB; vllm-embed on GPU1 is
+    # small and outside the exclusive pair.
+    vram_required_gb: 44
+    incompatible_with: [inference-huihui-4gpu, inference-4gpu, inference-4gpu-large,
                         dual-stack, training-lora-text, training-lora-image, training-unsloth]
 
   inference-pair-b:
@@ -36,20 +28,48 @@ profiles:
     gpu_assignment:
       vllm-pair-b: ["1", "2"]
     exclusive_gpus: ["1", "2"]
-    incompatible_with: [inference-4gpu, inference-4gpu-large, dual-stack,
+    # vLLM --gpu-memory-utilization 0.92 on 2 x 24 GB.
+    vram_required_gb: 44
+    incompatible_with: [inference-huihui-4gpu, inference-4gpu, inference-4gpu-large, dual-stack,
                         image-studio, training-lora-text, training-lora-image]
 
+  # Default. Qwen3.8-27B for VS Code Copilot Chat, Continue.dev, OpenHands,
+  # Open WebUI, n8n and Dify, plus nomic-embed-text for RAG / codebase search.
   inference-4gpu:
-    description: "Full mesh [GPU0,1,2,3] — 70B+ models"
+    description: "Qwen3.8-27B on all 4 GPUs — coding + chat (default)"
     compose_files:
       - compose.inference.yml
     services:
       - vllm-4gpu
+      - vllm-embed
     gpu_assignment:
       vllm-4gpu: ["0", "1", "2", "3"]
+      vllm-embed: ["1"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 88
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b, 
+    incompatible_with: [inference-huihui-4gpu, inference-pair-a, inference-pair-b, 
+                        inference-4gpu-large, dual-stack, image-studio,
+                        training-lora-text, training-lora-image, training-unsloth]
+
+  # Both huihui-ai Qwen3.8-27B finetunes at once, one per NVLink pair, plus
+  # embeddings. Ports 8004 / 8005; served names are fixed (no slot symlinks).
+  # vllm-huihui 0.92 on GPU0+GPU3; vllm-huihui-coder 0.84 + vllm-embed 0.08
+  # on GPU1, so ~22 GB per 24 GB card.
+  inference-huihui-4gpu:
+    description: "Huihui Qwen3.8-27B + Coder390 on both NVLink pairs, plus embeddings"
+    compose_files:
+      - compose.inference.yml
+    services:
+      - vllm-huihui
+      - vllm-huihui-coder
+      - vllm-embed
+    gpu_assignment:
+      vllm-huihui: ["0", "3"]
+      vllm-huihui-coder: ["1", "2"]
+      vllm-embed: ["1"]
+    exclusive_gpus: ["0", "1", "2", "3"]
+    vram_required_gb: 90
+    incompatible_with: [inference-pair-a, inference-pair-b, inference-4gpu,
                         inference-4gpu-large, dual-stack, image-studio,
                         training-lora-text, training-lora-image, training-unsloth]
 
@@ -65,7 +85,7 @@ profiles:
       vllm-pair-b: ["1", "2"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 96
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+    incompatible_with: [inference-huihui-4gpu, inference-pair-a, inference-pair-b,
                         inference-4gpu, inference-4gpu-large, image-studio,
                         training-lora-text, training-lora-image, training-unsloth]
 
@@ -85,8 +105,7 @@ profiles:
       vllm-pair-b: ["1", "2"]
     exclusive_gpus: ["0", "1", "2"]
     vram_required_gb: 72
-    compatible_with: [inference-small]
-    incompatible_with: [inference-pair-b, inference-4gpu, inference-4gpu-large,
+    incompatible_with: [inference-huihui-4gpu, inference-pair-b, inference-4gpu, inference-4gpu-large,
                         dual-stack, training-lora-text, training-lora-image]
 
   # ── TRAINING PROFILES ────────────────────────────────────────────────────
@@ -102,7 +121,7 @@ profiles:
       kohya: ["1", "2"]
     exclusive_gpus: ["1", "2"]
     vram_required_gb: 48
-    incompatible_with: [inference-pair-b, inference-4gpu, inference-4gpu-large, 
+    incompatible_with: [inference-huihui-4gpu, inference-pair-a, inference-pair-b, inference-4gpu, inference-4gpu-large,
                         dual-stack, image-studio, training-lora-text, training-unsloth]
 
   training-lora-text:
@@ -115,8 +134,9 @@ profiles:
       axolotl: ["0", "1", "2", "3"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 90
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
-                        inference-4gpu, inference-4gpu-large, dual-stack, image-studio, training-lora-image]
+    incompatible_with: [inference-huihui-4gpu, inference-pair-a, inference-pair-b,
+                        inference-4gpu, inference-4gpu-large, dual-stack, image-studio,
+                        training-lora-image, training-unsloth]
 
   training-unsloth:
     description: "Fast LoRA fine-tuning via Unsloth on NVLink pair A [GPU0,GPU3]"
@@ -128,7 +148,7 @@ profiles:
       unsloth: ["0", "3"]
     exclusive_gpus: ["0", "3"]
     vram_required_gb: 48
-    incompatible_with: [inference-small, inference-pair-a, inference-4gpu, 
+    incompatible_with: [inference-huihui-4gpu, inference-pair-a, inference-4gpu, 
                         inference-4gpu-large, dual-stack, training-lora-text, training-lora-image]
 
   inference-4gpu-large:
@@ -141,7 +161,7 @@ profiles:
       vllm-4gpu: ["0", "1", "2", "3"]
     exclusive_gpus: ["0", "1", "2", "3"]
     vram_required_gb: 96
-    incompatible_with: [inference-small, inference-pair-a, inference-pair-b,
+    incompatible_with: [inference-huihui-4gpu, inference-pair-a, inference-pair-b,
                         inference-4gpu, dual-stack, image-studio, training-lora-text, 
                         training-lora-image, training-unsloth]
     environment:

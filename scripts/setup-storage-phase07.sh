@@ -16,11 +16,13 @@ sudo mkdir -p /data/datasets/audio/{raw,processed}
 # Create checkpoint directories
 echo "Creating checkpoint directories..."
 sudo mkdir -p /data/checkpoints/{kohya,axolotl,unsloth}
+# Unsloth image state: notebooks/HF cache (/workspace) and Studio data (#95)
+sudo mkdir -p /data/unsloth/{workspace,studio}
 
 # Create model directories required by training and studio services
 echo "Creating model directories..."
 sudo mkdir -p /data/models/comfyui/{loras,checkpoints,vae,controlnet,embeddings,upscale_models}
-sudo mkdir -p /data/models/{vllm,hf-cache,whisper,piper,ollama,invokeai}
+sudo mkdir -p /data/models/{vllm,hf-cache,whisper,piper,invokeai}
 sudo mkdir -p /data/outputs/{comfyui,invokeai,upscaled,rembg}
 sudo mkdir -p /data/audio
 
@@ -45,7 +47,7 @@ echo "✓ All directories created:"
 echo "  - /data/datasets/{images,text,audio}/{raw,formatted,etc}"
 echo "  - /data/checkpoints/{kohya,axolotl,unsloth}"
 echo "  - /data/models/comfyui/{loras,checkpoints,vae,controlnet,embeddings,upscale_models}"
-echo "  - /data/models/{vllm,hf-cache,whisper,piper,ollama,invokeai}"
+echo "  - /data/models/{vllm,hf-cache,whisper,piper,invokeai}"
 echo "  - /data/outputs/{comfyui,invokeai,upscaled,rembg}"
 echo "  - /data/audio"
 echo "  - /data/notebooks"

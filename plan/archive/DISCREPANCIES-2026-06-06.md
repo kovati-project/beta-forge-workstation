@@ -1,3 +1,5 @@
+> **Historical — do not treat as current.** This is a 2026-06-06 snapshot, archived on 2026-11-14 (#65). Several features it lists as missing or incomplete have since been implemented. For current gaps see [plan/KNOWN_GAPS.md](../KNOWN_GAPS.md) and the [project board](https://github.com/users/KasemOmary/projects/2).
+
 # Discrepancies Analysis: AI Workstation App vs PROJECT_PLAN.md
 
 **Generated:** 2026-06-06  

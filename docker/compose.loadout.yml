@@ -9,6 +9,9 @@ services:
     image: loadout-manager:latest
     container_name: loadout-manager
     restart: unless-stopped
+    # no no-new-privileges/cap_drop (#68): starts and stops other containers
+    # through the Docker socket, which is root-equivalent on the host anyway
+    # (`:ro` does not limit the API). Accepted exception (#43).
     ports:
       - "8800:8800"
     volumes:
@@ -23,6 +26,10 @@ services:
         bind:
           create_host_path: false
       - ../loadout-manager:/app:ro
+      # Models tab: scan /data/models and /data/checkpoints for models already on
+      # disk (read-only); /data/models/vllm stays writable for downloads/slots.
+      - /data/models:/data/models:ro
+      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/vllm:/data/models/vllm
       # persisted active-profile state (LOADOUT_STATE_PATH default); lost on recreate without this
       - /data/loadout-manager:/data/loadout-manager
@@ -34,8 +41,32 @@ services:
       - COMPOSE_DIR=/compose
       - ENV_FILE=/compose/.env
       - HOST_COMPOSE_DIR=${REPO_ROOT:-/home/kasemo/ai-workstation-project}/docker
+      # Alertmanager by container name over ai-workstation (GET /api/alerts);
+      # Alertmanager posts back to http://loadout-manager:8800/api/alerts/webhook.
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      # browser-facing address shown in API responses (OAuth redirect URIs, runbook)
+      - WORKSTATION_HOST=${WORKSTATION_HOST:-10.10.10.2}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Admin panel (api/admin.py). Authentik is on the ai-auth network, so it
+      # is reached through its published port on the host. AUTHENTIK_TOKEN is an
+      # API token created in Authentik (Directory -> Tokens, intent "API").
+      - AUTHENTIK_URL=${AUTHENTIK_URL:-http://host.docker.internal:9080}
+      - AUTHENTIK_TOKEN=${AUTHENTIK_TOKEN:-}
+      # api/voice.py. Integration note: #90 used host.docker.internal:9099/:5000
+      # because this container was only on ai-loadout; with #82 it is also on
+      # ai-workstation (where compose.voice.yml runs), so it reaches the voice
+      # services by container name and container port, like #87 does for Qdrant etc.
+      - WHISPER_URL=http://whisper:8000
+      - PIPER_URL=http://piper-openai:8000
+      # MCP servers (compose.agentic.yml) are on the ai-workstation network;
+      # reach them through their published ports on the host.
+      # Integration note: kept as #93 chose. api/mcp.py builds every server URL
+      # from one MCP_HOST plus a per-server port, so container names (mcp-fetch,
+      # mcp-browser, ...) would need a code change there; no other PR reaches MCP.
+      - MCP_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         reservations:
@@ -45,8 +76,14 @@ services:
               capabilities: [gpu]
     networks:
       - ai-loadout
+      # shared with compose.monitoring.yml so Alertmanager can reach the
+      # alert webhook by container name (configs/prometheus/alertmanager.yml)
+      - ai-workstation
 
 networks:
   ai-loadout:
     name: ai-loadout
     driver: bridge
+  ai-workstation:
+    name: ai-workstation
+    external: true

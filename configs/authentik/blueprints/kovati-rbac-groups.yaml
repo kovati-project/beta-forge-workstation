@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://goauthentik.io/blueprints/schema.json
+#
+# Kovati RBAC roles (#54): the three groups the Loadout Manager admin panel
+# assigns users to. docker/compose.auth.yml mounts this directory at
+# /blueprints/custom, where the Authentik worker discovers and applies it on
+# start-up and whenever the file changes.
+#
+# state: created makes this idempotent without overriding the admins: a group
+# is created only if no group with that name exists, and later edits made in
+# the Authentik UI (renames aside) are never reverted.
+#
+# Role meaning (enforced by policies bound in Authentik, not by this file):
+#   Administrator - manages the workstation, incl. the Loadout Manager admin API
+#   Developer     - uses the dev tooling (OpenHands, JupyterLab, n8n, Dify, ...)
+#   User          - uses the end-user apps (Open WebUI)
+#
+# None of them is an Authentik superuser; the bootstrap admin keeps that via
+# the built-in "authentik Admins" group.
+version: 1
+metadata:
+  name: Kovati - RBAC groups
+  labels:
+    blueprints.goauthentik.io/description: Administrator, Developer and User groups for Kovati role assignment
+entries:
+  - model: authentik_core.group
+    state: created
+    identifiers:
+      name: Administrator
+    attrs:
+      is_superuser: false
+      attributes:
+        kovati_role: administrator
+  - model: authentik_core.group
+    state: created
+    identifiers:
+      name: Developer
+    attrs:
+      is_superuser: false
+      attributes:
+        kovati_role: developer
+  - model: authentik_core.group
+    state: created
+    identifiers:
+      name: User
+    attrs:
+      is_superuser: false
+      attributes:
+        kovati_role: user

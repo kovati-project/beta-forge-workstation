@@ -5,6 +5,17 @@ export function NVLinkTopology() {
   const { state } = useApp();
 
   if (!state.gpus || state.gpus.length === 0) {
+    // NVML unreadable: say so rather than show a loading skeleton forever.
+    if (state.gpuTelemetry && state.gpuTelemetry.available === false) {
+      return (
+        <div className="nvlink-topology nvlink-topology-unavailable" role="status">
+          <div className="nvlink-unavailable-title">GPU telemetry unavailable</div>
+          <div className="nvlink-unavailable-error">
+            {state.gpuTelemetry.error || 'NVML could not be read'}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="nvlink-topology skeleton">
         <div className="skeleton-bar" style={{ width: '100%', height: '160px' }}></div>
