@@ -10,14 +10,12 @@ from pydantic import BaseModel
 
 from .envfile import read_env
 
-router = APIRouter()
+try:
+    from config import VLLM_URLS
+except ImportError:
+    from ..config import VLLM_URLS
 
-VLLM_URLS = {
-    "vllm-pair-a": "http://localhost:8000",
-    "vllm-pair-b": "http://localhost:8001",
-    "vllm-4gpu": "http://localhost:8002",
-    "vllm-embed": "http://localhost:8003",
-}
+router = APIRouter()
 
 VLLM_MODEL_DIR = Path("/data/models/vllm")
 # Roots scanned for models already on disk (custom, fine-tuned, copied in by hand).
