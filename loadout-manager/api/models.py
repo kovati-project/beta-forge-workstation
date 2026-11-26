@@ -1,6 +1,7 @@
 """Model management API endpoints."""
 
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -234,6 +235,14 @@ def _valid_local_name(name: str) -> bool:
             and ".." not in name and not name.startswith("."))
 
 
+_REPO_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _valid_repo_id(repo_id: str) -> bool:
+    """Hugging Face ``owner/name``: no leading slash, no ``..``, nothing else."""
+    return bool(_REPO_ID_RE.match(repo_id)) and ".." not in repo_id
+
+
 @router.post("/models/local/register")
 async def register_local_model(req: RegisterRequest) -> Dict:
     """Link an on-disk HF-format model into VLLM_MODEL_DIR as ``name``.
@@ -364,22 +373,34 @@ async def download_vllm_model(req: DownloadRequest) -> Dict:
     if _download_state.get("status") == "running":
         raise HTTPException(status_code=409, detail="A download is already in progress")
 
-    if "/" in req.local_name or ".." in req.local_name or not req.local_name.strip():
-        raise HTTPException(status_code=400, detail="Invalid local_name")
+    repo_id = req.repo_id.strip()
+    if not _valid_repo_id(repo_id):
+        raise HTTPException(status_code=400,
+                            detail="Invalid repo_id (expected owner/name)")
 
-    dest = VLLM_MODEL_DIR / req.local_name
+    # Same rules as register/activate, plus: never a slot link name, and never a
+    # name that is already a symlink. snapshot_download writes THROUGH a symlink,
+    # so a registered model's name (or a slot's) would be overwritten in place.
+    local_name = req.local_name.strip()
+    if not _valid_local_name(local_name) or local_name in VLLM_SLOTS.values():
+        raise HTTPException(status_code=400, detail="Invalid local_name")
+    dest = VLLM_MODEL_DIR / local_name
+    if dest.is_symlink():
+        raise HTTPException(status_code=409,
+                            detail=f"{local_name} is already a link; pick another name")
+
     _download_state.clear()
     _download_state.update({
         "status": "running",
-        "repo_id": req.repo_id,
-        "local_name": req.local_name,
+        "repo_id": repo_id,
+        "local_name": local_name,
     })
 
     def _run():
         try:
             from huggingface_hub import snapshot_download
             snapshot_download(
-                repo_id=req.repo_id,
+                repo_id=repo_id,
                 local_dir=str(dest),
                 ignore_patterns=["*.gguf"],
                 token=_hf_token(),
@@ -390,7 +411,7 @@ async def download_vllm_model(req: DownloadRequest) -> Dict:
             _download_state["error"] = str(e)
 
     threading.Thread(target=_run, daemon=True).start()
-    return {"status": "started", "repo_id": req.repo_id, "local_name": req.local_name}
+    return {"status": "started", "repo_id": repo_id, "local_name": local_name}
 
 
 @router.get("/models/vllm/download/status")
