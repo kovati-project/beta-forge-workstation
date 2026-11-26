@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # Import API routers
 from api import create_router
 from api.gpu import read_gpu_telemetry
+from api import secrets as secrets_api
 
 app = FastAPI(title="Loadout Manager", version="1.0.0")
 
@@ -73,10 +74,59 @@ app.include_router(api_router)
 
 # ── Configuration ────────────────────────────────────────────────────────────
 CONFIG_PATH = Path(__file__).parent / "profiles.yaml"
-COMPOSE_BASE = Path(__file__).parent.parent / "docker"
-# docker/.env (bind-mounted at /compose/.env); passed explicitly so ${VAR}
-# references in the compose files resolve (#51)
-ENV_FILE = Path(os.environ.get("ENV_FILE", "/compose/.env"))
+# Compose files are reached the same way api/secrets.py reaches them: the
+# directory mounted at /compose (COMPOSE_DIR), with --project-directory set to
+# the host path (HOST_COMPOSE_DIR) so relative bind mounts resolve on the host,
+# and --env-file so ${VAR} substitution sees docker/.env. The old
+# Path(__file__).parent.parent / "docker" resolved to /docker inside the
+# container, so every teardown failed and every switch aborted.
+MANAGED_COMPOSE_FILES = ["compose.inference.yml", "compose.training.yml", "compose.studio.yml"]
+
+
+def _env_seconds(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default))
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        logger.warning(f"Ignoring invalid {name}={raw!r}; using {default}")
+        return default
+
+
+# `up` no longer has to cover image downloads (do_switch pulls first), but a
+# cold vLLM container can still take a while to be created and started.
+UP_TIMEOUT_S = _env_seconds("LOADOUT_UP_TIMEOUT", 300)
+DOWN_TIMEOUT_S = _env_seconds("LOADOUT_DOWN_TIMEOUT", 120)
+PULL_TIMEOUT_S = _env_seconds("LOADOUT_PULL_TIMEOUT", 1800)
+
+
+def _compose(compose_file: str) -> List[str]:
+    """`docker compose ... -f <file>` for one managed stack (basename only)."""
+    return secrets_api._compose(compose_file.split("/")[-1])
+
+
+def _start_plan(profile_name: str, profile: Dict) -> List[tuple]:
+    """[(compose_file, [services])] for a profile: one `up` per compose file.
+
+    Each file declares its own project name (ai-inference, ai-studio, ...).
+    Merging two files into one `up` put every container under the first file's
+    project, so image-studio's vllm-pair-b ran as ai-studio and the per-file
+    teardown never saw it. Starting each file on its own keeps containers in
+    the project that stop_all_services() takes down.
+    """
+    files = [cf.split("/")[-1] for cf in profile.get("compose_files") or []]
+    remaining = list(profile.get("services") or [])
+    plan = []
+    for cf in files:
+        doc = yaml.safe_load((secrets_api.COMPOSE_DIR / cf).read_text()) or {}
+        defined = set((doc.get("services") or {}).keys())
+        mine = [s for s in remaining if s in defined]
+        remaining = [s for s in remaining if s not in defined]
+        if mine:
+            plan.append((cf, mine))
+    if remaining:
+        raise ValueError(f"Profile '{profile_name}' lists services {remaining} that "
+                         f"are not defined in {files}")
+    return plan
 REPO_ROOT = Path(__file__).parent
 
 # ── State ────────────────────────────────────────────────────────────────────
@@ -146,17 +196,15 @@ def load_profiles() -> Dict:
 # Workload kind per service name; drives the colour of the per-GPU service tag.
 # Services not listed here render with the neutral tag colour.
 SERVICE_TYPES = {
-    "ollama": "inference",
     "vllm-pair-a": "inference",
     "vllm-pair-b": "inference",
     "vllm-4gpu": "inference",
+    "vllm-embed": "inference",
     "axolotl": "training",
     "kohya": "training",
     "unsloth": "training",
     "comfyui": "image",
     "invokeai": "image",
-    "realesrgan": "image",
-    "real-esrgan": "image",
     "rembg": "image",
 }
 
@@ -397,18 +445,26 @@ def _check_vram(profile_name: str, profile: Dict, telemetry: Dict,
     if missing:
         return f"GPU(s) {missing} required by '{profile_name}' are not visible"
 
+    # Per GPU, not summed: a tensor-parallel group needs its share on every
+    # card, so 24 GB free on GPU0 and 20 on GPU3 is not 44 for vllm-pair-a.
+    # The requirement is split evenly over exclusive_gpus (they are exclusive,
+    # so the profile owns each one whole).
     gpus = [by_index[i] for i in wanted]
+    share = required / len(gpus)
     if outgoing_running:
-        capacity = sum(g["vram_total_gb"] for g in gpus)
-        if capacity < required:
-            return (f"Insufficient VRAM: GPUs {wanted} hold {capacity:.1f}GB in "
-                    f"total, {required:g}GB required")
+        small = [g["index"] for g in gpus if g["vram_total_gb"] < share]
+        if small:
+            return (f"Insufficient VRAM: GPU(s) {small} hold less than the "
+                    f"{share:.1f}GB per GPU that '{profile_name}' needs "
+                    f"({required:g}GB over GPUs {wanted})")
         return None
-    free = sum(g["vram_free_gb"] for g in gpus)
-    reserve = VRAM_RESERVE_GB_PER_GPU * len(gpus)
-    if free + reserve < required:
-        return (f"Insufficient VRAM: {free:.1f}GB free on GPUs {wanted} "
-                f"(+{reserve:g}GB driver reserve), {required:g}GB required")
+    short = [(g["index"], g["vram_free_gb"]) for g in gpus
+             if g["vram_free_gb"] + VRAM_RESERVE_GB_PER_GPU < share]
+    if short:
+        detail = ", ".join(f"GPU{i} {free:.1f}GB free" for i, free in short)
+        return (f"Insufficient VRAM: {detail} (+{VRAM_RESERVE_GB_PER_GPU:g}GB "
+                f"driver reserve each), {share:.1f}GB per GPU required "
+                f"({required:g}GB over GPUs {wanted})")
     return None
 
 
@@ -432,15 +488,18 @@ async def _run_blocking(*args, **kwargs):
 async def stop_all_services() -> List[str]:
     """Stop all managed Docker Compose stacks. Returns a description of each
     stack that could not be confirmed stopped (empty list = all stopped)."""
-    compose_files = ["compose.inference.yml", "compose.training.yml", "compose.studio.yml"]
     failures = []
-    for cf in compose_files:
+    for cf in MANAGED_COMPOSE_FILES:
+        # --profile '*': services behind a compose profile (vllm-pair-b,
+        # vllm-4gpu, axolotl, unsloth, invokeai) are invisible to a plain
+        # `down` and kept running. --remove-orphans: containers left in this
+        # project by an older merged-file `up`.
         try:
             result = await _run_blocking(
-                ["docker", "compose", "-f", str(COMPOSE_BASE / cf), "down"],
+                _compose(cf) + ["--profile", "*", "down", "--remove-orphans"],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=DOWN_TIMEOUT_S
             )
         except subprocess.TimeoutExpired:
             logger.warning(f"Timeout stopping {cf}")
@@ -477,6 +536,28 @@ async def do_switch(profile_name: str):
                                  f"{type(e).__name__}: {e}")
         logger.info(f"Switching to profile: {profile_name}")
 
+        try:
+            plan = _start_plan(profile_name, profile)
+        except Exception as e:
+            raise _SwitchAborted(f"Cannot plan '{profile_name}': {type(e).__name__}: {e}")
+
+        # Download images while the old profile is still serving, so `up`
+        # does not have to fit a multi-GB pull inside its timeout and a failed
+        # download does not leave the box with nothing running. Best effort:
+        # --policy missing makes this a no-op offline when images are local,
+        # and if a pull really failed, `up` reports it.
+        for cf, svcs in plan:
+            try:
+                pulled = await _run_blocking(
+                    _compose(cf) + ["pull", "--policy", "missing", "--ignore-buildable",
+                                    "--quiet"] + svcs,
+                    capture_output=True, text=True, timeout=PULL_TIMEOUT_S)
+                if pulled.returncode != 0:
+                    logger.warning(f"Pre-pull for {cf} failed (exit {pulled.returncode}): "
+                                   f"{(pulled.stderr or '').strip()[:200]}")
+            except Exception as e:
+                logger.warning(f"Pre-pull for {cf} failed: {e}")
+
         # Stop all existing services. If any stack may still be running, do
         # not start another on top of it: that is the VRAM conflict the gates
         # exist to prevent. The old profile stays recorded as active (some of
@@ -504,19 +585,18 @@ async def do_switch(profile_name: str):
         if reason:
             raise _SwitchAborted(reason)
 
-        services = profile.get("services") or []
+        services = list(profile.get("services") or [])
         if services:
-            cmd = ["docker", "compose"]
-            if ENV_FILE.exists():
-                cmd += ["--env-file", str(ENV_FILE)]
-            for cf in profile["compose_files"]:
-                cf_name = cf.split("/")[-1]
-                cmd += ["-f", str(COMPOSE_BASE / cf_name)]
-            cmd += ["up", "-d", "--remove-orphans"] + services
             try:
-                result = await _run_blocking(cmd, capture_output=True, text=True, timeout=120)
-                if result.returncode != 0:
-                    raise RuntimeError(f"Docker compose failed: {result.stderr}")
+                for cf, svcs in plan:
+                    # No --remove-orphans: the profile's other files are
+                    # separate projects now, and teardown already emptied them.
+                    result = await _run_blocking(
+                        _compose(cf) + ["up", "-d"] + svcs,
+                        capture_output=True, text=True, timeout=UP_TIMEOUT_S)
+                    if result.returncode != 0:
+                        raise RuntimeError(f"Docker compose failed for {cf}: "
+                                           f"{(result.stderr or '').strip()[:500]}")
             except Exception as e:
                 # `up` may have started some containers before failing (or the
                 # CLI was killed mid-start). Take them down again so nothing

@@ -1,7 +1,7 @@
 name: compose images
 
 # Every image in docker/compose.*.yml must still be pullable. Registries do
-# remove images (MinIO, #92; unsloth and realesrgan, #95), and a deployed host
+# remove images (MinIO, #92; Unsloth and Real-ESRGAN, #95), and a deployed host
 # only notices when it next pulls. Runs on compose changes and weekly.
 
 on:

@@ -1,42 +1,5 @@
 // Resources API utilities
 
-export async function getModels() {
-  try {
-    const response = await fetch('/api/models');
-    if (response.ok) return await response.json();
-    return [];
-  } catch (error) {
-    console.error('Failed to fetch models:', error);
-    return [];
-  }
-}
-
-export async function deleteModel(name) {
-  try {
-    const response = await fetch(`/api/models/${name}`, { method: 'DELETE' });
-    if (response.ok) return await response.json();
-    throw new Error('Failed to delete model');
-  } catch (error) {
-    console.error('Failed to delete model:', error);
-    throw error;
-  }
-}
-
-export async function pullModel(name) {
-  try {
-    const response = await fetch('/api/models/pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (response.ok) return await response.json();
-    throw new Error('Failed to pull model');
-  } catch (error) {
-    console.error('Failed to pull model:', error);
-    throw error;
-  }
-}
-
 export async function loadLoRA(path, baseModel) {
   try {
     const response = await fetch('/api/models/load-lora', {

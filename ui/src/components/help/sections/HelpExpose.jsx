@@ -2,10 +2,10 @@ import { Panel } from '../../Panel';
 
 export function HelpExpose() {
   const endpoints = [
-    { service: 'vLLM (pair-a)', port: '8000', path: '/v1', desc: 'Primary LLM inference (34B–40B models via GPU 0+3)' },
-    { service: 'vLLM (pair-b)', port: '8001', path: '/v1', desc: 'Secondary LLM inference stack (GPU 1+2)' },
-    { service: 'vLLM (4-GPU)', port: '8002', path: '/v1', desc: '70B+ model inference (all 4 GPUs)' },
-    { service: 'Ollama', port: '11434', path: '/v1', desc: 'GGUF model inference, simpler setup' },
+    { service: 'vLLM (4-GPU)', port: '8002', path: '/v1', desc: 'Default: Qwen3.8-27B for chat, coding agents and autocomplete (all 4 GPUs)' },
+    { service: 'vLLM (embeddings)', port: '8003', path: '/v1', desc: 'nomic-embed-text for RAG and codebase search' },
+    { service: 'vLLM (pair-a)', port: '8000', path: '/v1', desc: 'Optional profile: 34B–40B models via GPU 0+3' },
+    { service: 'vLLM (pair-b)', port: '8001', path: '/v1', desc: 'Optional profile: second model on GPU 1+2' },
     { service: 'Whisper STT', port: '9099', path: '/v1/audio/transcriptions', desc: 'Speech-to-text (audio → text)' },
     { service: 'Piper TTS', port: '5000', path: '/v1/audio/speech', desc: 'Text-to-speech (text → audio)' },
   ];

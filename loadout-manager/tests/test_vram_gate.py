@@ -41,7 +41,6 @@ def set_free_after_down(h, free_gb):
 
 # Profiles that declare vram_required_gb > 0. Every GPU profile does (BUG-5).
 GATED = [
-    ("inference-small", 16),
     ("inference-pair-a", 44),
     ("inference-pair-b", 44),
     ("inference-4gpu", 88),
@@ -118,16 +117,16 @@ def test_sufficient_vram_passes_and_requested_services_started(lm):
 def test_refusal_does_not_disturb_a_running_profile(lm):
     """A VRAM refusal must not tear down what is currently running. The pair is
     compatible, so only the VRAM gate can refuse it: on 16 GB cards
-    training-lora-image's 48 GB cannot fit on GPU1+GPU2."""
-    assert "inference-small" not in lm.profiles["training-lora-image"].get("incompatible_with", [])
-    assert "training-lora-image" not in lm.profiles["inference-small"].get("incompatible_with", [])
-    lm.make_active("inference-small")
+    training-unsloth's 48 GB cannot fit on GPU0+GPU3."""
+    assert "inference-pair-b" not in lm.profiles["training-unsloth"].get("incompatible_with", [])
+    assert "training-unsloth" not in lm.profiles["inference-pair-b"].get("incompatible_with", [])
+    lm.make_active("inference-pair-b")
     lm.set_free(10, total_gb=16.0)
-    r = lm.activate("training-lora-image")
+    r = lm.activate("training-unsloth")
     assert r.status_code == 409
     assert lm.docker.calls == []
-    assert lm.state["active_profile"] == "inference-small"
-    assert lm.state["running_services"] == ["ollama"]
+    assert lm.state["active_profile"] == "inference-pair-b"
+    assert lm.state["running_services"] == ["vllm-pair-b"]
 
 
 # ── Telemetry unavailable ────────────────────────────────────────────────────
@@ -156,7 +155,7 @@ def test_idle_is_not_blocked_by_missing_telemetry(lm):
     assert lm.activate("idle").status_code == 200
 
 
-@pytest.mark.parametrize("name", ["inference-small", "inference-pair-a", "inference-pair-b"])
+@pytest.mark.parametrize("name", ["inference-pair-a", "inference-pair-b"])
 def test_telemetry_unavailable_fails_closed_without_declared_requirement(lm, name):
     lm.telemetry_down()
     r = lm.activate(name)
@@ -164,7 +163,7 @@ def test_telemetry_unavailable_fails_closed_without_declared_requirement(lm, nam
     assert lm.docker.starts == []
 
 
-@pytest.mark.parametrize("name", ["inference-small", "inference-pair-a", "inference-pair-b"])
+@pytest.mark.parametrize("name", ["inference-pair-a", "inference-pair-b"])
 def test_low_vram_refused_without_declared_requirement(lm, name):
     lm.set_free(0.5)  # essentially no VRAM anywhere
     r = lm.activate(name)
@@ -184,7 +183,7 @@ def test_gate_counts_only_the_profiles_exclusive_gpus(lm):
 
 
 @pytest.mark.parametrize("active,target", [
-    ("inference-small", "image-studio"),         # the data's own 'compatible_with' pair
+    ("inference-pair-a", "image-studio"),        # inference -> image studio
     ("training-lora-text", "training-lora-text"),  # plain restart of the active profile
 ])
 def test_vram_held_by_the_outgoing_profile_does_not_block_the_switch(lm, active, target):
@@ -195,7 +194,8 @@ def test_vram_held_by_the_outgoing_profile_does_not_block_the_switch(lm, active,
     set_free_after_down(lm, 24)
     r = lm.activate(target)
     assert r.status_code == 200, "teardown would have freed this VRAM"
-    assert len(lm.docker.starts) == 1
+    # One `up` per compose file of the target (image-studio has two).
+    assert len(lm.docker.starts) == len(lm.profiles[target]["compose_files"])
     assert lm.state["active_profile"] == target
     assert lm.state["last_error"] is None
 
@@ -235,7 +235,7 @@ def test_outgoing_profile_still_holding_vram_after_teardown_aborts_the_start(lm)
     """BUG-4 counterpart: with a profile running, the endpoint cannot know how
     much VRAM teardown will free, so it accepts and do_switch re-checks after
     teardown. If the memory is still taken then, nothing is started."""
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     lm.set_free([1, 1, 1, 1])  # and it stays taken after `down`
     assert lm.activate("image-studio").status_code == 200
     assert len(lm.docker.downs) == 3
@@ -316,3 +316,25 @@ async def test_scheduled_switch_that_passes_the_gates_still_runs(lm, monkeypatch
     await _run_one_scheduler_pass(lm, monkeypatch, "training-lora-text")
     assert len(lm.docker.starts) == 1
     assert lm.state["active_profile"] == "training-lora-text"
+
+
+# ── Per-GPU check ────────────────────────────────────────────────────────────
+
+def test_free_memory_is_checked_per_gpu_not_summed(lm):
+    """vllm-pair-a is TP=2 over GPU0+GPU3 and needs its share on each card.
+    GPU0 fully free plus GPU3 at 20 sums to 44 (+1 reserve) but GPU3 cannot
+    hold 22."""
+    lm.set_free([24, 24, 24, 20])
+    r = lm.activate("inference-pair-a")
+    assert r.status_code == 409
+    assert lm.docker.calls == []
+
+
+def test_capacity_is_checked_per_gpu_while_a_profile_is_running(lm):
+    """With a profile running the gate only checks capacity; a 16 GB card cannot
+    take a 22 GB share even if the pair's total looks big enough."""
+    lm.make_active("inference-pair-b")
+    lm.set_free(1, total_gb=16.0)
+    r = lm.activate("inference-pair-a")
+    assert r.status_code == 409
+    assert lm.docker.calls == []

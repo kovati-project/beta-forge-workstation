@@ -110,7 +110,18 @@ scrape_configs:
           profile_gated: "true"
           gpus: "0,1,2,3"
 
-  # Not scraped: ollama, comfyui, open-webui. Their stock images serve no
+  - job_name: 'vllm-embed'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['vllm-embed:8000']    # host port 8003 -> container 8000
+        labels:
+          service: vllm-embed
+          engine: vllm
+          profile_gated: "true"
+          gpus: "1"
+
+  # Not scraped: comfyui, open-webui. Their stock images serve no
   # Prometheus endpoint (/metrics is a 404 or the web UI's HTML; Open WebUI's
   # telemetry is OTLP push), so a job for them could never be UP and only kept
   # ServiceDown firing. Container liveness and resource use for all three are

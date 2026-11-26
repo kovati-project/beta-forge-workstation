@@ -32,7 +32,7 @@ check "ComfyUI container running"      "docker ps --filter name=comfyui --filter
 check "ComfyUI API responding"         "curl -sf http://localhost:8188/system_stats"
 check "Rembg container running"        "docker ps --filter name=rembg --filter status=running | grep -q rembg"
 check "Rembg API responding"           "curl -sf http://localhost:8190/ 2>/dev/null || true"
-check "Real-ESRGAN container running"  "docker ps --filter name=realesrgan --filter status=running | grep -q realesrgan"
+check "Upscale model present (ComfyUI)" "ls /data/models/comfyui/upscale_models/ 2>/dev/null | grep -q '.'"
 
 # Models
 echo ""
