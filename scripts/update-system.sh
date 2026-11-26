@@ -25,7 +25,7 @@ ${YELLOW}Usage:${NC}
   bash scripts/update-system.sh <command> [args]
 
 ${YELLOW}Commands:${NC}
-  driver [VERSION]       Update NVIDIA driver (e.g., 560, 555, or latest)
+  driver [VERSION]       Update NVIDIA driver (e.g., 595, 580, or latest; 580 minimum)
   images [SERVICE]       Update Docker images (all or specific service)
   model-add <REPO> [NAME]  Download a Hugging Face model for vLLM
   model-remove <NAME>      Remove a vLLM model directory
@@ -102,6 +102,12 @@ cmd_driver() {
         fi
     fi
     
+    # vLLM's pinned image is built on CUDA 13.0, which needs driver >= 580.
+    if [[ ! "$version" =~ ^[0-9]+$ ]] || (( version < 580 )); then
+        log_error "Driver version must be a branch number >= 580 (got '$version'); vLLM needs CUDA 13.0"
+        return 1
+    fi
+
     log_warn "This will stop all GPU services and reboot the system"
     echo -n "Continue? (yes/no): "
     read -r confirm

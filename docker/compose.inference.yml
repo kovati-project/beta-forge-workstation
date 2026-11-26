@@ -12,13 +12,17 @@ services:
   # Pair A and pair B share GPUs with vllm-4gpu, so they are opt-in profiles
   # (the loadout manager stops the stack before starting another profile).
 
+  # vLLM is pinned to v0.23.0 (VLLM_TAG in docker/.env overrides it), the
+  # version Qwen3.8-27B was validated on: ~5 min load, 262,144-token window,
+  # qwen3_coder tool calls. It is a CUDA 13.0 build (driver >= 580). An
+  # unpinned tag changes the engine, its flags and its driver floor on any pull.
   # ── vLLM: NVLink Pair A [GPU0, GPU3] ─────────────────────────────────────────
   # High-throughput serving for 32B–40B models.
   # CUDA_VISIBLE_DEVICES=0,3 maps to the confirmed NVLink bridge.
   # Model path is a symlink — update /data/models/vllm/current before starting.
   # Not started by default — use profile "pair-a" or the loadout manager.
   vllm-pair-a:
-    image: vllm/vllm-openai:v0.23.0
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-pair-a
     restart: unless-stopped
     ipc: host
@@ -70,7 +74,7 @@ services:
   # Second independent inference slot. Same config as pair A, different GPUs/port.
   # Not started by default — use profile "pair-b" or the loadout manager.
   vllm-pair-b:
-    image: vllm/vllm-openai:v0.23.0
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-pair-b
     restart: unless-stopped
     ipc: host
@@ -153,7 +157,7 @@ services:
   # 57 -> ~41 tok/s (the pipeline adds a hop per token). Load ~3.5 min.
   # Revert: TP=4, drop --pipeline-parallel-size, CUDA_* and the 8192 line.
   vllm-4gpu:
-    image: vllm/vllm-openai:v0.23.0
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-4gpu
     restart: unless-stopped
     ipc: host
@@ -202,7 +206,7 @@ services:
   # Weights download into /data/models/hf-cache on first start. Trust-remote-code
   # is needed because the repo's config.json names a custom NomicBert config class.
   vllm-embed:
-    image: vllm/vllm-openai:v0.23.0
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-embed
     restart: unless-stopped
     ipc: host
@@ -235,7 +239,7 @@ services:
   # (qwen3_5 arch), FP8 on load (~14 GB/GPU at TP=2). Flags match vllm-4gpu.
   # Mounts the model dir directly (not a slot symlink) so the served name is fixed.
   vllm-huihui:
-    image: vllm/vllm-openai:v0.23.0
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-huihui
     restart: unless-stopped
     ipc: host
@@ -281,7 +285,7 @@ services:
   # (qwen3_5 arch), FP8 on load (~14 GB/GPU at TP=2). Flags match vllm-4gpu.
   # Mounts the model dir directly (not a slot symlink) so the served name is fixed.
   vllm-huihui-coder:
-    image: vllm/vllm-openai:v0.23.0
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-huihui-coder
     restart: unless-stopped
     ipc: host

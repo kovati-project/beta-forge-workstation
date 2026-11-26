@@ -25,12 +25,13 @@ check() {
 
 STUB="$WORK/bin"
 mkdir -p "$STUB"
-# Knobs: STUB_TOPO=healthy|no-nvlink|fail, STUB_DOWN_LINKS=<n> links down on GPU1
+# Knobs: STUB_TOPO=healthy|no-nvlink|fail, STUB_DOWN_LINKS=<n> links down on GPU1,
+# STUB_DRIVER=<version> (default 595.71.05, the version on the workstation)
 cat > "$STUB/nvidia-smi" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
   "--query-gpu=driver_version --format=csv,noheader")
-    for i in 0 1 2 3; do echo "570.86.15"; done ;;
+    for i in 0 1 2 3; do echo "${STUB_DRIVER:-595.71.05}"; done ;;
   "--query-gpu=name --format=csv,noheader")
     for i in 0 1 2 3; do echo "NVIDIA RTX A5500"; done ;;
   "--query-gpu=persistence_mode --format=csv,noheader")
@@ -85,6 +86,11 @@ STUB_DOWN_LINKS=2 run
 check "exits 1" [ "$RC" -eq 1 ]
 check "reports GPU1 degraded 2/4" grep -q "GPU1 NVLink DEGRADED (2/4" <<<"$OUT"
 check "other GPUs still OK" [ "$(grep -c 'NVLink OK (4/4' <<<"$OUT")" -eq 3 ]
+
+echo "verify-drivers.sh: driver below the 580 floor"
+STUB_DRIVER=570.86.15 run
+check "exits 1" [ "$RC" -eq 1 ]
+check "names the 580 minimum" grep -q "Driver 570.86.15 is below minimum 580" <<<"$OUT"
 
 echo "verify-drivers.sh: topo -m fails"
 STUB_TOPO=fail run
