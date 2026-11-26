@@ -1,0 +1,355 @@
+#!/usr/bin/env bash
+# Test harness for scripts/backup.sh. Runs the real script against a stub
+# `docker` / `mc` on PATH and a temporary DATA_ROOT / BACKUP_ROOT, so it needs
+# no Docker daemon, no root and no /data. What it can NOT prove: that the real
+# docker CLI, alpine image, pg_dumpall or mc behave the way the stubs do.
+#
+# Usage: bash scripts/tests/test-backup.sh      (exit 0 = all tests passed)
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT="$(cd "$HERE/.." && pwd)/backup.sh"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+PASSES=0
+FAILS=0
+pass() { PASSES=$((PASSES + 1)); echo "  ok   $1"; }
+fail() { FAILS=$((FAILS + 1)); echo "  FAIL $1"; }
+check() { # check <description> <command...>
+    local desc=$1
+    shift
+    if "$@"; then pass "$desc"; else fail "$desc"; fi
+}
+
+# ── stubs ─────────────────────────────────────────────────────────────────────
+STUB="$WORK/bin"
+mkdir -p "$STUB"
+
+# docker stub. Knobs (env):
+#   STUB_DOCKER_DOWN=1        `docker info` fails like a stopped daemon
+#   STUB_VOLUMES="a b"        names `docker volume ls -q` prints / inspect knows
+#   STUB_FAIL_SOURCES="x y"   `docker run` for these sources writes half an
+#                             archive, prints to stderr and exits 1
+#   STUB_PG_RUNNING="c d"     containers `docker inspect` reports running
+#   STUB_MC_ALIAS=1          `docker exec <c> mc ls local` succeeds (alias configured)
+#   STUB_MC_PIPE_FAIL=name   `mc pipe` of that file name fails
+#   STUB_MINIO_STORE=dir     where `mc pipe` stores objects (<dir>/local/backups/...)
+#   STUB_MINIO_LOG=file      mc invocations are appended here
+#   STUB_DOCKER_LOG=file      `docker run` appends its arguments
+#   STUB_CHOWN_LOG=file       the container-side chown appends its arguments
+cat > "$STUB/docker" <<'EOF'
+#!/usr/bin/env bash
+in_list() { local x; for x in $2; do [ "$x" = "$1" ] && return 0; done; return 1; }
+case "$1" in
+  info)
+    if [ -n "${STUB_DOCKER_DOWN:-}" ]; then
+      echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock" >&2
+      exit 1
+    fi
+    echo "Server Version: stub" ;;
+  volume)
+    case "$2" in
+      inspect) in_list "$3" "${STUB_VOLUMES:-}" ;;
+      ls) for v in ${STUB_VOLUMES:-}; do echo "$v"; done ;;
+    esac ;;
+  ps) ;;
+  inspect)
+    c=${!#}
+    if in_list "$c" "${STUB_PG_RUNNING:-}"; then echo true; else
+      echo "Error: No such object: $c" >&2; exit 1; fi ;;
+  exec)
+    shift
+    while [ $# -gt 0 ]; do case "$1" in -i|-t|-it) shift ;; -e) shift 2 ;; *) break ;; esac; done
+    container=$1; shift
+    if [ "$1" = mc ]; then
+      # mc inside the minio container. The alias is "configured" only with STUB_MC_ALIAS=1.
+      echo "docker exec $container $*" >> "${STUB_MINIO_LOG:-/dev/null}"
+      case "$2" in
+        ls) [ -n "${STUB_MC_ALIAS:-}" ] ;;
+        pipe)
+          if [ -n "${STUB_MC_PIPE_FAIL:-}" ] && [ "$(basename "$3")" = "$STUB_MC_PIPE_FAIL" ]; then
+            echo "mc: <ERROR> Unable to write to bucket." >&2; cat > /dev/null; exit 1
+          fi
+          mkdir -p "$STUB_MINIO_STORE/$(dirname "$3")" && cat > "$STUB_MINIO_STORE/$3" ;;
+        *) echo "stub mc: unhandled: $*" >&2; exit 99 ;;
+      esac
+    else
+      echo "-- stub dump of $container"
+    fi ;;
+  run)
+    shift
+    src="" dst="" script="" file=""
+    echo "docker run $*" >> "${STUB_DOCKER_LOG:-/dev/null}"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -v) case "$2" in
+              *:/source:ro) src=${2%:/source:ro} ;;
+              *:/backup) dst=${2%:/backup} ;;
+            esac
+            shift 2 ;;
+        -e) export "${2?}"; shift 2 ;;
+        --rm) shift ;;
+        alpine) shift; break ;;
+        *) shift ;;
+      esac
+    done
+    # remaining: sh -c '<script>' sh <name>.tar.gz   (script uses /source, /backup)
+    script=$3 file=$5
+    out="$dst/$file"
+    if in_list "$src" "${STUB_FAIL_SOURCES:-}"; then
+      printf 'partial' > "$out"
+      echo "tar: /source/big.db: Read error at byte 0: Input/output error" >&2
+      exit 1
+    fi
+    # Run the script for real against a throwaway source tree. The container's
+    # chown is replaced by a recorder (the test user cannot chown to others, and
+    # an unprivileged chown to oneself proves nothing). umask 022 stands in for
+    # root's default inside the container, which the host's umask 077 never reaches.
+    tree=$(mktemp -d)
+    echo "stub archive of $src" > "$tree/data.txt"
+    script=${script//\/source/$tree}
+    script=${script//\/backup\//$dst/}
+    umask 022
+    PATH="$STUB_CONTAINER_BIN:$PATH" sh -c "$script" sh "$file"
+    rc=$?
+    rm -rf "$tree"
+    exit $rc ;;
+  *) echo "stub docker: unhandled: $*" >&2; exit 99 ;;
+esac
+EOF
+
+# `chown` as seen inside the stub container: record, do not act
+mkdir -p "$WORK/container-bin"
+STUB_CONTAINER_BIN="$WORK/container-bin"
+export STUB_CONTAINER_BIN
+cat > "$STUB_CONTAINER_BIN/chown" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "${STUB_CHOWN_LOG:-/dev/null}"
+EOF
+
+# Host mc stub. There is no host mc any more (mc runs inside the minio
+# container), so this only records that backup.sh wrongly called it.
+cat > "$STUB/mc" <<EOF
+#!/usr/bin/env bash
+touch "$WORK/host-mc-called"
+exit 0
+EOF
+
+# du stub: STUB_DU_FAIL=1 makes it fail, forcing an unexpected set -e abort
+REAL_DU="$(command -v du)"
+cat > "$STUB/du" <<EOF
+#!/usr/bin/env bash
+if [ -n "\${STUB_DU_FAIL:-}" ]; then echo "du: stub failure" >&2; exit 1; fi
+exec "$REAL_DU" "\$@"
+EOF
+chmod +x "$STUB"/* "$STUB_CONTAINER_BIN"/*
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+ALL_VOLUMES="ai-webui_open-webui-data ai-training_label-studio-data ai-storage_postgres-data ai-monitoring_prometheus-data ai-monitoring_grafana-data ai-storage_qdrant-data"
+N=0
+
+# new_env: fresh DATA_ROOT/BACKUP_ROOT for one test case
+new_env() {
+    N=$((N + 1))
+    DATA="$WORK/case$N/data"
+    ROOT="$WORK/case$N/backups"
+    mkdir -p "$DATA/n8n" "$DATA/authentik" "$ROOT"
+    echo "n8n" > "$DATA/n8n/database.sqlite"
+}
+
+# run_backup <args...>: runs backup.sh; sets RC and OUT, and RUN to the new run dir
+run_backup() {
+    OUT=$(PATH="$STUB:$PATH" DATA_ROOT="$DATA" BACKUP_ROOT="$ROOT" BACKUP_MIN_FREE_GB=0 \
+          bash "$SCRIPT" "$@" 2>&1)
+    RC=$?
+    RUN=$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d -newer "$WORK/stamp$N" 2>/dev/null | head -1)
+}
+stamp() { touch "$WORK/stamp$N"; sleep 1; }
+
+# make_old <dir>: create a directory dated 2020
+make_old() { mkdir -p "$1"; touch -d '2020-01-01 00:00:00' "$1"; }
+
+manifest_failed() { # names listed under "## FAILED" in the manifest
+    awk '/^## FAILED/{f=1; next} /^##/{f=0} f && NF' "$RUN/MANIFEST.txt"
+}
+
+# ── tests ─────────────────────────────────────────────────────────────────────
+echo "backup.sh: unknown mode"
+new_env
+run_backup volume
+check "exits 2" [ "$RC" -eq 2 ]
+check "prints usage" grep -q "Usage:" <<<"$OUT"
+check "names the bad mode" grep -q "Unknown mode: 'volume'" <<<"$OUT"
+check "creates no run directory" [ -z "$(ls -A "$ROOT")" ]
+
+echo "backup.sh: --help"
+new_env
+run_backup --help
+check "exits 0" [ "$RC" -eq 0 ]
+check "prints usage" grep -q "Usage:" <<<"$OUT"
+
+echo "backup.sh: extra argument"
+new_env
+run_backup volumes extra
+check "exits 2" [ "$RC" -eq 2 ]
+
+echo "backup.sh: docker daemon down"
+new_env
+STUB_DOCKER_DOWN=1 run_backup volumes
+check "exits 2" [ "$RC" -eq 2 ]
+check "says the daemon is unreachable" grep -q "daemon is not reachable" <<<"$OUT"
+check "shows docker's own error" grep -q "Cannot connect to the Docker daemon" <<<"$OUT"
+check "creates no run directory" [ -z "$(ls -A "$ROOT")" ]
+
+echo "backup.sh: all volumes succeed"
+new_env
+make_old "$ROOT/20200101-000000"
+stamp
+STUB_VOLUMES="$ALL_VOLUMES" STUB_PG_RUNNING="postgres authentik-postgres" run_backup volumes
+check "exits 0" [ "$RC" -eq 0 ]
+check "says Backup Complete" grep -q "Backup Complete" <<<"$OUT"
+check "has a manifest without FAILED" bash -c '[ -f "$1" ] && ! grep -q "## FAILED" "$1"' _ "$RUN/MANIFEST.txt"
+check "archived all 10 sources" [ "$(find "$RUN" -name '*.gz' | wc -l)" -eq 10 ]
+check "manifest does not list itself" bash -c '! grep -q "  MANIFEST.txt" "$1"' _ "$RUN/MANIFEST.txt"
+
+echo "backup.sh: container-written archives belong to the invoking user"
+new_env
+stamp
+STUB_DOCKER_LOG="$WORK/docker-run$N.log" STUB_CHOWN_LOG="$WORK/chown$N.log" \
+STUB_VOLUMES="$ALL_VOLUMES" run_backup volumes
+check "exits 0" [ "$RC" -eq 0 ]
+check "passes the invoker's uid and gid" \
+    grep -q -- "-e HOST_UID=$(id -u) -e HOST_GID=$(id -g)" "$WORK/docker-run$N.log"
+check "still reads sources as root (no --user)" \
+    bash -c '! grep -qE -- "(--user|-u )" "$1"' _ "$WORK/docker-run$N.log"
+check "chowns every container archive to uid:gid" \
+    bash -c '[ "$(grep -c "^$1:$2 /" "$3")" -eq 8 ]' _ "$(id -u)" "$(id -g)" "$WORK/chown$N.log"
+check "chown targets the run directory" grep -q " $RUN/qdrant.tar.gz\$" "$WORK/chown$N.log"
+check "archives are mode 600 despite the container umask" \
+    bash -c '[ -z "$(find "$1" -name "*.tar.gz" ! -perm 600)" ]' _ "$RUN"
+check "archives are valid gzip tar" bash -c 'tar tzf "$1" >/dev/null' _ "$RUN/n8n.tar.gz"
+
+echo "backup.sh: one volume fails in the middle"
+new_env
+make_old "$ROOT/20200101-000000"
+stamp
+STUB_VOLUMES="$ALL_VOLUMES" STUB_PG_RUNNING="postgres authentik-postgres" \
+STUB_FAIL_SOURCES="ai-storage_postgres-data" run_backup volumes
+check "exits 1" [ "$RC" -eq 1 ]
+check "says Backup FAILED" grep -q "Backup FAILED" <<<"$OUT"
+check "writes a manifest" [ -f "$RUN/MANIFEST.txt" ]
+check "manifest FAILED lists only postgres" [ "$(manifest_failed)" = "postgres" ]
+check "removes the partial archive" [ ! -e "$RUN/postgres.tar.gz" ]
+check "keeps going: volumes after it are archived" [ -f "$RUN/qdrant.tar.gz" ]
+check "keeps going: dumps after it are archived" [ -f "$RUN/authentik-db-dump.sql.gz" ]
+check "surfaces the tar error in the log" grep -q "Input/output error" <<<"$OUT"
+check "skips retention" grep -q "Skipping cleanup" <<<"$OUT"
+check "old run directory is kept" [ -d "$ROOT/20200101-000000" ]
+
+echo "backup.sh: retention after a successful run"
+new_env
+make_old "$ROOT/20200101-000000"          # old run dir: removed
+make_old "$ROOT/20200102-000000"          # old run dir: removed
+make_old "$ROOT/keep-me"                  # old, not a run dir
+make_old "$ROOT/20200103-000000.bak"      # old, run-like but not the pattern
+make_old "$ROOT/2020-01-04"               # old, other date format
+mkdir -p "$ROOT/20991231-000000"          # recent run dir (mtime now)
+touch -d '2020-01-01' "$ROOT/old-file-20200101-000000"
+stamp
+STUB_VOLUMES="$ALL_VOLUMES" run_backup volumes
+check "exits 0" [ "$RC" -eq 0 ]
+check "removes old run directories" [ ! -e "$ROOT/20200101-000000" ]
+check "removes every old run directory" [ ! -e "$ROOT/20200102-000000" ]
+check "keeps old non-run directory" [ -d "$ROOT/keep-me" ]
+check "keeps old run-like .bak directory" [ -d "$ROOT/20200103-000000.bak" ]
+check "keeps old directory in another date format" [ -d "$ROOT/2020-01-04" ]
+check "keeps old plain file" [ -f "$ROOT/old-file-20200101-000000" ]
+check "keeps recent run directory" [ -d "$ROOT/20991231-000000" ]
+check "keeps BACKUP_ROOT" [ -d "$ROOT" ]
+check "keeps this run" [ -f "$RUN/MANIFEST.txt" ]
+check "reports 2 removed" grep -q "Removed 2 of 2 old backup" <<<"$OUT"
+
+echo "backup.sh: retention skipped when nothing was backed up"
+new_env
+rm -rf "$DATA/n8n" "$DATA/authentik"
+make_old "$ROOT/20200101-000000"
+stamp
+STUB_VOLUMES="" run_backup volumes
+check "exits 1" [ "$RC" -eq 1 ]
+check "manifest FAILED says nothing-backed-up" [ "$(manifest_failed)" = "nothing-backed-up" ]
+check "old run directory is kept" [ -d "$ROOT/20200101-000000" ]
+
+echo "backup.sh: unexpected abort mid-run (set -e)"
+new_env
+make_old "$ROOT/20200101-000000"
+stamp
+STUB_VOLUMES="$ALL_VOLUMES" STUB_DU_FAIL=1 run_backup volumes
+check "exits non-zero" [ "$RC" -ne 0 ]
+check "says it aborted" grep -q "aborted" <<<"$OUT"
+check "still writes a manifest" [ -f "$RUN/MANIFEST.txt" ]
+check "manifest FAILED says aborted" grep -qx "aborted" <(manifest_failed)
+check "old run directory is kept" [ -d "$ROOT/20200101-000000" ]
+
+echo "backup.sh: MinIO sync through the container's mc"
+new_env
+stamp
+STORE="$WORK/minio$N"
+STUB_MINIO_STORE="$STORE" STUB_MINIO_LOG="$WORK/minio$N.log" STUB_MC_ALIAS=1 \
+STUB_VOLUMES="$ALL_VOLUMES" STUB_PG_RUNNING="minio postgres" run_backup volumes
+check "exits 0" [ "$RC" -eq 0 ]
+check "says it synced" grep -q "Synced to MinIO: local/backups/" <<<"$OUT"
+check "never calls a host mc" [ ! -e "$WORK/host-mc-called" ]
+check "uploads the manifest" [ -f "$STORE/local/backups/$(basename "$RUN")/MANIFEST.txt" ]
+check "uploads each archive byte for byte" \
+    bash -c 'cmp "$1/qdrant.tar.gz" "$2/local/backups/$(basename "$1")/qdrant.tar.gz"' _ "$RUN" "$STORE"
+check "uploads every file in the run" \
+    bash -c '[ "$(ls "$1" | wc -l)" -eq "$(ls "$2/local/backups/$(basename "$1")" | wc -l)" ]' _ "$RUN" "$STORE"
+check "uses no -it (not a tty) and no secrets on the command line" \
+    bash -c '! grep -qE -- "( -it|password|alias set)" "$1"' _ "$WORK/minio$N.log"
+
+echo "backup.sh: MinIO upload fails"
+new_env
+make_old "$ROOT/20200101-000000"
+stamp
+STUB_MINIO_STORE="$WORK/minio$N" STUB_MC_ALIAS=1 STUB_MC_PIPE_FAIL=qdrant.tar.gz \
+STUB_VOLUMES="$ALL_VOLUMES" STUB_PG_RUNNING="minio" run_backup volumes
+check "exits 1" [ "$RC" -eq 1 ]
+check "says the sync failed" grep -q "MinIO sync failed for 1 file" <<<"$OUT"
+check "manifest FAILED lists minio-sync" [ "$(manifest_failed)" = "minio-sync" ]
+check "still uploads the other files" [ -f "$WORK/minio$N/local/backups/$(basename "$RUN")/MANIFEST.txt" ]
+check "skips retention" grep -q "Skipping cleanup" <<<"$OUT"
+
+echo "backup.sh: MinIO alias not configured"
+new_env
+stamp
+STUB_MINIO_STORE="$WORK/minio$N" STUB_VOLUMES="$ALL_VOLUMES" STUB_PG_RUNNING="minio" run_backup volumes
+check "exits 0 (skip is not a failure)" [ "$RC" -eq 0 ]
+check "says the alias is not configured" grep -q "alias 'local' is not configured" <<<"$OUT"
+check "uploads nothing" [ ! -e "$WORK/minio$N" ]
+check "never calls a host mc" [ ! -e "$WORK/host-mc-called" ]
+
+echo "backup.sh: MinIO container not running"
+new_env
+stamp
+STUB_MINIO_STORE="$WORK/minio$N" STUB_MC_ALIAS=1 STUB_VOLUMES="$ALL_VOLUMES" run_backup volumes
+check "exits 0 (skip is not a failure)" [ "$RC" -eq 0 ]
+check "says the container is not running" grep -q "container 'minio' is not running" <<<"$OUT"
+check "uploads nothing" [ ! -e "$WORK/minio$N" ]
+check "never calls a host mc" [ ! -e "$WORK/host-mc-called" ]
+
+echo "backup.sh: configs mode works without docker"
+new_env
+mkdir -p "$DATA/configs"
+echo "lr: 1e-4" > "$DATA/configs/train.yaml"
+stamp
+STUB_DOCKER_DOWN=1 run_backup configs
+check "exits 0" [ "$RC" -eq 0 ]
+check "archives training configs" [ -f "$RUN/training-configs.tar.gz" ]
+check "excludes .env from project configs" \
+    bash -c '! tar tzf "$1" | grep -q "/\.env$"' _ "$RUN/project-configs.tar.gz"
+
+echo ""
+echo "backup.sh tests: $PASSES passed, $FAILS failed"
+[ "$FAILS" -eq 0 ]

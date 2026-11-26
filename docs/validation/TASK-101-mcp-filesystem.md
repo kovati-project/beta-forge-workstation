@@ -38,3 +38,36 @@ account is not in the `docker` group. Deferred rather than assumed.
 
 Fails at accessibility. The declared configuration looks correct; the service simply
 is not up. Start the agentic stack, then re-run for the sandbox half.
+
+## Fix (fix/mcp-servers) and re-run steps
+
+Root cause, from `docker logs mcp-filesystem` on the host: the server is
+stdio-only and has no `--port` flag, so it treated `--port` and `3100` as
+directories, printed `Secure MCP Filesystem Server running on stdio`, saw EOF on
+stdin and exited 0. Nothing ever listened on 3100.
+
+The service is now `@modelcontextprotocol/server-filesystem` (pinned, built
+from `docker/mcp/filesystem/`) behind `mcp-proxy`, serving MCP streamable HTTP
+at `http://<host>:3100/mcp`.
+
+Sandbox shape, changed deliberately: the sandbox root is still `/data` inside
+the container and read-only, but only user content is mounted into it
+(`/data/documents`, `/data/datasets`, `/data/outputs`, `/data/notebooks`, each
+`:ro`). The host's `/data` also holds service state (authentik, n8n, caddy,
+minio, backups), which an LLM-facing file server must not be able to read.
+Container: uid 1000, read-only rootfs, `cap_drop: [ALL]`, `no-new-privileges`.
+
+Re-run on the host after deploying:
+
+```bash
+bash scripts/validate-phase08.sh          # initialize handshake on :3100-3103/mcp
+docker inspect mcp-filesystem --format '{{range .Mounts}}{{.Source}} -> {{.Destination}} rw={{.RW}}{{"\n"}}{{end}}'
+curl -s http://localhost:8800/api/mcp/servers | jq '.summary'
+```
+
+Then, from any MCP client pointed at `http://10.10.10.2:3100/mcp` (or Open WebUI
+→ Admin Settings → External Tools → MCP (Streamable HTTP) →
+`http://mcp-filesystem:3100/mcp`): `list_allowed_directories` returns `/data`,
+`list_directory /data` shows the four mounts, `read_text_file /etc/passwd` and
+`/data/../etc/passwd` are refused (`Access denied - path outside allowed
+directories`), and `write_file` under `/data` fails with `EROFS`.

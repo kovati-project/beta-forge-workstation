@@ -18,6 +18,7 @@ WARNINGS=0
 # Locate the deployed tree and its deploy stamp. sync-and-deploy.ps1 writes
 # scripts/.deployed-commit (key=value lines) into the synced tree.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 STAMP_FILE="$SCRIPT_DIR/.deployed-commit"
 
@@ -187,8 +188,14 @@ check_service "Loadout Manager" "http://localhost:8800/health" "200"
 # 6. Inference services
 echo ""
 echo -e "${BLUE}Inference Services:${NC}"
-check_service "Ollama" "http://localhost:11434/api/tags" "200"
-check_service "vLLM Pair A (GPU 0+3)" "http://localhost:8000/health" "200"
+check_service "vLLM Qwen3.8-27B (4-GPU, :8002)" "http://localhost:8002/health" "200"
+check_service "vLLM embeddings (:8003)" "http://localhost:8003/health" "200"
+# Pair A is an opt-in loadout profile now; it shares GPUs with the default stack.
+if curl -sf http://localhost:8000/health &>/dev/null; then
+    check_service "vLLM Pair A (GPU 0+3)" "http://localhost:8000/health" "200"
+else
+    echo -e "  ${YELLOW}◇${NC} vLLM Pair A (profile not active)"
+fi
 check_service "ComfyUI" "http://localhost:8188/system_stats" "200"
 check_service "Open WebUI" "http://localhost:3000" "200"
 check_service "SearXNG" "http://localhost:8080" "200"
@@ -227,7 +234,7 @@ else
 fi
 
 if curl -sf http://localhost:3010 &>/dev/null; then
-    check_service "Dify" "http://localhost:3010" "200"
+    check_service "Dify" "http://localhost:3010" "200|307"
 else
     echo -e "  ${YELLOW}◇${NC} Dify (not running)"
 fi
@@ -254,7 +261,7 @@ fi
 echo ""
 echo -e "${BLUE}Observability:${NC}"
 if curl -sf http://localhost:3002 &>/dev/null; then
-    check_service "Langfuse" "http://localhost:3002" "200"
+    check_service "Langfuse" "http://localhost:3002" "200|307"
 else
     echo -e "  ${YELLOW}◇${NC} Langfuse (not running)"
 fi
@@ -333,8 +340,8 @@ if [ $WARNINGS -gt 0 ]; then
 fi
 
 echo ""
-echo -e "Check Grafana dashboards at ${BLUE}http://10.10.10.2:3001${NC}"
-echo -e "View Authentik admin at ${BLUE}http://10.10.10.2:9080/if/admin/${NC}"
+echo -e "Check Grafana dashboards at ${BLUE}http://${WORKSTATION_HOST}:3001${NC}"
+echo -e "View Authentik admin at ${BLUE}http://${WORKSTATION_HOST}:9080/if/admin/${NC}"
 
 # Exit with appropriate code
 [ $UNHEALTHY -eq 0 ]

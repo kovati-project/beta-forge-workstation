@@ -19,6 +19,7 @@ COMPOSE="docker compose"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE="$(dirname "$SCRIPT_DIR")/docker"
 export REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 # Verify docker is running
 if ! docker info &>/dev/null; then
@@ -154,21 +155,21 @@ for i in {1..30}; do
 done
 
 # 6. Activate default inference profile
-log_step "Activating default inference profile (Ollama)..."
-curl -sX POST http://localhost:8800/activate/inference-small || {
+log_step "Activating default inference profile (Qwen3.8-27B on vLLM, all 4 GPUs)..."
+curl -sX POST http://localhost:8800/activate/inference-4gpu || {
     log_error "Failed to activate default profile"
 }
-sleep 8  # Allow Ollama to load base model
+sleep 8  # vLLM keeps loading in the background; clients retry until it is up
 
-# 7. Start inference services
-start_service "Inference services (Ollama, vLLM, ComfyUI)" "compose.inference.yml" || exit 1
+# 7. Start inference services (default stack: vllm-4gpu + vllm-embed)
+start_service "Inference services (vLLM Qwen3.8-27B + embeddings)" "compose.inference.yml" || exit 1
 sleep 5
 
 # 8. Start training services (if available)
 if [ -f "$BASE/compose.training.yml" ]; then
     log_step "Starting training services (Kohya, Label Studio, JupyterLab)..."
     $COMPOSE -f "$BASE/compose.training.yml" up -d --force-recreate kohya || true
-    $COMPOSE -f "$BASE/compose.training.yml" up -d label-studio || true
+    $COMPOSE -f "$BASE/compose.training.yml" up -d label-studio jupyterlab || true
     sleep 3
 fi
 
@@ -192,10 +193,10 @@ echo ""
 log_step "=== Startup Complete ==="
 echo ""
 echo "Service URLs:"
-echo "  Open WebUI:     http://10.10.10.2:3000"
-echo "  Grafana:        http://10.10.10.2:3001"
-echo "  n8n:            http://10.10.10.2:5678"
-echo "  Loadout Status: http://10.10.10.2:8800/status"
+echo "  Open WebUI:     http://${WORKSTATION_HOST}:3000"
+echo "  Grafana:        http://${WORKSTATION_HOST}:3001"
+echo "  n8n:            http://${WORKSTATION_HOST}:5678"
+echo "  Loadout Status: http://${WORKSTATION_HOST}:8800/status"
 echo ""
 log_step "Running health check..."
 if [ -f "./scripts/healthcheck.sh" ]; then

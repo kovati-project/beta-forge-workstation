@@ -110,7 +110,7 @@ function GpuCardContent({ gpu, activeProfile, telemetryError, index }) {
 
       <div className="gpu-card-metric">
         <div className="gpu-card-metric-label">Power</div>
-        <div className="gpu-card-metric-value">{gpu.power_w} W</div>
+        <div className="gpu-card-metric-value">{gpu.power_w ?? '—'} W</div>
       </div>
 
       {serviceTag && (

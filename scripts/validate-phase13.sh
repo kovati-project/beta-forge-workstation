@@ -3,6 +3,7 @@
 # Phase 13 validation: Security hardening verification
 
 set -e
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 echo "=== Phase 13 Validation ==="
 echo ""
@@ -279,7 +280,7 @@ echo "Next Steps:"
 echo "================================"
 echo ""
 echo "1. Initial Authentik Setup (FIRST TIME):"
-echo "   Visit: http://10.10.10.2:9080/if/flow/initial-setup/"
+echo "   Visit: http://${WORKSTATION_HOST}:9080/if/flow/initial-setup/"
 echo "   Create admin account"
 echo ""
 echo "2. Configure Applications in Authentik:"

@@ -4,6 +4,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 export REPO_ROOT
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
@@ -42,12 +43,15 @@ echo "  ✓ Image built"
 
 echo "[4/4] Starting loadout manager..."
 remove_orphan loadout-manager ai-loadout-mgr
+# compose.loadout.yml joins the external ai-workstation network (Alertmanager
+# reaches the alert webhook over it); create it if this runs before deploy-all.
+docker network inspect ai-workstation &>/dev/null || docker network create ai-workstation
 docker compose -f "$REPO_ROOT/docker/compose.loadout.yml" up -d
 echo "  Waiting for startup (5s)..."
 sleep 5
 
 if curl -sf http://localhost:8800/health &>/dev/null; then
-    echo "  ✓ Loadout Manager running at http://10.10.10.2:8800"
+    echo "  ✓ Loadout Manager running at http://${WORKSTATION_HOST}:8800"
 else
     echo "  ✗ Not responding — check: docker logs loadout-manager"
     exit 1

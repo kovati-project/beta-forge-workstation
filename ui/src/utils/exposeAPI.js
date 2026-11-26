@@ -50,9 +50,11 @@ export async function revokeAPIKey(name) {
 
 export async function testMCP(name) {
   try {
-    const response = await fetch(`/api/mcp/${name}/test`, { method: 'POST' });
+    // Backend route is POST /api/mcp/test with the server name as a query parameter.
+    const response = await fetch(`/api/mcp/test?name=${encodeURIComponent(name)}`, { method: 'POST' });
     if (response.ok) return await response.json();
-    throw new Error('Connection failed');
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || 'Connection failed');
   } catch (error) {
     console.error('MCP test failed:', error);
     throw error;

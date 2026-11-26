@@ -26,7 +26,6 @@ EXPAND = {
 # UI calls with no backend route today (UI-1). Remove an entry when the
 # endpoint is added; strict xfail fails the run until you do.
 MISSING = {
-    "/api/mcp/x/test":           "backend has POST /api/mcp/test (name in body)",
     "/api/network/routes/x":     "no route-exposure endpoint",
     "/api/platform/setup":       "no /api/platform router",
     "/api/storage/buckets/x":    "only GET /api/storage/buckets exists",

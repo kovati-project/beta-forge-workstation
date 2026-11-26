@@ -100,7 +100,7 @@ export const PROFILES_MOCK = [
     description: 'Image generation + text inference (GPU 0 + pair B)',
     gpus: [0, 1, 2],
     nvlink_pairs: [[1, 2]],
-    services: ['comfyui', 'real-esrgan', 'rembg', 'vllm-pair-b'],
+    services: ['comfyui', 'rembg', 'vllm-pair-b'],
     vram_required_gb: 72,
     use_case: 'SDXL/FLUX image gen + 32B text inference',
     accent: 'purple',
