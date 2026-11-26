@@ -5,7 +5,7 @@ nvidia-smi and wg go through FakeDocker (``api.docker``; it records every
 subprocess.run), NVML is the conftest stub, .env and the completion flag are
 temp files.
 
-Defects are xfail(strict=True) so a fix fails the run until the marker goes.
+SET-4..SET-8 were strict xfails documenting defects; they are plain tests now.
 """
 
 import re
@@ -160,22 +160,15 @@ def test_generate_secrets_fills_empty_values(api):
     assert api.env_file.read_text().count("LANGFUSE_DB_PASSWORD=") == 1
 
 
-# ── defects ─────────────────────────────────────────────────────────────────
+# ── formerly defects (SET-4..SET-8) ─────────────────────────────────────────
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-4: the NVLink parser looks for 'X' (the Self diagonal) instead of "
-           "NV# links and miscomputes indices; it finds no pairs on this "
-           "workstation's real topology, so dual-stack is never recommended.")
+# SET-4 (fixed)
 def test_nvlink_pairs_parsed_from_real_topology(api):
     _reply(api, "nvidia-smi", stdout=TOPO_M)
     assert api.setup._detect_nvlink_pairs() == [[0, 3], [1, 2]]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-5: probe calls .decode() on nvmlDeviceGetName(); nvidia-ml-py>=12 "
-           "(requirements.txt) returns str, so probe always fails with 500.")
+# SET-5 (fixed)
 def test_probe_with_modern_nvidia_ml_py(api, monkeypatch):
     import pynvml
     monkeypatch.setattr(pynvml, "nvmlDeviceGetName", lambda h: "NVIDIA GeForce RTX 3090",
@@ -185,10 +178,7 @@ def test_probe_with_modern_nvidia_ml_py(api, monkeypatch):
     assert len(r.json()["gpus"]) == len(NVML.devices)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-6: a failing `wg genkey` is not checked; setup/network reports "
-           "success and writes an empty WIREGUARD_PUBKEY.")
+# SET-6 (fixed)
 def test_network_fails_when_wireguard_fails(api):
     _reply(api, "wg", rc=1)
     r = api.client.post("/api/setup/network")
@@ -196,20 +186,145 @@ def test_network_fails_when_wireguard_fails(api):
     assert "WIREGUARD_PUBKEY=" not in (api.env_file.read_text() if api.env_file.exists() else "")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-7: setup/validate checks nothing. It sleeps and prints a tick for "
-           "each service, so it reports a fully healthy stack with nothing running.")
+# SET-7 (fixed)
 def test_validate_reports_failure_when_nothing_is_running(api, no_sleep):
     r = api.client.post("/api/setup/validate")
     assert "✓ Validation complete" not in r.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SET-8: setup/provision pulls nothing. It sleeps and prints a tick per "
-           "image (several not even used by this stack: authelia, node-red).")
+# SET-8 (fixed)
 def test_provision_actually_pulls_images(api, no_sleep):
     api.client.post("/api/setup/provision")
     calls = api.exec.calls + [c.cmd for c in api.docker.calls]
     assert any("pull" in c for c in calls)
+
+
+# ── network ─────────────────────────────────────────────────────────────────
+
+def test_network_accepts_the_json_body_the_wizard_sends(api):
+    api.env_file.write_text(ENV_SAMPLE)
+    _reply(api, "wg", stdout="wg-key-material\n")
+    r = api.client.post("/api/setup/network",
+                        json={"jumpbox_ip": "10.8.0.1", "enable_caddy": False})
+    assert r.status_code == 200, r.text
+    env = _env(api)
+    assert env["JUMPBOX_IP"] == "10.8.0.1" and env["CADDY_ENABLED"] == "false"
+    assert api.env_file.read_text().startswith(ENV_SAMPLE)  # comments, order kept
+
+
+@pytest.mark.parametrize("bad", ["10.0.0.1\nPOSTGRES_ADMIN_PASSWORD=x", "not-an-ip", "10.0.0.256"])
+def test_network_rejects_a_non_ip_and_writes_nothing(api, bad):
+    api.env_file.write_text(ENV_SAMPLE)
+    _reply(api, "wg", stdout="wg-key-material\n")
+    r = api.client.post("/api/setup/network", json={"jumpbox_ip": bad})
+    assert r.status_code == 400
+    assert api.env_file.read_text() == ENV_SAMPLE
+    assert not [c for c in api.docker.calls if c.cmd and c.cmd[0] == "wg"]
+
+
+def test_network_does_not_invent_a_lan_ip(api):
+    api.env_file.write_text(ENV_SAMPLE)
+    _reply(api, "wg", stdout="wg-key-material\n")
+    api.client.post("/api/setup/network", json={"jumpbox_ip": "10.8.0.1"})
+    assert "KOVATI_OS_LAN_IP" not in _env(api)
+    api.client.post("/api/setup/network", json={"jumpbox_ip": "10.8.0.1", "lan_ip": "192.168.1.20"})
+    assert _env(api)["KOVATI_OS_LAN_IP"] == "192.168.1.20"
+
+
+def test_network_keeps_the_private_key_out_of_env_at_0600_and_reuses_it(api):
+    import stat
+    _reply(api, "wg", stdout="wg-key-material\n")
+    assert api.client.post("/api/setup/network", json={}).status_code == 200
+    key = api.setup._wg_key_file()
+    assert key.read_text().strip() == "wg-key-material"
+    assert stat.S_IMODE(key.stat().st_mode) == 0o600
+    genkeys = lambda: [c for c in api.docker.calls if c.cmd[:2] == ["wg", "genkey"]]
+    assert len(genkeys()) == 1
+    api.client.post("/api/setup/network", json={})
+    assert len(genkeys()) == 1, "a re-run must not rotate the tunnel key"
+
+
+# ── provision / validate ────────────────────────────────────────────────────
+
+def _sse_lines(text):
+    return [l[len("data: "):] for l in text.splitlines() if l.startswith("data: ")]
+
+
+def test_provision_pulls_every_stack_including_profiled_services(api, no_sleep):
+    lines = _sse_lines(api.client.post("/api/setup/provision").text)
+    pulls = api.exec.find("pull")
+    files = api.setup._stack_files()
+    assert files and len(pulls) == len(files)
+    for argv in pulls:
+        assert "--ignore-buildable" in argv
+        assert argv[argv.index("--profile") + 1] == "*"
+    assert lines[-1] == "✓ All images provisioned"
+    assert f"Progress: {len(files)}/{len(files)}" in lines
+
+
+def test_provision_reports_a_failed_pull(api, no_sleep):
+    api.exec.on(lambda argv: "pull" in argv and any(a.endswith("compose.storage.yml") for a in argv),
+                rc=1, lines=["manifest unknown"])
+    lines = _sse_lines(api.client.post("/api/setup/provision").text)
+    assert "✗ compose.storage.yml: manifest unknown" in lines
+    assert "✓ All images provisioned" not in lines
+    assert lines[-1].startswith("✗ 1 of ")
+
+
+def _compose_file_of(argv):
+    return next(Path(a).name for i, a in enumerate(argv) if i and argv[i - 1] == "-f")
+
+
+def _healthy_stack(api):
+    import json as _json
+    from api import secrets as secrets_api
+
+    def services(cf):
+        doc = yaml.safe_load((secrets_api.COMPOSE_DIR / cf).read_text())
+        return [n for n, s in doc["services"].items() if not (s or {}).get("profiles")]
+
+    def rule(argv):
+        if "config" in argv:
+            return 0, services(_compose_file_of(argv))
+        if "ps" in argv:
+            return 0, [_json.dumps({"Service": s, "State": "running", "Health": ""})
+                       for s in services(_compose_file_of(argv))]
+    api.exec.rules.append(rule)
+
+
+def test_validate_passes_when_secrets_are_set_and_core_services_run(api, no_sleep):
+    api.client.post("/api/setup/generate-secrets")
+    _healthy_stack(api)
+    lines = _sse_lines(api.client.post("/api/setup/validate").text)
+    assert lines[-1] == "✓ Validation complete", lines
+    assert not [l for l in lines if l.startswith("✗")]
+
+
+def test_validate_names_an_unhealthy_service(api, no_sleep):
+    import json as _json
+    api.client.post("/api/setup/generate-secrets")
+
+    def unhealthy(argv):
+        if "ps" in argv and _compose_file_of(argv) == "compose.storage.yml":
+            return 0, [_json.dumps({"Service": "qdrant", "State": "running", "Health": "unhealthy"})]
+    api.exec.rules.append(unhealthy)
+    _healthy_stack(api)
+    lines = _sse_lines(api.client.post("/api/setup/validate").text)
+    assert "✗ qdrant: unhealthy" in lines
+    assert any(l.endswith(": not created") for l in lines)  # the rest of storage is absent
+    assert lines[-1].startswith("✗ Validation failed")
+
+
+def test_validate_requires_the_generated_secrets(api, no_sleep):
+    _healthy_stack(api)
+    lines = _sse_lines(api.client.post("/api/setup/validate").text)
+    assert any(l.startswith("✗ Secrets") for l in lines)
+    assert lines[-1].startswith("✗ Validation failed")
+
+
+def test_ps_json_array_and_ndjson_parse_the_same():
+    import json as _json
+    from api import setup
+    rows = [{"Service": "a", "State": "running"}, {"Service": "b", "State": "exited"}]
+    assert setup._parse_ps(_json.dumps(rows)) == setup._parse_ps(
+        "\n".join(_json.dumps(r) for r in rows)) == {"a": rows[0], "b": rows[1]}
