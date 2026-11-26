@@ -46,17 +46,17 @@ fi
 ok "nvidia-smi found"
 
 # ---------------------------------------------------------------------------
-# 2. Driver version >= 560
+# 2. Driver version >= 580 (CUDA 13.0, required by the pinned vLLM image)
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- [2] Driver version ---"
 DRIVER_VER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
 DRIVER_MAJOR=$(echo "$DRIVER_VER" | cut -d'.' -f1)
 info "Detected driver: $DRIVER_VER"
-if [[ "$DRIVER_MAJOR" -ge 560 ]]; then
-    ok "Driver >= 560 (required for A5500 NVLink under CUDA 12.4)"
+if [[ "$DRIVER_MAJOR" -ge 580 ]]; then
+    ok "Driver >= 580 (CUDA 13.0: vLLM image; Unsloth needs >= 570)"
 else
-    fail "Driver $DRIVER_VER is below minimum 560"
+    fail "Driver $DRIVER_VER is below minimum 580; vLLM (CUDA 13.0) and Unsloth (CUDA 12.8) containers will not start"
 fi
 
 # ---------------------------------------------------------------------------

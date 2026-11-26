@@ -2,7 +2,13 @@
 # install-nvidia.sh — Phase 02 Step 2
 # Brief ID: P02S2-001
 #
-# Installs NVIDIA driver 560 on Ubuntu 26.04 LTS Server.
+# Installs the NVIDIA driver on Ubuntu 26.04 LTS Server (595 by default, the
+# version the reference workstation runs). Override with DRIVER_VERSION=<n>.
+#
+# The floor is 580: the pinned vLLM image is built on CUDA 13.0 (driver >= 580)
+# and the Unsloth image on CUDA 12.8 (>= 570). The container toolkit refuses to
+# start an image whose NVIDIA_REQUIRE_CUDA the host driver cannot meet, so an
+# older driver installs cleanly and then fails at the first profile switch.
 # Run as a normal user with sudo privileges from the physical/BMC console.
 # Safe to re-run (idempotent).
 #
@@ -10,7 +16,13 @@
 
 set -euo pipefail
 
-DRIVER_VERSION="560"
+DRIVER_VERSION="${DRIVER_VERSION:-595}"
+MIN_DRIVER_VERSION=580
+
+if (( DRIVER_VERSION < MIN_DRIVER_VERSION )); then
+    echo "DRIVER_VERSION=${DRIVER_VERSION} is below ${MIN_DRIVER_VERSION}; the vLLM and Unsloth images need CUDA 12.8+/13.0." >&2
+    exit 1
+fi
 CUDA_KEYRING_DEB="cuda-keyring_1.1-1_all.deb"
 CUDA_REPO_URL="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2604/x86_64"
 

@@ -38,12 +38,15 @@ services:
               device_ids: ['1', '2']
               capabilities: [gpu]
 
+  # vLLM is pinned (VLLM_TAG in docker/.env overrides it). `latest` moved to a
+  # CUDA 13.0 build on 2026-11-16, which needs NVIDIA driver >= 580; an
+  # unpinned tag changes the engine, its flags and its driver floor on any pull.
   # ── vLLM: NVLink Pair A [GPU0, GPU3] ─────────────────────────────────────────
   # High-throughput serving for 32B–40B models.
   # CUDA_VISIBLE_DEVICES=0,3 maps to the confirmed NVLink bridge.
   # Model path is a symlink — update /data/models/vllm/current before starting.
   vllm-pair-a:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.34.0}
     container_name: vllm-pair-a
     restart: unless-stopped
     security_opt:
@@ -89,7 +92,7 @@ services:
   # Second independent inference slot. Same config as pair A, different GPUs/port.
   # Not started by default — use profile "pair-b" or the loadout manager.
   vllm-pair-b:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.34.0}
     container_name: vllm-pair-b
     restart: unless-stopped
     security_opt:
@@ -135,7 +138,7 @@ services:
   # For 70B+ models. Requires all GPUs free — mutually exclusive with pair A/B.
   # fp8 quantization allows longer context on 96GB total VRAM.
   vllm-4gpu:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.34.0}
     container_name: vllm-4gpu
     restart: unless-stopped
     security_opt:
