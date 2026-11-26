@@ -86,14 +86,18 @@ export async function downloadVllmModel(repoId, localName) {
   return response.json();
 }
 
+// Resolves to the status object, or null when the request failed. Callers must
+// treat null as "unknown" and keep what they last knew: {} is a real answer
+// ("no download"), so returning it on a failed poll made a blip look like the
+// download had vanished.
 export async function getVllmDownloadStatus() {
   try {
     const response = await fetch('/api/models/vllm/download/status');
     if (response.ok) return await response.json();
-    return {};
+    return null;
   } catch (error) {
     console.error('Failed to fetch download status:', error);
-    return {};
+    return null;
   }
 }
 

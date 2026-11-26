@@ -63,7 +63,8 @@ function useVllmDownload(onDone) {
   onDoneRef.current = onDone;
 
   useEffect(() => {
-    // Pick up a download started before this page was opened.
+    // Pick up a download started before this page was opened. A failed request
+    // (null) leaves the idle default in place.
     getVllmDownloadStatus().then(s => s && setDlStatus(s));
   }, []);
 
@@ -71,6 +72,9 @@ function useVllmDownload(onDone) {
     if (dlStatus?.status === 'running') {
       pollRef.current = setInterval(async () => {
         const s = await getVllmDownloadStatus();
+        // A failed poll (null) keeps the last status, so 'running' stays set and
+        // the effect keeps its interval: the next tick simply tries again.
+        if (!s) return;
         setDlStatus(s);
         if (s.status === 'done') {
           clearInterval(pollRef.current);
