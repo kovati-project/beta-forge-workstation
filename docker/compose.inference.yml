@@ -1,6 +1,10 @@
 name: ai-inference
 
 services:
+  # The vLLM services deliberately carry no security_opt (#97) and no extra
+  # /data/models + /data/checkpoints mounts (#84) yet: either change recreates
+  # the running vLLM containers, and this file matches what Adapress runs. Add
+  # them in a planned window and re-run the coding-agent smoke test after.
 
   # Default stack (`docker compose up -d` with no profile): vllm-4gpu serving
   # Qwen3.8-27B on all four GPUs, plus vllm-embed. Every LLM client points at
@@ -21,18 +25,11 @@ services:
     image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-pair-a
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8000:8000"
     volumes:
       - /data/models/vllm:/models
-      # Same-path mounts so models registered from the Models tab (absolute
-      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
-      - /data/models:/data/models:ro
-      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
@@ -42,16 +39,27 @@ services:
       - NCCL_P2P_LEVEL=NVL
       - NCCL_SHM_DISABLE=0
       - HF_HOME=/root/.cache/huggingface
+    # Slot model (2026-11-24): huihui-qwen3.8-27b-abliterated, a bf16 Qwen3.8-27B finetune
+    # (qwen3_5 arch). --quantization fp8 converts it on load (~28 GB, ~14 GB/GPU),
+    # leaving room for 128k context. Flags match vllm-4gpu (same model family).
+    # The first served name follows the model; current-model stays as an alias
+    # for old clients. If the slot symlink is repointed in the loadout manager,
+    # update the served name here too.
     command: >
       /models/current
+      --served-model-name huihui-qwen3.8-27b-abliterated current-model
       --tensor-parallel-size 2
-      --max-model-len 16384
+      --quantization fp8
+      --max-model-len 131072
       --gpu-memory-utilization 0.92
-      --max-num-seqs 64
-      --enable-chunked-prefill
+      --max-num-seqs 16
+      --enable-prefix-caching
+      --language-model-only
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
       --host 0.0.0.0
       --port 8000
-      --served-model-name current-model
     deploy:
       resources:
         reservations:
@@ -69,18 +77,11 @@ services:
     image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-pair-b
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8001:8000"
     volumes:
       - /data/models/vllm:/models
-      # Same-path mounts so models registered from the Models tab (absolute
-      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
-      - /data/models:/data/models:ro
-      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
@@ -88,16 +89,27 @@ services:
       - NCCL_P2P_LEVEL=NVL
       - NCCL_SHM_DISABLE=0
       - HF_HOME=/root/.cache/huggingface
+    # Slot model (2026-11-24): huihui-qwen3.8-27b-coder390-abliterated, a bf16 Qwen3.8-27B finetune
+    # (qwen3_5 arch). --quantization fp8 converts it on load (~28 GB, ~14 GB/GPU),
+    # leaving room for 128k context. Flags match vllm-4gpu (same model family).
+    # The first served name follows the model; current-model-b stays as an alias
+    # for old clients. If the slot symlink is repointed in the loadout manager,
+    # update the served name here too.
     command: >
       /models/current-b
+      --served-model-name huihui-qwen3.8-27b-coder390-abliterated current-model-b
       --tensor-parallel-size 2
-      --max-model-len 16384
+      --quantization fp8
+      --max-model-len 131072
       --gpu-memory-utilization 0.92
-      --max-num-seqs 64
-      --enable-chunked-prefill
+      --max-num-seqs 16
+      --enable-prefix-caching
+      --language-model-only
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
       --host 0.0.0.0
       --port 8000
-      --served-model-name current-model-b
     deploy:
       resources:
         reservations:
@@ -113,10 +125,14 @@ services:
   # "4gpu"). The flags below are specific to that model family (qwen3_5
   # architecture); re-check them before pointing the slot at another model.
   #
-  #   TP=4          weights are 31 GB, ~7.7 GB per GPU. Only 16 of 64 layers
+  #   TP=2 x PP=2   weights are 31 GB, ~7.7 GB per GPU. Only 16 of 64 layers
   #                 use full attention, so the KV cache is ~64 KB/token (bf16)
   #                 and the native 262,144-token window fits several times over.
-  #                 GPU pairs 0-3 and 1-2 are NVLinked; TP=4 also crosses PCIe.
+  #                 GPU pairs 0-3 and 1-2 are NVLinked. CUDA_VISIBLE_DEVICES=
+  #                 0,3,1,2 makes each TP group one NVLink pair, so per-layer
+  #                 all-reduce stays on NVLink (custom all-reduce on); only the
+  #                 pipeline hand-off between the pairs crosses PCIe.
+  #   8192          --max-num-batched-tokens: bigger prefill chunks.
   #   0.82          leaves ~4 GB per GPU: whisper-stt shares GPU0, vllm-embed
   #                 GPU1, and CUDA graphs are allocated outside this budget.
   #   parsers       qwen3_coder emits structured (also streamed) tool calls for
@@ -136,33 +152,35 @@ services:
   # ~55 tok/s, prefill ~550 tok/s, FIM autocomplete 0.4-0.6 s. Custom
   # all-reduce is off across >2 PCIe GPUs and NCCL_P2P_LEVEL=NVL routes the
   # cross-pair traffic through host memory, which limits prefill.
+  # 2026-11-17, switched to TP=2 x PP=2 (above), same 11.7k-token prompt:
+  # prefill 645 -> ~2,900 tok/s (time to first token 18 s -> 4 s), decode
+  # 57 -> ~41 tok/s (the pipeline adds a hop per token). Load ~3.5 min.
+  # Revert: TP=4, drop --pipeline-parallel-size, CUDA_* and the 8192 line.
   vllm-4gpu:
     image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
     container_name: vllm-4gpu
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    # TODO(#68): cap_drop needs on-host verification
     ipc: host
     ports:
       - "8002:8000"
     volumes:
       - /data/models/vllm:/models
-      # Same-path mounts so models registered from the Models tab (absolute
-      # symlinks in /data/models/vllm, see loadout-manager/api/models.py) resolve.
-      - /data/models:/data/models:ro
-      - /data/checkpoints:/data/checkpoints:ro
       - /data/models/hf-cache:/root/.cache/huggingface
       - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
     environment:
       # GPU selection handled by device_ids below (see pair-a note).
+      # Order the GPUs so each tensor-parallel group is one NVLink pair.
+      - CUDA_DEVICE_ORDER=PCI_BUS_ID
+      - CUDA_VISIBLE_DEVICES=0,3,1,2
       - NCCL_P2P_LEVEL=NVL
       - NCCL_SHM_DISABLE=0
       - HF_HOME=/root/.cache/huggingface
     command: >
       /models/large
       --served-model-name qwen3.8-27b
-      --tensor-parallel-size 4
+      --tensor-parallel-size 2
+      --pipeline-parallel-size 2
+      --max-num-batched-tokens 8192
       --max-model-len 262144
       --gpu-memory-utilization 0.82
       --max-num-seqs 16
@@ -215,6 +233,97 @@ services:
             - driver: nvidia
               device_ids: ['1']
               capabilities: [gpu]
+
+  # ── vLLM: Huihui Qwen3.8-27B abliterated [GPU0, GPU3, NVLink bridge A] ──
+  # Loadout "inference-huihui-4gpu" (2026-11-24). bf16 Qwen3.8-27B finetune
+  # (qwen3_5 arch), FP8 on load (~14 GB/GPU at TP=2). Flags match vllm-4gpu.
+  # Mounts the model dir directly (not a slot symlink) so the served name is fixed.
+  vllm-huihui:
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
+    container_name: vllm-huihui
+    restart: unless-stopped
+    ipc: host
+    ports:
+      - "8004:8000"
+    volumes:
+      - /data/models/vllm:/models
+      - /data/models/hf-cache:/root/.cache/huggingface
+      - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
+    environment:
+      # GPU selection handled by device_ids below (see pair-a note).
+      - NCCL_P2P_LEVEL=NVL
+      - NCCL_SHM_DISABLE=0
+      - HF_HOME=/root/.cache/huggingface
+    command: >
+      /models/huihui-qwen3.8-27b-abliterated
+      --served-model-name huihui-qwen3.8-27b-abliterated
+      --tensor-parallel-size 2
+      --quantization fp8
+      --max-model-len 131072
+      --gpu-memory-utilization 0.92
+      --max-num-seqs 16
+      --enable-prefix-caching
+      --language-model-only
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --host 0.0.0.0
+      --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0', '3']
+              capabilities: [gpu]
+    profiles:
+      - huihui
+
+  # ── vLLM: Huihui Qwen3.8-27B Coder390 [GPU1, GPU2, NVLink bridge B]
+  # 0.84 leaves ~2 GB on GPU1 for vllm-embed (0.08). ──
+  # Loadout "inference-huihui-4gpu" (2026-11-24). bf16 Qwen3.8-27B finetune
+  # (qwen3_5 arch), FP8 on load (~14 GB/GPU at TP=2). Flags match vllm-4gpu.
+  # Mounts the model dir directly (not a slot symlink) so the served name is fixed.
+  vllm-huihui-coder:
+    image: vllm/vllm-openai:${VLLM_TAG:-v0.23.0}
+    container_name: vllm-huihui-coder
+    restart: unless-stopped
+    ipc: host
+    ports:
+      - "8005:8000"
+    volumes:
+      - /data/models/vllm:/models
+      - /data/models/hf-cache:/root/.cache/huggingface
+      - ../configs/nccl/nccl.conf:/etc/nccl.conf:ro
+    environment:
+      # GPU selection handled by device_ids below (see pair-a note).
+      - NCCL_P2P_LEVEL=NVL
+      - NCCL_SHM_DISABLE=0
+      - HF_HOME=/root/.cache/huggingface
+    command: >
+      /models/huihui-qwen3.8-27b-coder390-abliterated
+      --served-model-name huihui-qwen3.8-27b-coder390-abliterated
+      --tensor-parallel-size 2
+      --quantization fp8
+      --max-model-len 65536
+      --gpu-memory-utilization 0.84
+      --max-num-seqs 16
+      --enable-prefix-caching
+      --language-model-only
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser qwen3
+      --host 0.0.0.0
+      --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1', '2']
+              capabilities: [gpu]
+    profiles:
+      - huihui
 
 networks:
   default:
