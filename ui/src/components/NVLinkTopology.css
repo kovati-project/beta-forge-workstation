@@ -12,6 +12,20 @@
   min-height: 200px;
 }
 
+.nvlink-unavailable-title {
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.nvlink-unavailable-error {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  word-break: break-word;
+}
+
 .nvlink-svg {
   width: 100%;
   height: auto;

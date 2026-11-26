@@ -8,20 +8,34 @@ from fastapi import APIRouter, HTTPException
 from pathlib import Path
 
 try:
-    from config import DATA_DIR
+    from config import DATA_DIR, MINIO_ENDPOINT, POSTGRES_HOST, QDRANT_URL
 except ImportError:
-    from ..config import DATA_DIR
+    from ..config import DATA_DIR, MINIO_ENDPOINT, POSTGRES_HOST, QDRANT_URL
+from .envfile import read_env
 
 router = APIRouter()
 
-QDRANT_URL = "http://localhost:6333"
+
+def _credential(env_key: str, dotenv_key: str, default: str = "") -> str:
+    """An explicit environment variable, else the value in docker/.env.
+
+    The container gets docker/.env mounted (ENV_FILE), not its values as
+    environment variables, so credentials are read from the file.
+    """
+    value = os.getenv(env_key)
+    if value:
+        return value
+    env_file = Path(os.getenv("ENV_FILE", "/compose/.env"))
+    return read_env(env_file).get(dotenv_key) or default
+
 
 try:
     from minio import Minio
+    # Same credentials docker/compose.storage.yml gives the minio container.
     minio_client = Minio(
-        "localhost:9000",
-        access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-        secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+        MINIO_ENDPOINT,
+        access_key=os.getenv("MINIO_ACCESS_KEY", "admin"),
+        secret_key=_credential("MINIO_SECRET_KEY", "MINIO_ROOT_PASSWORD"),
         secure=False
     )
 except Exception as e:
@@ -166,10 +180,10 @@ def _get_postgres_collections(partitions: List[Dict]) -> List[Dict]:
         return []
     try:
         conn = psycopg2.connect(
-            host=os.getenv("POSTGRES_HOST", "localhost"),
+            host=POSTGRES_HOST,
             port=int(os.getenv("POSTGRES_PORT", "5432")),
-            user=os.getenv("POSTGRES_USER", "postgres"),
-            password=os.getenv("POSTGRES_PASSWORD", ""),
+            user=os.getenv("POSTGRES_USER", "admin"),
+            password=_credential("POSTGRES_PASSWORD", "POSTGRES_ADMIN_PASSWORD"),
             database="postgres",
             connect_timeout=2,
         )
@@ -213,6 +227,24 @@ def _get_filesystem_collections(partitions: List[Dict]) -> List[Dict]:
             "mountpoint": _mountpoint_for(str(DATA_DIR), partitions),
         })
     return result
+
+
+def _under_data(path: str, *, follow_symlinks: bool = True) -> Path:
+    """``path`` (relative to DATA_DIR, or absolute) as a path inside DATA_DIR.
+
+    ``DATA_DIR / path`` alone is not a confinement: an absolute ``path``
+    replaces DATA_DIR (``/compose/.env``) and ``..`` climbs out of it. The
+    path is normalised and, by default, symlinks are resolved too, so a link
+    under /data cannot point the caller elsewhere. With ``follow_symlinks``
+    False only the parent is resolved, so the entry itself (possibly a link)
+    is what is returned.
+    """
+    root = DATA_DIR.resolve()
+    candidate = Path(os.path.normpath(DATA_DIR / path))
+    real = candidate.resolve() if follow_symlinks else candidate.parent.resolve() / candidate.name
+    if real != root and root not in real.parents:
+        raise HTTPException(status_code=400, detail=f"Path is outside {DATA_DIR}")
+    return real
 
 
 @router.get("/storage/summary")
@@ -308,10 +340,10 @@ async def get_storage_detail(type: str, name: str) -> Dict:
             raise HTTPException(status_code=503, detail="psycopg2 not installed")
         try:
             conn = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOST", "localhost"),
+                host=POSTGRES_HOST,
                 port=int(os.getenv("POSTGRES_PORT", "5432")),
-                user=os.getenv("POSTGRES_USER", "postgres"),
-                password=os.getenv("POSTGRES_PASSWORD", ""),
+                user=os.getenv("POSTGRES_USER", "admin"),
+                password=_credential("POSTGRES_PASSWORD", "POSTGRES_ADMIN_PASSWORD"),
                 database=name,
                 connect_timeout=2,
             )
@@ -338,7 +370,7 @@ async def get_storage_detail(type: str, name: str) -> Dict:
             raise HTTPException(status_code=500, detail=str(e))
 
     elif type == "filesystem":
-        dir_path = DATA_DIR / name
+        dir_path = _under_data(name)
         if not dir_path.exists():
             raise HTTPException(status_code=404, detail=f"Directory not found: {name}")
         try:
@@ -403,8 +435,8 @@ async def list_buckets() -> Dict:
 async def list_storage(path: str = "") -> Dict:
     """List files in storage directory."""
     try:
-        full_path = DATA_DIR / path if path else DATA_DIR
-        if not full_path.exists():
+        full_path = _under_data(path)
+        if not full_path.is_dir():
             raise HTTPException(status_code=404, detail="Path not found")
         files = []
         for item in full_path.iterdir():
@@ -415,6 +447,8 @@ async def list_storage(path: str = "") -> Dict:
                 "modified": item.stat().st_mtime,
             })
         return {"files": files, "path": str(full_path)}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -423,9 +457,10 @@ async def list_storage(path: str = "") -> Dict:
 async def preview_file(path: str, n: int = 3) -> Dict:
     """Preview first N lines of a file."""
     try:
-        full_path = DATA_DIR / path
-        if not full_path.exists():
+        full_path = _under_data(path)
+        if not full_path.is_file():
             raise HTTPException(status_code=404, detail="File not found")
+        n = max(0, min(n, 200))
         lines = []
         i = 0
         with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -434,6 +469,8 @@ async def preview_file(path: str, n: int = 3) -> Dict:
                     break
                 lines.append(line.strip())
         return {"path": path, "lines": lines, "total_lines": i + 1}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -442,13 +479,21 @@ async def preview_file(path: str, n: int = 3) -> Dict:
 async def delete_file(path: str) -> Dict:
     """Delete a file or directory."""
     try:
-        full_path = DATA_DIR / path
-        if not full_path.exists():
+        # Not following the final link: deleting a symlink removes the link,
+        # never what it points at.
+        full_path = _under_data(path, follow_symlinks=False)
+        if not full_path.exists() and not full_path.is_symlink():
             raise HTTPException(status_code=404, detail="File not found")
-        if full_path.is_file():
+        # Top-level /data directories (models, datasets, checkpoints, backups,
+        # loadout-manager, ...) are mounts or whole stores, never a file.
+        if full_path.parent == DATA_DIR.resolve() or full_path == DATA_DIR.resolve():
+            raise HTTPException(status_code=400, detail="Refusing to delete a top-level data directory")
+        if full_path.is_symlink() or full_path.is_file():
             full_path.unlink()
         else:
             shutil.rmtree(full_path)
         return {"status": "deleted", "path": path}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

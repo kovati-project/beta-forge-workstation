@@ -9,14 +9,17 @@ import json
 import httpx
 import pytest
 
-from api import voice
-
 WAV = b"RIFF\x24\x00\x00\x00WAVEfmt fake"
 
 
 @pytest.fixture
-def upstream(monkeypatch):
+def upstream(main_module, monkeypatch):
     """Route voice.py's outbound HTTP to a handler; record every request."""
+    # Imported here, not at module level: importing the `api` package pulls in
+    # api/gpu.py (the shared NVML reader), which must see conftest's pynvml stub
+    # that main_module installs. A collection-time import binds the real pynvml
+    # for the whole session and breaks the GPU gate tests.
+    from api import voice
     seen = []
     routes = {}
     real = httpx.AsyncClient
@@ -42,6 +45,7 @@ def upstream(monkeypatch):
     u = U()
     u.seen = seen
     u.routes = routes
+    u.voice = voice
     return u
 
 
@@ -95,7 +99,7 @@ def test_synthesize_defaults_voice(api, upstream):
         httpx.Response(200, content=WAV, headers={"content-type": "audio/wav"})
     r = api.client.post("/api/voice/synthesize", json={"text": "Hi"})
     assert r.status_code == 200
-    assert json.loads(upstream.seen[0].content)["voice"] == voice.DEFAULT_VOICE
+    assert json.loads(upstream.seen[0].content)["voice"] == upstream.voice.DEFAULT_VOICE
 
 
 def test_synthesize_rejects_empty_text_without_calling_piper(api, upstream):

@@ -2,10 +2,13 @@ use_default_settings: true
 
 server:
   # Template: scripts/init-secrets.sh renders this to settings.yml (gitignored) and
-  # fills in a generated key. Do NOT put a real key in this file.
+  # fills in a generated key and WORKSTATION_HOST from docker/.env.
+  # Do NOT put a real key in this file.
   secret_key: "@SEARXNG_SECRET_KEY@"
   bind_address: "0.0.0.0:8080"
-  base_url: "http://192.168.1.103:8080/"
+  # Public URL browsers use; re-render after changing WORKSTATION_HOST:
+  #   bash scripts/init-secrets.sh --render-searxng
+  base_url: "http://@WORKSTATION_HOST@:8080/"
 
 search:
   safe_search: 0

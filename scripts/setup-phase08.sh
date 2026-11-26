@@ -2,29 +2,35 @@
 [ -n "${BASH_VERSION:-}" ] || { echo "ERROR: this script needs bash - run: bash $0" >&2; exit 1; }
 # Setup Phase 08: n8n workflows and MCP configuration
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 echo "=== Phase 08: Setup Agentic Configuration ==="
 echo ""
 
 # Create n8n credentials template (optional — users create via UI)
 sudo mkdir -p /data/n8n-credentials
-sudo tee /data/n8n-credentials/README.md <<'EOF'
+sudo tee /data/n8n-credentials/README.md <<EOF
 # n8n Credentials
 
 Store credential templates here. n8n UI at :5678 to add credentials:
 
-1. **Ollama (OpenAI Compatible)**
+1. **vLLM Qwen3.8-27B (OpenAI Compatible)**
    - Type: OpenAI API
-   - Base URL: http://10.10.10.2:11434/v1
+   - Base URL: http://vllm-4gpu:8000/v1   (model: qwen3.8-27b)
+   - API Key: EMPTY
+
+1b. **vLLM embeddings (OpenAI Compatible)**
+   - Type: OpenAI API
+   - Base URL: http://vllm-embed:8000/v1  (model: nomic-embed-text)
    - API Key: EMPTY
 
 2. **Loadout Manager**
    - Type: HTTP Header Auth
-   - Base URL: http://10.10.10.2:8800
+   - Base URL: http://${WORKSTATION_HOST}:8800
    - Header: Authorization: Bearer <optional-token>
 
 3. **Localhost SSH** (for remote command execution)
-   - Host: 10.10.10.2
+   - Host: ${WORKSTATION_HOST}
    - Port: 22
    - User: kasemo
    - Auth: key-pair or password
@@ -61,7 +67,7 @@ Trigger training job and monitor:
 ## 3. Content Generation
 Text → prompt enhancement → image generation:
 - Trigger: Webhook (POST /generate)
-- Node: LLM (Ollama) → Enhance prompt
+- Node: LLM (vLLM qwen3.8-27b) → Enhance prompt
 - Node: HTTP Request → ComfyUI API queue
 - Node: Poll ComfyUI /queue → get result
 - Node: Real-ESRGAN upscale
@@ -72,7 +78,7 @@ Watch folder → chunk → embed → store:
 - Trigger: File (watch /data/documents/inbox/)
 - Node: PDFParser → extract text
 - Node: Chunk node (1000 token chunks)
-- Node: LLM (Ollama) → embed via nomic-embed-text
+- Node: Embeddings (vLLM) → embed via nomic-embed-text
 - Node: Qdrant → upsert embeddings
 - Node: Move file to /data/documents/processed/
 
@@ -91,7 +97,7 @@ sudo chown -R "$(id -u):$(id -g)" /data/n8n-credentials /data/n8n-workflows
 echo "✓ Created /data/n8n-credentials/"
 echo "✓ Created /data/n8n-workflows/ with reference templates"
 echo ""
-echo "Next: Visit n8n UI at http://10.10.10.2:5678 to:"
+echo "Next: Visit n8n UI at http://${WORKSTATION_HOST}:5678 to:"
 echo "  1. Create owner account"
-echo "  2. Add credentials (Ollama, Loadout Manager, SSH, etc.)"
+echo "  2. Add credentials (vLLM, Loadout Manager, SSH, etc.)"
 echo "  3. Build first workflow from templates above"

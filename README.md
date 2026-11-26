@@ -2,7 +2,7 @@
 
 Self-hosted AI stack running on a Threadripper Pro 5955WX / 512GB RAM / 4× RTX A5500 (96GB NVLink VRAM).
 
-**Access:** `kasemo@10.10.10.2` (via jumpbox `10.10.10.1`)
+**Access:** `kasemo@<WORKSTATION_HOST>` (via jumpbox `10.10.10.1`); the host address is set once in `docker/.env`, see [Changing the workstation host](#changing-the-workstation-host)
 
 ---
 
@@ -10,7 +10,7 @@ Self-hosted AI stack running on a Threadripper Pro 5955WX / 512GB RAM / 4× RTX 
 
 | Layer | Services |
 |---|---|
-| Inference | Ollama (11434), vLLM pair A/B/4-GPU (8000/8001/8002), ComfyUI (8188) |
+| Inference | vLLM Qwen3.8-27B (8002, default, all 4 GPUs) + embeddings (8003); optional vLLM pair A/B (8000/8001); ComfyUI (8188) |
 | UI | Open WebUI (3000), SearXNG (8080) |
 | Orchestration | Loadout Manager (8800) — VRAM-aware GPU profile switching |
 | Agentic | n8n (5678), Dify (3010), MCP servers |
@@ -34,7 +34,7 @@ Run from this repo root on **Windows**:
 .\sync-and-deploy.ps1
 
 # 2. SSH in and run first-time setup
-ssh kasemo@10.10.10.2
+ssh kasemo@<WORKSTATION_HOST>
 cd ~/ai-workstation
 chmod +x scripts/*.sh scripts/*.py
 
@@ -76,7 +76,7 @@ The sync excludes `plan/`, `.git/`, `.env`, and `node_modules/`.
 ### Apply changes directly on the server
 
 ```bash
-ssh kasemo@10.10.10.2
+ssh kasemo@<WORKSTATION_HOST>
 cd ~/ai-workstation
 
 # Redeploy a single phase
@@ -109,7 +109,7 @@ Stack files in `docker/`:
 
 | File | Services |
 |---|---|
-| `compose.inference.yml` | Ollama, vLLM, ComfyUI |
+| `compose.inference.yml` | vLLM (4-GPU default + embeddings, pair A/B profiles) |
 | `compose.webui.yml` | Open WebUI, SearXNG |
 | `compose.loadout.yml` | Loadout Manager |
 | `compose.storage.yml` | MinIO, Qdrant, PostgreSQL, Langfuse |
@@ -123,7 +123,7 @@ Stack files in `docker/`:
 ### Restart a single container
 
 ```bash
-docker restart ollama
+docker restart vllm-4gpu
 docker restart open-webui
 docker restart loadout-manager
 ```
@@ -153,16 +153,22 @@ After pulling, force-recreate to apply:
 docker compose -f docker/compose.inference.yml up -d --force-recreate
 ```
 
-### Add / remove Ollama models
+### Add / remove models
+
+Models are Hugging Face checkpoints under `/data/models/vllm/`; a vLLM service
+serves whichever one its slot symlink (`current`, `current-b`, `large`) points at.
+The loadout manager's Models page does the same as:
 
 ```bash
-bash scripts/update-system.sh model-add qwen2.5-coder:32b
-bash scripts/update-system.sh model-remove qwen2.5-coder:7b
-
-# Or directly
-docker exec ollama ollama pull mistral:7b
-docker exec ollama ollama list
+bash scripts/update-system.sh model-add Qwen/Qwen2.5-32B-Instruct qwen2.5-32b
+ln -sfn qwen2.5-32b /data/models/vllm/current     # pair A slot
+bash scripts/update-system.sh model-remove qwen2.5-14b
 ```
+
+The default slot `large` holds Qwen3.8-27B-FP8, which VS Code Copilot Chat,
+Continue.dev, OpenHands, Open WebUI and n8n all use (`configs/continue/`,
+`configs/vscode/chatLanguageModels.json`). `vllm-4gpu`'s flags are specific to
+that model family; check them before pointing `large` elsewhere.
 
 ### Update NVIDIA drivers
 
@@ -191,10 +197,9 @@ curl http://localhost:8800/status
 
 | Profile | GPUs | Use case |
 |---|---|---|
-| `inference-small` | GPU 0 | 7B–13B Ollama |
-| `inference-pair-a` | GPU 0+3 | 34B–40B vLLM TP=2 |
+| `inference-4gpu` | all | **Default.** Qwen3.8-27B (coding + chat) + embeddings |
+| `inference-pair-a` | GPU 0+3 | 34B–40B vLLM TP=2 (+ embeddings on GPU 1) |
 | `inference-pair-b` | GPU 1+2 | Second parallel model |
-| `inference-4gpu` | all | 70B+ full precision |
 | `image-studio` | GPU 0 | ComfyUI, frees 1/2/3 for LLM |
 | `training-lora-image` | GPU 1+2 | Kohya image LoRA |
 | `training-lora-text` | all | Axolotl FSDP fine-tune |
@@ -223,10 +228,50 @@ These cannot be automated — visit after `deploy-all.sh` finishes:
 
 | Service | URL | Action |
 |---|---|---|
-| Authentik | `http://10.10.10.2:9080/if/flow/initial-setup/` | Create admin account |
-| n8n | `http://10.10.10.2:5678` | Complete owner setup |
-| Langfuse | `http://10.10.10.2:3002` | Create admin account |
-| Grafana | `http://10.10.10.2:3001` | Import dashboards 12239, 1860, 893 |
+| Authentik | `http://<WORKSTATION_HOST>:9080/if/flow/initial-setup/` | Create admin account |
+| n8n | `http://<WORKSTATION_HOST>:5678` | Complete owner setup |
+| Langfuse | `http://<WORKSTATION_HOST>:3002` | Create admin account |
+| Grafana | `http://<WORKSTATION_HOST>:3001` | Import dashboards 12239, 1860, 893 |
+
+---
+
+## Changing the workstation host
+
+Every browser-facing URL (Grafana's root URL, n8n webhooks, Dify's web API
+prefix, the SearXNG `base_url`, OAuth redirect URIs shown by the loadout
+manager, and the URLs the deploy/validate scripts print) comes from one value,
+`WORKSTATION_HOST` in `docker/.env`. It can be an IP or a hostname such as
+`kovati.lan`; when unset it falls back to `10.10.10.2`. Service-to-service
+traffic (Open WebUI, Caddy, Prometheus, n8n/Dify to Ollama) uses container names
+on the Docker networks and does not depend on it.
+
+To move the workstation to a new address:
+
+```bash
+# on the workstation
+sed -i 's/^WORKSTATION_HOST=.*/WORKSTATION_HOST=192.168.1.102/' docker/.env   # or add the line
+bash scripts/init-secrets.sh --render-searxng          # re-renders base_url, keeps the key
+docker compose -f docker/compose.agentic.yml up -d     # n8n, Dify
+docker compose -f docker/compose.monitoring.yml up -d  # Grafana
+docker compose -f docker/compose.webui.yml up -d       # SearXNG
+docker compose -f docker/compose.loadout.yml up -d     # loadout manager
+```
+
+`up -d` recreates only the containers whose configuration changed. Do not use
+`docker compose restart`; it does not re-read `docker/.env`.
+
+Client machines (the Continue.dev configs in `configs/continue/` and
+`configs/open-webui/continue-config.json`, and `scripts/test-coding-agent.ps1`)
+address the workstation as `kovati.lan`. Add one hosts entry per client, and an
+IP change is then a one-line edit there:
+
+```text
+# Windows: C:\Windows\System32\drivers\etc\hosts   Linux/macOS: /etc/hosts
+192.168.1.102  kovati.lan
+```
+
+If you set `WORKSTATION_HOST=kovati.lan` on the workstation too, give the
+workstation itself the same hosts entry (or a local DNS record).
 
 ---
 

@@ -13,6 +13,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 BASE="$REPO_ROOT/docker"
 export REPO_ROOT
 
@@ -67,6 +68,11 @@ while IFS= read -r f; do
             base=$(basename "$f")
             COMPOSE_CHANGED="$COMPOSE_CHANGED $base"
             ;;
+        docker/minio/*)
+            # MinIO image is built locally (docker/minio/Dockerfile)
+            [[ "$COMPOSE_CHANGED" == *compose.storage.yml* ]] || \
+                COMPOSE_CHANGED="$COMPOSE_CHANGED compose.storage.yml"
+            ;;
     esac
 done <<< "$CHANGED"
 
@@ -111,7 +117,8 @@ if [[ -n "$COMPOSE_CHANGED" ]]; then
         [[ -f "$full" ]] || continue
 
         log "Pulling images for $compose_file..."
-        docker compose -f "$full" pull --quiet || warn "Image pull failed for $compose_file (continuing)"
+        # --ignore-buildable: locally built images (e.g. minio) have nothing to pull
+        docker compose -f "$full" pull --quiet --ignore-buildable || warn "Image pull failed for $compose_file (continuing)"
 
         log "Applying $compose_file..."
         case "$compose_file" in
@@ -127,6 +134,8 @@ if [[ -n "$COMPOSE_CHANGED" ]]; then
                 docker compose -f "$full" up -d --force-recreate n8n 2>/dev/null || warn "$compose_file apply failed"
                 ;;
             compose.storage.yml)
+                log "Building MinIO image from source (cached after the first build)..."
+                docker compose -f "$full" build minio || warn "MinIO image build failed"
                 docker compose -f "$full" up -d --force-recreate langfuse 2>/dev/null || warn "$compose_file apply failed"
                 docker compose -f "$full" up -d 2>/dev/null || warn "$compose_file apply failed"
                 ;;
@@ -147,5 +156,5 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 log "Commit: $(git log --oneline -1)"
 echo ""
-echo "  UI:   http://10.10.10.2:8800"
+echo "  UI:   http://${WORKSTATION_HOST}:8800"
 echo ""

@@ -7,6 +7,9 @@ services:
     image: fedirz/faster-whisper-server:latest-cuda
     container_name: whisper
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "9099:8000"
     volumes:
@@ -58,6 +61,9 @@ services:
     image: ghcr.io/linuxserver/piper:latest
     container_name: piper
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     expose:
       - "10200"
     volumes:

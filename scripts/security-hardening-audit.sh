@@ -4,6 +4,7 @@
 # Checks Docker configurations, network segmentation, secrets management
 
 set -e
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 echo "=== Phase 13 Security Audit ==="
 echo ""
@@ -271,7 +272,7 @@ echo "Manual Security Checklist:"
 echo "================================"
 echo ""
 echo "[ ] Authentik Initial Setup:"
-echo "    1. Visit http://10.10.10.2:9000/if/flow/initial-setup/"
+echo "    1. Visit http://${WORKSTATION_HOST}:9000/if/flow/initial-setup/"
 echo "    2. Create admin account"
 echo "    3. Log in with admin credentials"
 echo ""

@@ -4,6 +4,7 @@
 # Checks: Prometheus, Grafana, exporters, targets, alerts
 
 set -e
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 echo "=== Phase 10 Validation ==="
 echo ""
@@ -143,10 +144,10 @@ echo ""
 echo "Manual verification checklist:"
 echo ""
 echo "[ ] Prometheus targets all 'UP':"
-echo "    http://10.10.10.2:9091/targets"
+echo "    http://${WORKSTATION_HOST}:9091/targets"
 echo ""
 echo "[ ] GPU metrics present in Prometheus:"
-echo "    http://10.10.10.2:9091/graph?query=DCGM_FI_DEV_GPU_UTIL"
+echo "    http://${WORKSTATION_HOST}:9091/graph?query=DCGM_FI_DEV_GPU_UTIL"
 echo "    - Should show graphs for GPU0-3"
 echo ""
 echo "[ ] Grafana dashboard import:"

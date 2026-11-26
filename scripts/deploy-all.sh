@@ -21,6 +21,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 FROM_PHASE=3
@@ -52,15 +53,15 @@ done
 # deploy_script is relative to REPO_ROOT.
 # notes are printed before running (pre-flight info).
 declare -a PHASES=(
-    "3|Text Inference (Ollama + vLLM)|scripts/deploy-phase03.sh|Requires /data/models/ollama to exist (setup-storage.sh). vLLM model download is separate."
-    "4|Image Inference (ComfyUI + Real-ESRGAN)|scripts/deploy-phase04.sh|"
+    "3|Text Inference (vLLM Qwen3.8-27B + embeddings)|scripts/deploy-phase03.sh|Downloads Qwen3.8-27B-FP8 (~31 GB) on first run. Stops pair A/B and Ollama."
+    "4|Image Inference (ComfyUI)|scripts/deploy-phase04.sh|"
     "5|Open WebUI (UI + SearXNG)|scripts/deploy-phase05.sh|Requires Phase 03."
     "6|Loadout Manager (GPU orchestrator)|scripts/deploy-phase06.sh|"
     "7|Training Pipeline (Kohya + Axolotl + JupyterLab)|scripts/deploy-phase07.sh|"
     "8|Agentic Workflows & MCP (n8n + Dify)|scripts/deploy-phase08.sh|n8n owner account created manually after deploy."
     "9|Storage, Vector DB & RAG (MinIO + Qdrant + Postgres + Langfuse)|scripts/deploy-phase09.sh|Requires init-secrets.sh to have been run (docker/.env must exist)."
     "10|Monitoring (Prometheus + Grafana + DCGM)|scripts/deploy-phase10.sh|Change GF_SECURITY_ADMIN_PASSWORD in compose.monitoring.yml first."
-    "11|Code Generation (OpenHands + Continue.dev)|scripts/deploy-phase11.sh|Pull code models first: ollama pull qwen2.5-coder:32b"
+    "11|Code Generation (OpenHands + Continue.dev)|scripts/deploy-phase11.sh|Requires Phase 03 (vllm-4gpu serving qwen3.8-27b)."
     "12|Voice I/O (Whisper STT + Piper TTS)|scripts/deploy-phase12.sh|First start downloads whisper-large-v3 (~1.5GB). Allow 2-5 min."
     "13|Security Hardening (Authentik + UFW)|scripts/deploy-phase13.sh|Auto-generates .env secrets. Requires /data/authentik dirs."
     "14|Operations Runbook (systemd auto-start + backup)|scripts/setup-systemd-service.sh|Requires sudo. Installs systemd units and timers."
@@ -110,8 +111,8 @@ if [[ ! -f "$REPO_ROOT/docker/.env" ]] && [[ "$DRY_RUN" == false ]]; then
 fi
 
 # ── Check /data/ directories exist ───────────────────────────────────────────
-if [[ ! -d /data/models/ollama ]] && [[ "$DRY_RUN" == false ]]; then
-    err "/data/models/ollama not found. Run:  sudo bash scripts/setup-storage.sh"
+if [[ ! -d /data/models/vllm ]] && [[ "$DRY_RUN" == false ]]; then
+    err "/data/models/vllm not found. Run:  sudo bash scripts/setup-storage.sh"
     exit 1
 fi
 
@@ -220,12 +221,12 @@ fi
 
 echo ""
 echo "Service URLs (if all phases deployed):"
-echo "  Open WebUI:     http://10.10.10.2:3000"
-echo "  Grafana:        http://10.10.10.2:3001"
-echo "  n8n:            http://10.10.10.2:5678"
-echo "  Authentik:      http://10.10.10.2:9080/if/flow/initial-setup/"
-echo "  Loadout Status: http://10.10.10.2:8800/status"
-echo "  OpenHands:      http://10.10.10.2:3003"
+echo "  Open WebUI:     http://${WORKSTATION_HOST}:3000"
+echo "  Grafana:        http://${WORKSTATION_HOST}:3001"
+echo "  n8n:            http://${WORKSTATION_HOST}:5678"
+echo "  Authentik:      http://${WORKSTATION_HOST}:9080/if/flow/initial-setup/"
+echo "  Loadout Status: http://${WORKSTATION_HOST}:8800/status"
+echo "  OpenHands:      http://${WORKSTATION_HOST}:3003"
 echo ""
 echo "Run full health check:"
 echo "  bash scripts/healthcheck.sh"

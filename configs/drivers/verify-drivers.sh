@@ -3,7 +3,7 @@
 # Brief ID: P02S2-001
 #
 # Run after reboot to confirm:
-#   - Driver 560+ loaded
+#   - Driver 580+ loaded
 #   - All 4x RTX A5500 visible
 #   - NVLink shows 4 active links per GPU
 #   - Topology matrix shows NVLink connections
@@ -46,17 +46,17 @@ fi
 ok "nvidia-smi found"
 
 # ---------------------------------------------------------------------------
-# 2. Driver version >= 560
+# 2. Driver version >= 580 (CUDA 13.0, required by the pinned vLLM image)
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- [2] Driver version ---"
 DRIVER_VER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
 DRIVER_MAJOR=$(echo "$DRIVER_VER" | cut -d'.' -f1)
 info "Detected driver: $DRIVER_VER"
-if [[ "$DRIVER_MAJOR" -ge 560 ]]; then
-    ok "Driver >= 560 (required for A5500 NVLink under CUDA 12.4)"
+if [[ "$DRIVER_MAJOR" -ge 580 ]]; then
+    ok "Driver >= 580 (CUDA 13.0: vLLM image; Unsloth needs >= 570)"
 else
-    fail "Driver $DRIVER_VER is below minimum 560"
+    fail "Driver $DRIVER_VER is below minimum 580; vLLM (CUDA 13.0) and Unsloth (CUDA 12.8) containers will not start"
 fi
 
 # ---------------------------------------------------------------------------
@@ -91,9 +91,15 @@ done < <(nvidia-smi --query-gpu=name --format=csv,noheader)
 echo ""
 echo "--- [5] NVLink link status (4 links expected per GPU) ---"
 EXPECTED_LINKS=4
+# `nvidia-smi nvlink --status` prints one line per link: "Link N: 14.062 GB/s"
+# when up, "Link N: <inactive>" when down. The word "Active" does not appear,
+# so counting it reported 0/4 on a healthy host. Count links that report a
+# speed (lines that say "Active" still count, for other driver formats).
+count_active_links() {
+    grep -Ec '^[[:space:]]*Link [0-9]+:.*([0-9.]+ ?GB/s|(^|[^[:alpha:]])Active)' || true
+}
 for gpu_idx in 0 1 2 3; do
-    # Count lines with "Active" in nvlink status output
-    ACTIVE=$(nvidia-smi nvlink --status -i "$gpu_idx" 2>/dev/null | grep -c "Active" || true)
+    ACTIVE=$(nvidia-smi nvlink --status -i "$gpu_idx" 2>/dev/null | count_active_links)
     info "GPU${gpu_idx}: ${ACTIVE} active NVLink link(s)"
     if [[ "$ACTIVE" -ge "$EXPECTED_LINKS" ]]; then
         ok "GPU${gpu_idx} NVLink OK (${ACTIVE}/${EXPECTED_LINKS} links active)"
@@ -107,18 +113,39 @@ done
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- [6] NVLink topology (GPU0↔GPU3 = pair A, GPU1↔GPU2 = pair B) ---"
-TOPO_OUTPUT=$(nvidia-smi topo -m 2>/dev/null)
+# (Under set -e a bare failing $(...) would end the script with no message.)
+TOPO_OUTPUT=$(nvidia-smi topo -m 2>&1) || {
+    fail "nvidia-smi topo -m failed: $TOPO_OUTPUT"
+    TOPO_OUTPUT=""
+}
+# Strip colour codes some driver versions emit
+TOPO_OUTPUT=$(printf '%s\n' "$TOPO_OUTPUT" | sed 's/\x1b\[[0-9;]*m//g')
 echo "$TOPO_OUTPUT" | grep -E "^GPU[0-9]" || true
 echo ""
 
-# Check for NV4 (4-link NVLink) between the expected pairs
+# Matrix cell for row GPU<a>, column GPU<b> (e.g. "NV4", "PHB", "X").
+# The header row is "<tab>GPU0<tab>GPU1..."; data rows are "GPU0<tab>X<tab>PHB...".
+topo_cell() {
+    local a=$1 b=$2
+    printf '%s\n' "$TOPO_OUTPUT" | awk -v row="GPU$a" -v col="GPU$b" '
+        !hdr && $1 ~ /^GPU[0-9]+$/ && $2 ~ /^GPU[0-9]+$/ {
+            for (i = 1; i <= NF; i++) if ($i == col) c = i + 1
+            hdr = 1; next
+        }
+        hdr && c && $1 == row { print $c; exit }'
+}
+
+# The expected pair must be linked by NVLink (NV<n>) in both directions. The
+# old check also accepted any "NV" anywhere in the output, which the NV# legend
+# that topo -m always prints satisfied, so this check could never fail.
 check_topo_pair() {
-    local a=$1 b=$2 label=$3
-    if echo "$TOPO_OUTPUT" | grep -qP "GPU${a}.*NV\d.*GPU${b}|GPU${b}.*NV\d.*GPU${a}" 2>/dev/null || \
-       echo "$TOPO_OUTPUT" | grep -q "NV"; then
-        ok "NVLink detected in topology ($label)"
+    local a=$1 b=$2 label=$3 ab ba
+    ab=$(topo_cell "$a" "$b")
+    ba=$(topo_cell "$b" "$a")
+    if [[ "$ab" =~ ^NV[0-9]+$ && "$ba" =~ ^NV[0-9]+$ ]]; then
+        ok "NVLink in topology ($label: $ab)"
     else
-        fail "No NVLink detected in topology ($label) — check bridge seating"
+        fail "No NVLink in topology ($label: GPU${a}→GPU${b}='${ab:-?}', GPU${b}→GPU${a}='${ba:-?}') — check bridge seating"
     fi
 }
 check_topo_pair 0 3 "pair A: GPU0↔GPU3"

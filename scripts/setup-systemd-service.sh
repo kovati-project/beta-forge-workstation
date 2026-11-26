@@ -93,47 +93,12 @@ chmod 644 /etc/systemd/system/ai-workstation.service
 log_step "✓ Service created: /etc/systemd/system/ai-workstation.service"
 echo ""
 
-# Create systemd timer for daily backups
-log_step "Creating systemd timer: ai-workstation-backup.timer"
-
-cat > /etc/systemd/system/ai-workstation-backup.service <<EOF
-[Unit]
-Description=AI Workstation Daily Backup
-After=ai-workstation.service
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=$USER_NAME
-WorkingDirectory=$PROJECT_DIR
-ExecStart=$PROJECT_DIR/scripts/backup.sh
-StandardOutput=journal
-StandardError=journal
-StandardInput=null
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > /etc/systemd/system/ai-workstation-backup.timer <<EOF
-[Unit]
-Description=Run AI Workstation Backup Daily at 2 AM
-Requires=ai-workstation-backup.service
-After=network-online.target
-
-[Timer]
-OnCalendar=daily
-OnCalendar=*-*-* 02:00:00
-Persistent=true
-AccuracySec=1min
-
-[Install]
-WantedBy=timers.target
-EOF
-
-chmod 644 /etc/systemd/system/ai-workstation-backup.service
-chmod 644 /etc/systemd/system/ai-workstation-backup.timer
-log_step "✓ Backup timer created"
+# Daily backup timer: one definition, in scripts/install-backup-timer.sh.
+# (The copy that used to live here had Requires= on its service, which ran a
+# backup every time the timer started, two OnCalendar lines, and User=$USER_NAME,
+# which cannot write the root-owned /data/backups.)
+log_step "Installing backup timer (scripts/install-backup-timer.sh)"
+bash "$PROJECT_DIR/scripts/install-backup-timer.sh"
 echo ""
 
 # Create health check timer (optional, every 6 hours)
@@ -160,8 +125,6 @@ EOF
 cat > /etc/systemd/system/ai-workstation-healthcheck.timer <<EOF
 [Unit]
 Description=Run AI Workstation Health Check Every 6 Hours
-Requires=ai-workstation-healthcheck.service
-After=network-online.target
 
 [Timer]
 OnBootSec=5min

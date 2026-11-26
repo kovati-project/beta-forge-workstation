@@ -7,23 +7,26 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # TODO(#68): cap_drop needs on-host verification
     ports:
       - "3000:8080"
     volumes:
       - open-webui-data:/app/backend/data
-      - /data/models/ollama:/root/.ollama
     environment:
       # Backends are addressed by container name and *internal* port on the
-      # ai-workstation network; 10.10.10.2 never existed on this host (#51).
+      # ai-workstation network, so they do not depend on WORKSTATION_HOST (#51).
       # Open WebUI keeps no saved connection settings in its DB here, so these env
       # vars are authoritative (re-check webui.db `config` if that ever changes).
 
-      # Ollama backend (primary)
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # No Ollama on this host; without this Open WebUI probes localhost:11434.
+      - ENABLE_OLLAMA_API=false
 
-      # vLLM backends (OpenAI-compatible; the base URL must end in /v1). pair-b and
-      # 4gpu only resolve while the loadout-manager has that profile running.
-      - OPENAI_API_BASE_URLS=http://vllm-pair-a:8000/v1;http://vllm-pair-b:8000/v1;http://vllm-4gpu:8000/v1
+      # vLLM backends (OpenAI-compatible; the base URL must end in /v1).
+      # vllm-4gpu (Qwen3.8-27B) is the default stack; pair-a and pair-b only
+      # resolve while the loadout-manager has that profile running.
+      - OPENAI_API_BASE_URLS=http://vllm-4gpu:8000/v1;http://vllm-pair-a:8000/v1;http://vllm-pair-b:8000/v1
       - OPENAI_API_KEYS=EMPTY;EMPTY;EMPTY
 
       # Image generation via ComfyUI
@@ -32,8 +35,17 @@ services:
       - COMFYUI_BASE_URL=http://comfyui:8188
 
       # RAG
+      # Store knowledge-base vectors in the shared Qdrant (compose.storage.yml)
+      # instead of the default Chroma inside this container. Open WebUI keeps
+      # its own "open-webui_*" collections, separate from the RAG collections
+      # scripts/setup-qdrant.py creates. Env-only setting: recreate to apply.
+      - VECTOR_DB=qdrant
+      - QDRANT_URI=http://qdrant:6333
+      # vllm-embed serves the same nomic-embed-text model Ollama did.
+      - RAG_EMBEDDING_ENGINE=openai
       - RAG_EMBEDDING_MODEL=nomic-embed-text
-      - RAG_EMBEDDING_ENGINE=ollama
+      - RAG_OPENAI_API_BASE_URL=http://vllm-embed:8000/v1
+      - RAG_OPENAI_API_KEY=EMPTY
       - CHUNK_SIZE=1000
       - CHUNK_OVERLAP=100
 
@@ -77,6 +89,15 @@ services:
     image: searxng/searxng:latest
     container_name: searxng
     restart: unless-stopped
+    # The image runs granian as root unless told otherwise; its entrypoint
+    # supports non-root (skips the chown and update-ca-certificates). 977 is the
+    # image's searxng user. settings.yml must already exist and be readable by
+    # it (init-secrets.sh renders it 0664), since 977 cannot create it.
+    user: "977:977"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "8080:8080"
     volumes:

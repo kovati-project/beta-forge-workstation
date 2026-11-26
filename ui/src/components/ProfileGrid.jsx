@@ -4,7 +4,7 @@ import { ProfileCard } from './ProfileCard';
 import './ProfileGrid.css';
 
 export function ProfileGrid({ profiles, loading, error }) {
-  const { state } = useApp();
+  const { state, startSwitch } = useApp();
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
 
@@ -18,9 +18,13 @@ export function ProfileGrid({ profiles, loading, error }) {
 
   const activateProfile = async (profileName) => {
     try {
-      const response = await fetch(`/activate/${profileName}`, { method: 'POST' });
-      if (!response.ok) {
-        alert('Failed to activate profile');
+      const response = await fetch(`/activate/${encodeURIComponent(profileName)}`, { method: 'POST' });
+      if (response.ok) {
+        startSwitch(profileName);
+      } else {
+        // 409s carry the reason (switch in progress, not enough VRAM, telemetry down).
+        const body = await response.json().catch(() => null);
+        alert(`Failed to activate profile${body?.detail ? `: ${body.detail}` : ''}`);
       }
     } catch (error) {
       alert('Error activating profile');
