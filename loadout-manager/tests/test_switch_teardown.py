@@ -343,6 +343,29 @@ def test_no_docker_call_runs_on_the_event_loop(lm):
     assert [c for c in lm.docker.calls if c.on_loop] == []
 
 
+def test_nvml_reads_do_not_run_on_the_event_loop(lm, monkeypatch):
+    """Every NVML read a request or the switch makes happens in a worker thread:
+    the activation gate, the post-teardown VRAM check, /status and /health."""
+    real = lm.main.read_gpu_telemetry
+    reads = []
+
+    def spy():
+        try:
+            asyncio.get_running_loop()
+            reads.append("loop")
+        except RuntimeError:
+            reads.append("thread")
+        return real()
+
+    monkeypatch.setattr(lm.main, "read_gpu_telemetry", spy)
+    lm.make_active("inference-pair-b")
+    assert lm.activate("training-unsloth").status_code == 200   # gate + post-teardown check
+    assert lm.client.get("/status").status_code == 200
+    assert lm.client.get("/health").status_code == 200
+    assert len(reads) >= 4, reads
+    assert "loop" not in reads, reads
+
+
 @pytest.mark.anyio
 async def test_stop_and_activate_cannot_both_be_accepted(lm, async_client):
     lm.make_active("inference-pair-b")

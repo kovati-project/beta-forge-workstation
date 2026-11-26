@@ -468,15 +468,30 @@ def _check_vram(profile_name: str, profile: Dict, telemetry: Dict,
     return None
 
 
-def validate_activation(profile_name: str, profiles: Dict) -> Optional[str]:
+def validate_activation(profile_name: str, profiles: Dict,
+                        telemetry: Optional[Dict] = None) -> Optional[str]:
     """Pre-switch gate shared by POST /activate and the scheduler. Returns the
     refusal reason, or None if the activation may proceed. Never awaits, so a
-    caller can check and then _claim_switch() atomically."""
+    caller can check and then _claim_switch() atomically.
+
+    NVML is a blocking call. Async callers read it first with
+    ``await _read_gpu_telemetry()`` and pass it in, so the read happens off the
+    event loop while the gate itself (which looks at ``state``) still runs with
+    no await between it and the claim. Without ``telemetry`` it is read here,
+    synchronously, which is only appropriate from a worker thread or a test."""
     reason = _check_incompatibility(profile_name, profiles)
     if reason:
         return reason
-    return _check_vram(profile_name, profiles[profile_name], get_gpu_telemetry(),
+    if telemetry is None:
+        telemetry = get_gpu_telemetry()
+    return _check_vram(profile_name, profiles[profile_name], telemetry,
                        outgoing_running=bool(state["running_services"]))
+
+
+async def _read_gpu_telemetry() -> Dict:
+    """get_gpu_telemetry() in a worker thread. NVML init + per-device queries
+    take tens of ms and stall the event loop (/ws, /health) if run on it."""
+    return await asyncio.to_thread(get_gpu_telemetry)
 
 
 async def _run_blocking(*args, **kwargs):
@@ -580,7 +595,7 @@ async def do_switch(profile_name: str):
         # The authoritative VRAM check: the pre-check could not see what the
         # outgoing profile was about to free, and the scheduler path may have
         # waited between checking and switching.
-        reason = _check_vram(profile_name, profile, get_gpu_telemetry(),
+        reason = _check_vram(profile_name, profile, await _read_gpu_telemetry(),
                              outgoing_running=False)
         if reason:
             raise _SwitchAborted(reason)
@@ -744,12 +759,14 @@ async def activate_profile(profile_name: str, background_tasks: BackgroundTasks)
     
     # Incompatibility and VRAM gates (shared with the scheduler). idle
     # (requirement 0) needs no telemetry, so it stays reachable with NVML down.
-    reason = validate_activation(profile_name, profiles)
+    # The NVML read is the only await; the gate runs on its result and claims
+    # the slot with no await in between. A second request that got through the
+    # `switching` test during that read is still refused by _claim_switch().
+    telemetry = await _read_gpu_telemetry()
+    reason = validate_activation(profile_name, profiles, telemetry)
     if reason:
         raise HTTPException(409, reason)
 
-    # Every check above ran without awaiting, so nothing can have claimed the
-    # slot since the `switching` test at the top.
     if not _claim_switch():
         raise HTTPException(409, "Profile switch already in progress")
     background_tasks.add_task(do_switch, profile_name)
@@ -951,7 +968,8 @@ async def scheduler_loop() -> None:
                     logger.error(f"Schedule {entry['id']}: unknown profile {profile}")
                     continue
                 # Same gates as POST /activate; no await between this and the claim.
-                reason = validate_activation(profile, profiles)
+                telemetry = await _read_gpu_telemetry()
+                reason = validate_activation(profile, profiles, telemetry)
                 if reason:
                     logger.error(f"Schedule {entry['id']}: not activating {profile}: {reason}")
                     continue

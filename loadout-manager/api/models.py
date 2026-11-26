@@ -1,6 +1,8 @@
 """Model management API endpoints."""
 
+import asyncio
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -10,14 +12,12 @@ from pydantic import BaseModel
 
 from .envfile import read_env
 
-router = APIRouter()
+try:
+    from config import VLLM_URLS
+except ImportError:
+    from ..config import VLLM_URLS
 
-VLLM_URLS = {
-    "vllm-pair-a": "http://localhost:8000",
-    "vllm-pair-b": "http://localhost:8001",
-    "vllm-4gpu": "http://localhost:8002",
-    "vllm-embed": "http://localhost:8003",
-}
+router = APIRouter()
 
 VLLM_MODEL_DIR = Path("/data/models/vllm")
 # Roots scanned for models already on disk (custom, fine-tuned, copied in by hand).
@@ -211,6 +211,14 @@ def _registered_targets() -> Dict[str, str]:
     return out
 
 
+def _scan_local_models() -> Dict:
+    registered = _registered_targets()
+    models = discover_local_models([MODELS_ROOT, CHECKPOINTS_ROOT])
+    for m in models:
+        m["registered_as"] = registered.get(str(Path(m["path"]).resolve()))
+    return {"roots": [str(MODELS_ROOT), str(CHECKPOINTS_ROOT)], "models": models}
+
+
 @router.get("/models/local")
 async def list_local_models() -> Dict:
     """Models already on disk under the models and checkpoints roots.
@@ -218,12 +226,11 @@ async def list_local_models() -> Dict:
     Rescanned on every call, so models copied onto the host out of band show up
     without restarting anything. POST /models/local/register makes an HF-format
     one loadable into a vLLM slot without copying or re-downloading it.
+
+    The scan sizes every model directory with an rglob, which on a large model
+    store takes long enough to stall the event loop, so it runs in a thread.
     """
-    registered = _registered_targets()
-    models = discover_local_models([MODELS_ROOT, CHECKPOINTS_ROOT])
-    for m in models:
-        m["registered_as"] = registered.get(str(Path(m["path"]).resolve()))
-    return {"roots": [str(MODELS_ROOT), str(CHECKPOINTS_ROOT)], "models": models}
+    return await asyncio.to_thread(_scan_local_models)
 
 
 class RegisterRequest(BaseModel):
@@ -234,6 +241,14 @@ class RegisterRequest(BaseModel):
 def _valid_local_name(name: str) -> bool:
     return (bool(name.strip()) and "/" not in name and "\\" not in name
             and ".." not in name and not name.startswith("."))
+
+
+_REPO_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _valid_repo_id(repo_id: str) -> bool:
+    """Hugging Face ``owner/name``: no leading slash, no ``..``, nothing else."""
+    return bool(_REPO_ID_RE.match(repo_id)) and ".." not in repo_id
 
 
 @router.post("/models/local/register")
@@ -289,9 +304,7 @@ async def list_vllm_models(endpoint: str = "vllm-pair-a") -> Dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/models/vllm/local")
-async def list_vllm_local() -> Dict:
-    """List model directories in /data/models/vllm and current slot assignments."""
+def _scan_vllm_local() -> Dict:
     skip = set(VLLM_SLOTS.values())  # {"current", "current-b", "large"}
     models = []
 
@@ -319,6 +332,15 @@ async def list_vllm_local() -> Dict:
             slots[slot] = None
 
     return {"models": models, "slots": slots}
+
+
+@router.get("/models/vllm/local")
+async def list_vllm_local() -> Dict:
+    """List model directories in /data/models/vllm and current slot assignments.
+
+    Sized with an rglob per model, so the scan runs in a thread (see
+    list_local_models)."""
+    return await asyncio.to_thread(_scan_vllm_local)
 
 
 class ActivateRequest(BaseModel):
@@ -366,22 +388,34 @@ async def download_vllm_model(req: DownloadRequest) -> Dict:
     if _download_state.get("status") == "running":
         raise HTTPException(status_code=409, detail="A download is already in progress")
 
-    if "/" in req.local_name or ".." in req.local_name or not req.local_name.strip():
-        raise HTTPException(status_code=400, detail="Invalid local_name")
+    repo_id = req.repo_id.strip()
+    if not _valid_repo_id(repo_id):
+        raise HTTPException(status_code=400,
+                            detail="Invalid repo_id (expected owner/name)")
 
-    dest = VLLM_MODEL_DIR / req.local_name
+    # Same rules as register/activate, plus: never a slot link name, and never a
+    # name that is already a symlink. snapshot_download writes THROUGH a symlink,
+    # so a registered model's name (or a slot's) would be overwritten in place.
+    local_name = req.local_name.strip()
+    if not _valid_local_name(local_name) or local_name in VLLM_SLOTS.values():
+        raise HTTPException(status_code=400, detail="Invalid local_name")
+    dest = VLLM_MODEL_DIR / local_name
+    if dest.is_symlink():
+        raise HTTPException(status_code=409,
+                            detail=f"{local_name} is already a link; pick another name")
+
     _download_state.clear()
     _download_state.update({
         "status": "running",
-        "repo_id": req.repo_id,
-        "local_name": req.local_name,
+        "repo_id": repo_id,
+        "local_name": local_name,
     })
 
     def _run():
         try:
             from huggingface_hub import snapshot_download
             snapshot_download(
-                repo_id=req.repo_id,
+                repo_id=repo_id,
                 local_dir=str(dest),
                 ignore_patterns=["*.gguf"],
                 token=_hf_token(),
@@ -392,7 +426,7 @@ async def download_vllm_model(req: DownloadRequest) -> Dict:
             _download_state["error"] = str(e)
 
     threading.Thread(target=_run, daemon=True).start()
-    return {"status": "started", "repo_id": req.repo_id, "local_name": req.local_name}
+    return {"status": "started", "repo_id": repo_id, "local_name": local_name}
 
 
 @router.get("/models/vllm/download/status")

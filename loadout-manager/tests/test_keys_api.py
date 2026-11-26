@@ -8,10 +8,12 @@ Not covered: enforcement. No endpoint checks API keys today; verify_api_key()
 exists for when one does.
 """
 
+import asyncio
 import json
 import os
 import stat
 import sys
+import threading
 
 import pytest
 
@@ -112,3 +114,52 @@ def test_corrupt_store_reads_as_empty(lm, keys):
     keys.path.parent.mkdir(parents=True)
     keys.path.write_text("{not json")
     assert lm.client.get("/api/keys").json() == {"keys": [], "count": 0}
+
+
+# ── concurrent read-modify-write ─────────────────────────────────────────────
+
+@pytest.mark.parametrize("other", ["generate", "delete"])
+def test_overlapping_operations_do_not_lose_updates(lm, keys, monkeypatch, other):
+    """A touch is paused between its load and its save; a second operation runs
+    in that window. Without the store lock the touch then writes back its stale
+    snapshot, losing a newly generated key or resurrecting a deleted one."""
+    assert _generate(lm, "a").status_code == 200
+    assert _generate(lm, "victim").status_code == 200
+
+    real_save = keys._save_keys
+    in_save, release = threading.Event(), threading.Event()
+    paused = []
+
+    def pausing_save(store):
+        if threading.current_thread().name == "touch" and not paused:
+            paused.append(True)
+            in_save.set()
+            assert release.wait(10), "test bug: touch was never released"
+        real_save(store)
+
+    monkeypatch.setattr(keys, "_save_keys", pausing_save)
+
+    if other == "generate":
+        op = lambda: asyncio.run(keys.generate_api_key("fresh"))
+    else:
+        op = lambda: asyncio.run(keys.delete_api_key("victim"))
+    touch = threading.Thread(name="touch", target=lambda: asyncio.run(keys.touch_api_key("a")))
+    second = threading.Thread(name="second", target=op)
+
+    touch.start()
+    assert in_save.wait(10)
+    second.start()
+    # Locked: the second operation waits here. Unlocked: it finishes (and writes)
+    # while the touch still holds its stale snapshot.
+    second.join(0.3)
+    release.set()
+    touch.join(10)
+    second.join(10)
+    assert not touch.is_alive() and not second.is_alive()
+
+    stored = json.loads(keys.path.read_text())
+    assert stored["a"]["last_used"] is not None
+    if other == "generate":
+        assert "fresh" in stored
+    else:
+        assert "victim" not in stored

@@ -9,6 +9,7 @@ or that the vLLM containers resolve a registered symlink (needs the compose
 mounts on a real host).
 """
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -262,3 +263,117 @@ def test_register_rejects_paths_outside_the_roots(models_api, tmp_path):
     r = models_api.client.post("/api/models/local/register",
                                json={"path": str(outside), "name": "x"})
     assert r.status_code == 400
+
+
+# ── download ─────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def downloads(models_api, monkeypatch):
+    """Fresh download state, and a Thread that records instead of fetching."""
+    models = models_api.models
+    monkeypatch.setattr(models, "_download_state", {})
+    started = []
+
+    class FakeThread:
+        def __init__(self, target=None, **kw):
+            self.target = target
+
+        def start(self):
+            started.append(self.target)
+
+    monkeypatch.setattr(models.threading, "Thread", FakeThread)
+    models_api.started = started
+    return models_api
+
+
+def _download(api, repo_id="Qwen/Qwen3-8B", local_name="qwen3-8b"):
+    return api.client.post("/api/models/vllm/download",
+                           json={"repo_id": repo_id, "local_name": local_name})
+
+
+def test_download_starts_for_a_valid_request(downloads):
+    r = _download(downloads, "Qwen/Qwen3-8B", "qwen3.8b_v2")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"status": "started", "repo_id": "Qwen/Qwen3-8B",
+                        "local_name": "qwen3.8b_v2"}
+    assert len(downloads.started) == 1
+    status = downloads.client.get("/api/models/vllm/download/status").json()
+    assert status["status"] == "running" and status["local_name"] == "qwen3.8b_v2"
+
+
+def test_download_may_resume_into_an_existing_directory(downloads):
+    (downloads.models.VLLM_MODEL_DIR / "half").mkdir(parents=True)
+    assert _download(downloads, local_name="half").status_code == 200
+
+
+@pytest.mark.parametrize("local_name", [
+    "", "   ", "a/b", "..", "../evil", "a..b", ".hidden", "a\\b",
+    "current", "current-b", "large",          # slot link names
+])
+def test_download_rejects_bad_local_names(downloads, local_name):
+    r = _download(downloads, local_name=local_name)
+    assert r.status_code == 400, r.text
+    assert downloads.started == []
+    assert downloads.client.get("/api/models/vllm/download/status").json() == {}
+
+
+def test_download_rejects_a_name_that_is_already_a_symlink(downloads, symlinks, tmp_path):
+    """snapshot_download writes through a symlink: it would overwrite the target."""
+    registered = tmp_path / "somewhere-else"
+    registered.mkdir()
+    vllm = downloads.models.VLLM_MODEL_DIR
+    vllm.mkdir(parents=True)
+    (vllm / "my-finetune").symlink_to(registered, target_is_directory=True)
+    r = _download(downloads, local_name="my-finetune")
+    assert r.status_code == 409, r.text
+    assert downloads.started == []
+    assert list(registered.iterdir()) == []
+
+
+@pytest.mark.parametrize("repo_id", [
+    "", "gpt2", "/Qwen/Qwen3-8B", "Qwen/", "/Qwen", "../etc/passwd",
+    "Qwen/../x", "Qwen/Qwen3..8B", "a/b/c", "Qwen/Qwen 3", "Qwen/Qwen3-8B?x=1",
+    "Qwen\\Qwen3-8B", ".Qwen/x",
+])
+def test_download_rejects_bad_repo_ids(downloads, repo_id):
+    r = _download(downloads, repo_id=repo_id)
+    assert r.status_code == 400, r.text
+    assert downloads.started == []
+
+
+@pytest.mark.parametrize("repo_id", ["Qwen/Qwen3-8B", "meta-llama/Llama-3.1-8B",
+                                     "org_x/model.v2", "a/b"])
+def test_download_accepts_owner_name_repo_ids(downloads, repo_id):
+    assert _download(downloads, repo_id=repo_id).status_code == 200
+
+
+def test_download_refuses_a_second_concurrent_download(downloads):
+    assert _download(downloads).status_code == 200
+    assert _download(downloads, local_name="other").status_code == 409
+
+
+# ── blocking work stays off the event loop ───────────────────────────────────
+
+def test_disk_scans_do_not_run_on_the_event_loop(models_api, monkeypatch):
+    """Sizing models walks the whole tree; on the loop it would stall every
+    other request (and /ws) for as long as the scan takes."""
+    _layout(models_api.root)
+    real = models_api.models._dir_size_gb
+    on_loop = []
+
+    def spy(d):
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(d)
+        except RuntimeError:
+            pass
+        return real(d)
+
+    monkeypatch.setattr(models_api.models, "_dir_size_gb", spy)
+    assert models_api.client.get("/api/models/local").status_code == 200
+    assert models_api.client.get("/api/models/vllm/local").status_code == 200
+    assert on_loop == []
+    # ...and the spy really saw both scans: qwen (vllm/local) plus discovery.
+    monkeypatch.setattr(models_api.models, "_dir_size_gb", lambda d: on_loop.append(d) or 0.0)
+    models_api.client.get("/api/models/vllm/local")
+    assert on_loop, "spy was not exercised"

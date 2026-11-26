@@ -224,6 +224,18 @@ LANGFUSE_URL = os.getenv("LANGFUSE_URL", "http://langfuse:3000")
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")   # host:port, no scheme
 QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
+# vLLM servers, by container name. Every vLLM container listens on 8000 inside
+# the network; the 8000-8003 numbers in PORT_MAP are host-published ports.
+VLLM_PAIR_A_URL = os.getenv("VLLM_PAIR_A_URL", "http://vllm-pair-a:8000")
+VLLM_PAIR_B_URL = os.getenv("VLLM_PAIR_B_URL", "http://vllm-pair-b:8000")
+VLLM_4GPU_URL = os.getenv("VLLM_4GPU_URL", "http://vllm-4gpu:8000")
+VLLM_EMBED_URL = os.getenv("VLLM_EMBED_URL", "http://vllm-embed:8000")
+VLLM_URLS = {
+    "vllm-pair-a": VLLM_PAIR_A_URL,
+    "vllm-pair-b": VLLM_PAIR_B_URL,
+    "vllm-4gpu": VLLM_4GPU_URL,
+    "vllm-embed": VLLM_EMBED_URL,
+}
 # Authentik is on its own ai-auth network, so it is reached through its
 # published port on the host (compose maps host.docker.internal to the host).
 AUTHENTIK_URL = os.getenv("AUTHENTIK_URL", "http://host.docker.internal:9080")
