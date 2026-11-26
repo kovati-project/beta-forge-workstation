@@ -9,6 +9,7 @@ or that the vLLM containers resolve a registered symlink (needs the compose
 mounts on a real host).
 """
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -349,3 +350,30 @@ def test_download_accepts_owner_name_repo_ids(downloads, repo_id):
 def test_download_refuses_a_second_concurrent_download(downloads):
     assert _download(downloads).status_code == 200
     assert _download(downloads, local_name="other").status_code == 409
+
+
+# ── blocking work stays off the event loop ───────────────────────────────────
+
+def test_disk_scans_do_not_run_on_the_event_loop(models_api, monkeypatch):
+    """Sizing models walks the whole tree; on the loop it would stall every
+    other request (and /ws) for as long as the scan takes."""
+    _layout(models_api.root)
+    real = models_api.models._dir_size_gb
+    on_loop = []
+
+    def spy(d):
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(d)
+        except RuntimeError:
+            pass
+        return real(d)
+
+    monkeypatch.setattr(models_api.models, "_dir_size_gb", spy)
+    assert models_api.client.get("/api/models/local").status_code == 200
+    assert models_api.client.get("/api/models/vllm/local").status_code == 200
+    assert on_loop == []
+    # ...and the spy really saw both scans: qwen (vllm/local) plus discovery.
+    monkeypatch.setattr(models_api.models, "_dir_size_gb", lambda d: on_loop.append(d) or 0.0)
+    models_api.client.get("/api/models/vllm/local")
+    assert on_loop, "spy was not exercised"

@@ -1,5 +1,6 @@
 """Model management API endpoints."""
 
+import asyncio
 import os
 import re
 import threading
@@ -210,6 +211,14 @@ def _registered_targets() -> Dict[str, str]:
     return out
 
 
+def _scan_local_models() -> Dict:
+    registered = _registered_targets()
+    models = discover_local_models([MODELS_ROOT, CHECKPOINTS_ROOT])
+    for m in models:
+        m["registered_as"] = registered.get(str(Path(m["path"]).resolve()))
+    return {"roots": [str(MODELS_ROOT), str(CHECKPOINTS_ROOT)], "models": models}
+
+
 @router.get("/models/local")
 async def list_local_models() -> Dict:
     """Models already on disk under the models and checkpoints roots.
@@ -217,12 +226,11 @@ async def list_local_models() -> Dict:
     Rescanned on every call, so models copied onto the host out of band show up
     without restarting anything. POST /models/local/register makes an HF-format
     one loadable into a vLLM slot without copying or re-downloading it.
+
+    The scan sizes every model directory with an rglob, which on a large model
+    store takes long enough to stall the event loop, so it runs in a thread.
     """
-    registered = _registered_targets()
-    models = discover_local_models([MODELS_ROOT, CHECKPOINTS_ROOT])
-    for m in models:
-        m["registered_as"] = registered.get(str(Path(m["path"]).resolve()))
-    return {"roots": [str(MODELS_ROOT), str(CHECKPOINTS_ROOT)], "models": models}
+    return await asyncio.to_thread(_scan_local_models)
 
 
 class RegisterRequest(BaseModel):
@@ -296,9 +304,7 @@ async def list_vllm_models(endpoint: str = "vllm-pair-a") -> Dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/models/vllm/local")
-async def list_vllm_local() -> Dict:
-    """List model directories in /data/models/vllm and current slot assignments."""
+def _scan_vllm_local() -> Dict:
     skip = set(VLLM_SLOTS.values())  # {"current", "current-b", "large"}
     models = []
 
@@ -326,6 +332,15 @@ async def list_vllm_local() -> Dict:
             slots[slot] = None
 
     return {"models": models, "slots": slots}
+
+
+@router.get("/models/vllm/local")
+async def list_vllm_local() -> Dict:
+    """List model directories in /data/models/vllm and current slot assignments.
+
+    Sized with an rglob per model, so the scan runs in a thread (see
+    list_local_models)."""
+    return await asyncio.to_thread(_scan_vllm_local)
 
 
 class ActivateRequest(BaseModel):
