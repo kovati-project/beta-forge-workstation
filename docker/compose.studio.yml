@@ -65,43 +65,12 @@ services:
     profiles:
       - studio
 
-  # ── Real-ESRGAN: upscaling API ──────────────────────────────────────────────
-  # Gated behind "studio" profile. Image verification status:
-  #   pablogimenez/realesrgan-api:latest — unverified (no official image exists)
-  #
-  # Recommended alternative: use ComfyUI's built-in upscale_models support —
-  # no separate container needed. Download the model once:
-  #   wget -P /data/models/comfyui/upscale_models \
-  #     https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
-  # Then use an "Upscale Model Loader" → "Upscale Image (using Model)" node in any workflow.
-  #
-  # If a standalone HTTP API is required, build a custom wrapper:
-  #   FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
-  #   RUN pip install realesrgan flask
-  #   COPY realesrgan_server.py /app/
-  #   CMD ["python", "/app/realesrgan_server.py"]
-  realesrgan:
-    image: pablogimenez/realesrgan-api:latest
-    container_name: realesrgan
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    # TODO(#68): cap_drop needs on-host verification
-    ports:
-      - "8189:8000"
-    volumes:
-      - /data/outputs/upscaled:/app/output
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=0
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['0']
-              capabilities: [gpu]
-    profiles:
-      - studio
+  # ── Upscaling ─────────────────────────────────────────────────────────────
+  # No separate upscaling service (#95): the Real-ESRGAN API image this file
+  # used was removed from Docker Hub and no maintained replacement exists.
+  # ComfyUI does the same job with its built-in upscale nodes. Put the model in
+  # /data/models/comfyui/upscale_models (see scripts/deploy-phase04.sh) and use
+  # "Load Upscale Model" -> "Upscale Image (using Model)" in a workflow.
 
   # ── Rembg: background removal (CPU) ────────────────────────────────────────
   rembg:

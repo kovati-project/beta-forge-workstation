@@ -54,7 +54,7 @@ done
 # notes are printed before running (pre-flight info).
 declare -a PHASES=(
     "3|Text Inference (Ollama + vLLM)|scripts/deploy-phase03.sh|Requires /data/models/ollama to exist (setup-storage.sh). vLLM model download is separate."
-    "4|Image Inference (ComfyUI + Real-ESRGAN)|scripts/deploy-phase04.sh|"
+    "4|Image Inference (ComfyUI)|scripts/deploy-phase04.sh|"
     "5|Open WebUI (UI + SearXNG)|scripts/deploy-phase05.sh|Requires Phase 03."
     "6|Loadout Manager (GPU orchestrator)|scripts/deploy-phase06.sh|"
     "7|Training Pipeline (Kohya + Axolotl + JupyterLab)|scripts/deploy-phase07.sh|"

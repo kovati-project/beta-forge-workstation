@@ -87,6 +87,7 @@ ui      7860   tcp  mgmt  Kohya_ss
 ui      8081   tcp  mgmt  Label Studio
 ui      8188   tcp  mgmt  ComfyUI
 ui      8501   tcp  mgmt  Unsloth Studio
+ui      8889   tcp  mgmt  Unsloth JupyterLab
 ui      8800   tcp  mgmt  Loadout Manager
 ui      8888   tcp  mgmt  JupyterLab
 ui      9001   tcp  mgmt  MinIO Console
@@ -105,7 +106,6 @@ api     8001   tcp  mgmt  vLLM pair B
 api     8002   tcp  mgmt  vLLM 4-GPU
 api     9099   tcp  mgmt  Whisper STT
 api     5000   tcp  mgmt  Piper TTS
-api     8189   tcp  mgmt  Real-ESRGAN
 api     8190   tcp  mgmt  Rembg
 
 # --- data stores --------------------------------------------------------------
