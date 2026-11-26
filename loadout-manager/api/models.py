@@ -3,9 +3,9 @@
 import os
 import threading
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Body, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .envfile import read_env
