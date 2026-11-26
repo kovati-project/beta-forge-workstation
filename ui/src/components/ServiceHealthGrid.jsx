@@ -10,6 +10,8 @@ const SERVICE_CATEGORIES = {
   'vllm-pair-b': 'inference',
   'vllm-4gpu': 'inference',
   'vllm-embed': 'inference',
+  'vllm-huihui': 'inference',
+  'vllm-huihui-coder': 'inference',
   'comfyui': 'image',
   'kohya': 'training',
   'axolotl': 'training',

@@ -20,6 +20,8 @@ export function LogViewerSection() {
     'vllm-embed',
     'vllm-pair-a',
     'vllm-pair-b',
+    'vllm-huihui',
+    'vllm-huihui-coder',
     'whisper-stt',
     'piper-tts',
   ];
