@@ -181,14 +181,14 @@ tests:
 
   # Active profile inference-4gpu expects vllm-4gpu, which cannot be scraped:
   # ProfileServiceDown fires for it (after for: 10m), and only for it -- not
-  # for vllm-pair-a (down, not expected) and not for ollama (expected by some
+  # for vllm-pair-a (down, not expected) and not for kohya (expected by some
   # profiles but has no scrape job, so there is no `up` to join).
   - name: profile_service_down_fires_for_expected_gated_service
     interval: 1m
     input_series:
       - series: 'loadout_service_expected{job="loadout-manager", instance="loadout-manager:8800", component="gpu-orchestrator", profile="inference-4gpu", service="vllm-4gpu"}'
         values: '1+0x20'
-      - series: 'loadout_service_expected{job="loadout-manager", instance="loadout-manager:8800", component="gpu-orchestrator", profile="inference-4gpu", service="ollama"}'
+      - series: 'loadout_service_expected{job="loadout-manager", instance="loadout-manager:8800", component="gpu-orchestrator", profile="inference-4gpu", service="kohya"}'
         values: '1+0x20'
       - series: 'up{job="vllm-4gpu", instance="vllm-4gpu:8000", service="vllm-4gpu", engine="vllm", profile_gated="true", gpus="0,1,2,3"}'
         values: '0+0x20'

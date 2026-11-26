@@ -22,8 +22,8 @@ def _f_args(call):
 
 def test_compose_files_come_from_compose_dir(lm):
     from api import secrets as secrets_api
-    lm.make_active("inference-small")
-    assert lm.activate("training-lora-image").status_code == 200
+    lm.make_active("inference-pair-b")
+    assert lm.activate("training-unsloth").status_code == 200
     for c in lm.docker.calls:
         for f in _f_args(c):
             assert Path(f).parent == secrets_api.COMPOSE_DIR, c
@@ -41,7 +41,7 @@ def test_teardown_includes_profiled_services_and_orphans(lm):
 
 
 def test_multi_file_profile_starts_each_file_in_its_own_project(lm):
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     assert lm.activate("image-studio").status_code == 200, lm.state["last_error"]
     ups = lm.docker.starts
     assert [(c.compose_files, c.cmd[c.cmd.index("-d") + 1:]) for c in ups] == [
@@ -52,19 +52,19 @@ def test_multi_file_profile_starts_each_file_in_its_own_project(lm):
 
 
 def test_images_are_pulled_before_teardown(lm):
-    lm.make_active("inference-small")
-    assert lm.activate("training-lora-image").status_code == 200
+    lm.make_active("inference-pair-b")
+    assert lm.activate("training-unsloth").status_code == 200
     (pull,) = lm.docker.pulls
     assert pull.compose_files == ["compose.training.yml"]
-    assert pull.cmd[-2:] == ["kohya", "label-studio"]
+    assert pull.cmd[-1:] == ["unsloth"]
     assert all(pull.seq < d.seq for d in lm.docker.downs)
 
 
 def test_failed_pull_does_not_block_the_switch(lm):
     lm.docker.fail("pull", rc=1, stderr="registry unreachable")
-    lm.make_active("inference-small")
-    assert lm.activate("training-lora-image").status_code == 200
-    assert lm.state["active_profile"] == "training-lora-image"
+    lm.make_active("inference-pair-b")
+    assert lm.activate("training-unsloth").status_code == 200
+    assert lm.state["active_profile"] == "training-unsloth"
     assert lm.state["last_error"] is None
 
 
@@ -74,7 +74,7 @@ def test_second_file_failing_to_start_cleans_up(lm):
             import subprocess
             return subprocess.CompletedProcess(c.cmd, 1, "", "port already allocated")
     lm.docker.rules.append(rule)
-    lm.make_active("inference-small")
+    lm.make_active("inference-pair-a")
     lm.activate("image-studio")
     first_up = lm.docker.starts[0]
     assert [c for c in lm.docker.downs if c.seq > first_up.seq], "cleanup must run"
@@ -84,10 +84,10 @@ def test_second_file_failing_to_start_cleans_up(lm):
 
 def test_profile_naming_an_undefined_service_aborts_before_teardown(lm, monkeypatch):
     profiles = lm.main.load_profiles()
-    profiles["training-lora-image"]["services"] = ["kohya", "no-such-service"]
+    profiles["training-unsloth"]["services"] = ["unsloth", "no-such-service"]
     monkeypatch.setattr(lm.main, "load_profiles", lambda: profiles)
-    lm.make_active("inference-small")
-    lm.activate("training-lora-image")
+    lm.make_active("inference-pair-b")
+    lm.activate("training-unsloth")
     assert lm.docker.calls == []
-    assert lm.state["active_profile"] == "inference-small"
+    assert lm.state["active_profile"] == "inference-pair-b"
     assert lm.state["last_error"]
