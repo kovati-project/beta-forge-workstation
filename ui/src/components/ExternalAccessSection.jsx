@@ -28,7 +28,7 @@ export function ExternalAccessSection() {
       await updateNetworkRoute(service, !currentlyExposed);
 
       // Check for security warnings
-      if (!currentlyExposed && (service.includes('vllm') || service.includes('ollama'))) {
+      if (!currentlyExposed && service.includes('vllm')) {
         setWarnings((prev) => ({
           ...prev,
           [service]: '⚠ Ensure API key authentication is configured',

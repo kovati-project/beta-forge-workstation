@@ -5,6 +5,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 # shellcheck source=lib/container-helpers.sh
 source "$REPO_ROOT/scripts/lib/container-helpers.sh"
 
@@ -69,7 +70,7 @@ echo "  SDXL VAE:"
 echo "    huggingface-cli download madebyollin/sdxl-vae-fp16-fix \\"
 echo "      --local-dir /data/models/comfyui/vae --include '*.safetensors'"
 echo ""
-echo "  Real-ESRGAN upscale model:"
+echo "  Real-ESRGAN upscale model (used by ComfyUI's upscale nodes):"
 echo "    wget -P /data/models/comfyui/upscale_models \\"
 echo "      https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
 echo ""
@@ -84,5 +85,5 @@ echo "      --local-dir /data/models/comfyui/checkpoints/flux1-dev --include '*.
 echo "    WARNING: FLUX.1-dev fills all 24GB of GPU0. Only use when LLM inference is idle."
 echo ""
 echo "  After downloading, install recommended custom nodes via ComfyUI Manager UI:"
-echo "    http://10.10.10.2:8188 → Manager → Install Missing Custom Nodes"
+echo "    http://${WORKSTATION_HOST}:8188 → Manager → Install Missing Custom Nodes"
 echo "    Recommended: Impact Pack, Efficiency Nodes, ControlNet Aux, WAS Node Suite"

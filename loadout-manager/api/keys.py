@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import tempfile
+import threading
 from datetime import datetime, timezone
 from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException
@@ -30,12 +31,23 @@ KEY_PREFIX = "nk_"
 DISPLAY_PREFIX_LEN = 10          # "nk_" + 7 characters, enough to tell keys apart
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
+# The store is one JSON file that every operation reads, changes and replaces
+# whole. Without mutual exclusion two overlapping operations (a generate and a
+# touch, or a delete and a touch) each start from the same snapshot and the
+# later write silently discards the earlier one: a new key vanishes, or a
+# deleted (revoked) key comes back. Hold this lock across every
+# load-modify-save, including the legacy upgrade write inside _load_keys.
+# It is a plain Lock, so _load_keys/_save_keys must never take it themselves:
+# callers do, once, around the whole read-modify-write.
+_STORE_LOCK = threading.Lock()
+
 
 def _hash(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
 def _load_keys() -> Dict:
+    """Read the store, upgrading legacy entries. The caller holds _STORE_LOCK."""
     if not os.path.exists(KEYS_FILE):
         return {}
     try:
@@ -59,7 +71,9 @@ def _load_keys() -> Dict:
 
 
 def _save_keys(store: Dict) -> None:
-    """Write atomically with mode 0600: the file is a credential store."""
+    """Write atomically with mode 0600: the file is a credential store.
+
+    The caller holds _STORE_LOCK."""
     directory = os.path.dirname(KEYS_FILE) or "."
     os.makedirs(directory, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".api_keys.", dir=directory)
@@ -85,20 +99,22 @@ def verify_api_key(presented: str, touch: bool = True) -> Optional[str]:
     if not presented or not presented.startswith(KEY_PREFIX):
         return None
     digest = _hash(presented)
-    store = _load_keys()
-    for name, meta in store.items():
-        if hmac.compare_digest(meta.get("hash", ""), digest):
-            if touch:
-                meta["last_used"] = _now_iso()
-                _save_keys(store)
-            return name
+    with _STORE_LOCK:
+        store = _load_keys()
+        for name, meta in store.items():
+            if hmac.compare_digest(meta.get("hash", ""), digest):
+                if touch:
+                    meta["last_used"] = _now_iso()
+                    _save_keys(store)
+                return name
     return None
 
 
 @router.get("/keys")
 async def list_api_keys() -> Dict:
     """List all API keys (metadata only; the key itself is never returned)."""
-    store = _load_keys()
+    with _STORE_LOCK:       # reading can write: legacy entries are upgraded
+        store = _load_keys()
     keys = [
         {
             "name": name,
@@ -118,15 +134,15 @@ async def generate_api_key(name: str) -> Dict:
         raise HTTPException(
             status_code=400,
             detail="Key name must be 1-64 characters: letters, digits, '.', '_' or '-'")
-    store = _load_keys()
-    if name in store:
-        raise HTTPException(status_code=409, detail=f"Key name '{name}' already exists")
-
     key = f"{KEY_PREFIX}{secrets.token_urlsafe(32)}"
     created = _now_iso()
-    store[name] = {"hash": _hash(key), "prefix": key[:DISPLAY_PREFIX_LEN],
-                   "created": created, "last_used": None}
-    _save_keys(store)
+    with _STORE_LOCK:
+        store = _load_keys()
+        if name in store:
+            raise HTTPException(status_code=409, detail=f"Key name '{name}' already exists")
+        store[name] = {"hash": _hash(key), "prefix": key[:DISPLAY_PREFIX_LEN],
+                       "created": created, "last_used": None}
+        _save_keys(store)
 
     return {"name": name, "key": key, "created": created}
 
@@ -134,20 +150,22 @@ async def generate_api_key(name: str) -> Dict:
 @router.post("/keys/{name}/touch")
 async def touch_api_key(name: str) -> Dict:
     """Update the last_used timestamp for a key."""
-    store = _load_keys()
-    if name not in store:
-        raise HTTPException(status_code=404, detail="Key not found")
-    store[name]["last_used"] = _now_iso()
-    _save_keys(store)
-    return {"status": "ok", "name": name, "last_used": store[name]["last_used"]}
+    with _STORE_LOCK:
+        store = _load_keys()
+        if name not in store:
+            raise HTTPException(status_code=404, detail="Key not found")
+        last_used = store[name]["last_used"] = _now_iso()
+        _save_keys(store)
+    return {"status": "ok", "name": name, "last_used": last_used}
 
 
 @router.delete("/keys/{name}")
 async def delete_api_key(name: str) -> Dict:
     """Delete an API key permanently."""
-    store = _load_keys()
-    if name not in store:
-        raise HTTPException(status_code=404, detail="Key not found")
-    del store[name]
-    _save_keys(store)
+    with _STORE_LOCK:
+        store = _load_keys()
+        if name not in store:
+            raise HTTPException(status_code=404, detail="Key not found")
+        del store[name]
+        _save_keys(store)
     return {"status": "deleted", "name": name}

@@ -12,6 +12,7 @@ try:
     from config import PROMETHEUS_URL
 except ImportError:
     from ..config import PROMETHEUS_URL
+from .gpu import read_gpu_telemetry
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -19,110 +20,25 @@ logger = logging.getLogger(__name__)
 # GPU VRAM history: 30 min at 3s resolution = 600 samples per GPU
 gpu_history = {i: deque(maxlen=600) for i in range(4)}
 
-# NVML is initialised lazily and per request (init -> query -> shutdown in
-# finally), so a driver that becomes healthy after container start is picked up
-# without a restart. After a failed attempt, retries are suppressed for
-# _NVML_RETRY_SECONDS so a dead driver is not hammered on every poll.
-_NVML_RETRY_SECONDS = 15
-_NVML_LOG_REPEAT_SECONDS = 300
-
-_nvml_last_fail_ts = 0.0                   # monotonic time of last failure
-_nvml_last_error: Optional[str] = None     # "<ExceptionType>: <msg>" of last failure
-_nvml_was_available: Optional[bool] = None  # None until first attempt
-_nvml_last_logged_error: Optional[str] = None
-_nvml_last_logged_ts = 0.0
-
-
-def _fmt_exc(e: BaseException) -> str:
-    return f"{type(e).__name__}: {e}"
-
-
-def _note_nvml_state(error: Optional[str]) -> None:
-    """Log availability changes: once per distinct error (and again every
-    ~5 min while it persists), and recovery at INFO."""
-    global _nvml_was_available, _nvml_last_logged_error, _nvml_last_logged_ts
-    now = time.monotonic()
-    if error is None:
-        if _nvml_was_available is False:
-            logger.info("NVIDIA telemetry recovered")
-        _nvml_was_available = True
-        _nvml_last_logged_error = None
-        return
-    _nvml_was_available = False
-    if (error != _nvml_last_logged_error
-            or now - _nvml_last_logged_ts >= _NVML_LOG_REPEAT_SECONDS):
-        logger.warning("NVIDIA telemetry unavailable: %s", error)
-        _nvml_last_logged_error = error
-        _nvml_last_logged_ts = now
-
 
 def _read_gpus() -> Tuple[Dict[int, Dict], Optional[str]]:
-    """Query NVML once. Returns ({gpu_index: metrics}, error).
+    """Read NVML via the shared reader (api/gpu.py). Returns ({gpu_index: metrics}, error).
 
-    error is None when every GPU was read; otherwise a "<ExceptionType>: <msg>"
-    string (init failure, no devices, or the first per-GPU failure). GPUs that
-    could not be read are absent from the dict.
+    error is None when the GPUs were read; otherwise the reader's error string
+    and the dict is empty.
     """
-    global _nvml_last_fail_ts, _nvml_last_error
-
-    if (_nvml_last_error is not None
-            and time.monotonic() - _nvml_last_fail_ts < _NVML_RETRY_SECONDS):
-        return {}, _nvml_last_error  # inside backoff window, don't re-attempt
-
-    try:
-        import pynvml
-        pynvml.nvmlInit()
-    except Exception as e:
-        _nvml_last_fail_ts = time.monotonic()
-        _nvml_last_error = _fmt_exc(e)
-        _note_nvml_state(_nvml_last_error)
-        return {}, _nvml_last_error
-
-    gpus: Dict[int, Dict] = {}
-    error: Optional[str] = None
-    try:
-        count = 0
-        try:
-            count = pynvml.nvmlDeviceGetCount()
-            if count < 1:
-                error = "NoGpuError: NVML reported 0 devices"
-        except Exception as e:
-            error = _fmt_exc(e)
-        for i in range(min(4, count)):
-            try:
-                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                mem  = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                util = pynvml.nvmlDeviceGetUtilizationRates(handle)
-                temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-                try:
-                    power_w = round(pynvml.nvmlDeviceGetPowerUsage(handle) / 1000, 1)
-                except Exception:
-                    power_w = None  # sensor unsupported: unknown, not 0 W
-            except Exception as e:
-                if error is None:
-                    error = f"GPU{i}: {_fmt_exc(e)}"
-                continue
-            gpus[i] = {
-                "vram_used_gb":  round(mem.used  / 1024 ** 3, 2),
-                "vram_total_gb": round(mem.total / 1024 ** 3, 1),
-                "utilization":   util.gpu,
-                "temp":          temp,
-                "power_w":       power_w,
-            }
-    finally:
-        try:
-            pynvml.nvmlShutdown()
-        except Exception:
-            pass
-
-    if gpus:
-        _nvml_last_error = None  # reads work; clear the backoff
-    else:
-        error = error or "NoGpuError: no GPU data returned"
-        _nvml_last_fail_ts = time.monotonic()
-        _nvml_last_error = error
-    _note_nvml_state(error)
-    return gpus, error
+    telemetry = read_gpu_telemetry()
+    gpus = {
+        g["index"]: {
+            "vram_used_gb":  g["vram_used_gb"],
+            "vram_total_gb": g["vram_total_gb"],
+            "utilization":   g["utilization_pct"],
+            "temp":          g["temp_c"],
+            "power_w":       g["power_w"],
+        }
+        for g in telemetry["gpus"]
+    }
+    return gpus, telemetry["error"]
 
 
 def _nvml_gpu_vram_used_gb() -> Optional[float]:
@@ -138,8 +54,8 @@ async def get_gpu_metrics() -> Dict:
     """Per-GPU telemetry: VRAM, utilization, temp, and 30-min VRAM history.
 
     Top-level `available` says whether NVML telemetry could be read. When it
-    could not (or only partly), `error` carries "<ExceptionType>: <msg>" and
-    the affected GPUs report null metrics rather than zeros.
+    could not, `error` says why and every GPU reports null metrics rather than
+    zeros.
     """
     gpus, error = _read_gpus()
     result: Dict = {}

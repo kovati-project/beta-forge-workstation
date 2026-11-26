@@ -6,10 +6,13 @@ Streams audio input from microphone and displays live transcription.
 import asyncio
 import websockets
 import json
+import os
 import sys
 import pyaudio
 
-WHISPER_WS = "ws://10.10.10.2:9099/v1/audio/transcriptions/realtime"
+# WORKSTATION_HOST: IP or hostname of the workstation (same variable as docker/.env, #51)
+WORKSTATION_HOST = os.environ.get("WORKSTATION_HOST", "10.10.10.2")
+WHISPER_WS = f"ws://{WORKSTATION_HOST}:9099/v1/audio/transcriptions/realtime"
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 1024
 AUDIO_FORMAT = pyaudio.paInt16

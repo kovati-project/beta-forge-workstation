@@ -164,6 +164,14 @@ whose `nvlink --status` output follows my recollection of driver 5xx (`Link N: 1
 
 I left this file alone because it is outside `scripts/`; it needs a follow-up edit.
 
+> **Follow-up (fix/backup-script-robustness):** checks [5] and [6] and the silent `topo -m`
+> exit are fixed in `verify-drivers.sh` (and the same "Active" count in `deploy-phase02.sh`
+> Step 3), covered by `scripts/tests/test-verify-drivers.sh` against a stub `nvidia-smi`.
+> The `nvlink --status` line format is still unconfirmed on the real host. The remaining
+> `backup.sh` gaps (no usage text, swallowed `docker info`/`gzip -t` errors, no manifest on an
+> unexpected abort, MinIO failure missing from the manifest, `models` mode archiving every
+> model twice) are fixed there too, covered by `scripts/tests/test-backup.sh`.
+
 ## TASK-123 — backup→restore via API (read-only review of `loadout-manager/api/backup.py`)
 
 Cycle not executed. Code-reading findings:

@@ -9,8 +9,8 @@
 #
 # What it does:
 #   1. Stops all running compose stacks
-#   2. Restores every patched file back to its original placeholder value
-#   3. Removes configs/authentik/.env
+#   2. Deletes docker/.env and configs/authentik/.env
+#   3. Deletes the rendered configs/postgres/init.sql and configs/searxng/settings.yml
 #   4. Leaves /data/ volumes untouched (PostgreSQL data, MinIO objects, etc.)
 
 set -euo pipefail
@@ -55,8 +55,8 @@ echo ""
 
 # ── 2. Delete secret files ────────────────────────────────────────────────────
 # Compose files use ${VAR} references and never need restoring.
-# Only docker/.env, configs/authentik/.env, and the two patched config files
-# need to be reset.
+# Only docker/.env, configs/authentik/.env, and the two rendered config files
+# need to be removed.
 
 echo "Removing docker/.env..."
 if [[ -f docker/.env ]]; then
@@ -74,21 +74,11 @@ else
     warn "configs/authentik/.env not found — nothing to remove"
 fi
 
-echo "Restoring configs/postgres/init.sql placeholders..."
-python3 - configs/postgres/init.sql <<'PYEOF'
-import re, sys, os
-path = sys.argv[1]
-if not os.path.exists(path):
-    sys.exit(0)
-with open(path, 'r') as f:
-    content = f.read()
-for user, placeholder in [('langfuse','langfuse_pass'), ('n8n','n8n_pass'), ('dify','dify_pass')]:
-    pattern = r"(?i)(CREATE USER " + re.escape(user) + r" WITH PASSWORD ')[^']*(')"
-    content = re.sub(pattern, r'\g<1>' + placeholder + r'\g<2>', content)
-with open(path, 'w') as f:
-    f.write(content)
-PYEOF
-log "configs/postgres/init.sql restored"
+echo "Removing rendered configs/postgres/init.sql..."
+# init-secrets.sh renders it from configs/postgres/init.sql.template on the next run.
+rm -f configs/postgres/init.sql configs/postgres/.init.sql.* 2>/dev/null \
+    || echo "  (could not remove - check its owner; delete it with sudo)"
+log "configs/postgres/init.sql removed (re-render: bash scripts/init-secrets.sh)"
 
 echo "Removing generated configs/searxng/settings.yml..."
 rm -f configs/searxng/settings.yml 2>/dev/null \

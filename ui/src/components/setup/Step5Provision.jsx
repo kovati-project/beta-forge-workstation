@@ -1,53 +1,38 @@
 /**
  * Step 5: Container Provisioning
+ *
+ * The backend pulls one compose file at a time. "✗" lines are failures; the
+ * step only offers Next when the stream ends with "✓ All images provisioned".
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { setupAPI } from '../../utils/setupAPI';
+import { readSSE } from './sseLines';
 
 export default function Step5Provision({ onComplete }) {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState([]);
-  const [completed, setCompleted] = useState(false);
+  const [status, setStatus] = useState('running'); // running | ok | failed
 
-  useEffect(() => {
-    const provision = async () => {
-      try {
-        const response = await setupAPI.provisionStack();
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const text = decoder.decode(value);
-          const lines = text.split('\n');
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const msg = line.slice(6);
-              setLogs(prev => [...prev, msg].slice(-50));
-              
-              if (msg.includes('Progress:')) {
-                const match = msg.match(/(\d+)\/(\d+)/);
-                if (match) {
-                  setProgress(Math.round((parseInt(match[1]) / parseInt(match[2])) * 100));
-                }
-              }
-            }
-          }
-        }
-
-        setProgress(100);
-        setCompleted(true);
-      } catch (err) {
-        setLogs(prev => [...prev, `Error: ${err.message}`]);
-      }
-    };
-
-    provision();
+  const provision = useCallback(async () => {
+    setStatus('running');
+    setProgress(0);
+    setLogs([]);
+    let ok = false;
+    try {
+      await readSSE(await setupAPI.provisionStack(), (msg) => {
+        setLogs(prev => [...prev, msg].slice(-50));
+        const match = msg.startsWith('Progress:') && msg.match(/(\d+)\/(\d+)/);
+        if (match) setProgress(Math.round((parseInt(match[1]) / parseInt(match[2])) * 100));
+        if (msg.startsWith('✓ All images provisioned')) ok = true;
+      });
+    } catch (err) {
+      setLogs(prev => [...prev, `✗ Error: ${err.message}`]);
+    }
+    setStatus(ok ? 'ok' : 'failed');
   }, []);
+
+  useEffect(() => { provision(); }, [provision]);
 
   return (
     <div className="setup-step">
@@ -64,16 +49,21 @@ export default function Step5Provision({ onComplete }) {
       <div className="logs-display">
         {logs.map((log, i) => (
           <div key={i} className="log-line">
-            {log.includes('✓') ? '✓' : '→'} {log}
+            {log.startsWith('✓') || log.startsWith('✗') ? log : `→ ${log}`}
           </div>
         ))}
       </div>
 
-      {completed && (
+      {status === 'ok' && (
         <div className="step-actions">
           <button className="btn-primary" onClick={() => onComplete()}>
             Next: Validate →
           </button>
+        </div>
+      )}
+      {status === 'failed' && (
+        <div className="step-actions">
+          <button className="btn-primary" onClick={provision}>Retry pull</button>
         </div>
       )}
     </div>

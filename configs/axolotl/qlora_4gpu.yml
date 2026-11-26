@@ -1,8 +1,14 @@
-base_model: /workspace/models/qwen2.5-32b
+# /data/models/vllm is mounted at /workspace/models. qwen2.5-14b (HF format,
+# bf16, Qwen2) is the trainable base on the workstation today; for 32B,
+# download Qwen/Qwen2.5-32B-Instruct there (Models tab) and change this path.
+base_model: /workspace/models/qwen2.5-14b
 model_type: AutoModelForCausalLM
 tokenizer_type: AutoTokenizer
 
-load_in_4bit: false
+# QLoRA: 4-bit base weights plus LoRA adapters. Without `adapter:` axolotl
+# ignores the lora_* keys and attempts a full fine-tune.
+adapter: qlora
+load_in_4bit: true
 bf16: true
 tf32: true
 
@@ -10,12 +16,27 @@ fsdp:
   - full_shard
   - auto_wrap
 fsdp_config:
+  # Keys as in axolotl's examples/archived/qwen2/qlora-fsdp.yaml; LoRA/QLoRA
+  # under FSDP needs use_orig_params false and module-state sync.
+  fsdp_limit_all_gathers: true
+  fsdp_sync_module_states: true
   fsdp_offload_params: false
-  fsdp_state_dict_type: FULL_STATE_DICT
+  fsdp_use_orig_params: false
+  fsdp_cpu_ram_efficient_loading: true
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
   fsdp_transformer_layer_cls_to_wrap: Qwen2DecoderLayer
+  fsdp_state_dict_type: FULL_STATE_DICT
+  fsdp_sharding_strategy: FULL_SHARD
+
+activation_checkpointing:
+  enabled: true
+  reentrant: false
 
 datasets:
-  - path: /workspace/datasets/text/formatted
+  # /data/datasets/text is mounted at /workspace/datasets, so the host path
+  # is /data/datasets/text/formatted/train.jsonl
+  # (scripts/convert_labelstudio_to_alpaca.py writes it).
+  - path: /workspace/datasets/formatted
     type: alpaca
     data_files:
       - train.jsonl

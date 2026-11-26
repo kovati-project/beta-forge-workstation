@@ -65,11 +65,16 @@ except Exception as e:
 
 
 async def _compose(compose_file: str, subcommand: str, *args: str, profile: str = None) -> tuple[int, str]:
-    """Run: docker compose [--project-directory <dir>] [--profile <name>] -f <file> <subcommand> [args...]
+    """Run: docker compose [--project-directory <dir>] [--env-file <.env>] [--profile <name>] -f <file> <subcommand> [args...]
     Returns (exit_code, combined_output)."""
     cmd = ["docker", "compose", "--ansi", "never"]
     if _HOST_COMPOSE_DIR:
         cmd += ["--project-directory", _HOST_COMPOSE_DIR]
+    # --project-directory is a host path that need not exist in this container,
+    # so compose would not find docker/.env on its own; without it ${VAR}
+    # references (secrets, WORKSTATION_HOST) resolve to blanks/defaults.
+    if _ENV_FILE.exists():
+        cmd += ["--env-file", str(_ENV_FILE)]
     if profile:
         cmd += ["--profile", profile]
     cmd += ["-f", str(_COMPOSE_DIR / compose_file), subcommand, *args]

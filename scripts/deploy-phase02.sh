@@ -115,9 +115,15 @@ sudo dpkg -i "/tmp/$KEYRING_DEB"
 sudo apt-get update -q
 ok "NVIDIA CUDA repo added"
 
-# Install driver
-sudo apt-get install -y -q nvidia-driver-560 nvidia-utils-560
-ok "nvidia-driver-560 installed"
+# Install driver. 595 is what the reference workstation runs; the floor is 580
+# because the pinned vLLM image is built on CUDA 13.0 (see
+# configs/drivers/install-nvidia.sh). Override with DRIVER_VERSION=<n>.
+DRIVER_VERSION="${DRIVER_VERSION:-595}"
+if [[ ! "$DRIVER_VERSION" =~ ^[0-9]+$ ]] || (( DRIVER_VERSION < 580 )); then
+  fail "DRIVER_VERSION must be a driver branch number >= 580 (got '${DRIVER_VERSION}'); vLLM needs CUDA 13.0"
+fi
+sudo apt-get install -y -q "nvidia-driver-${DRIVER_VERSION}" "nvidia-utils-${DRIVER_VERSION}"
+ok "nvidia-driver-${DRIVER_VERSION} installed"
 
 echo ""
 echo "  ╔─────────────────────────────────────────────╗"
@@ -147,9 +153,11 @@ DRIVER_VER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head 
 ok "nvidia-smi: $GPU_COUNT GPUs, driver $DRIVER_VER"
 [[ $GPU_COUNT -eq 4 ]] || warn "Expected 4 GPUs, found $GPU_COUNT"
 
-# NVLink check
+# NVLink check. Up links print "Link N: 14.062 GB/s", down ones "<inactive>";
+# the word "Active" does not appear (same parse as configs/drivers/verify-drivers.sh).
 for i in 0 1 2 3; do
-  LINKS=$(nvidia-smi nvlink --status -i $i 2>/dev/null | grep -c "Active" || true)
+  LINKS=$(nvidia-smi nvlink --status -i $i 2>/dev/null \
+    | grep -Ec '^[[:space:]]*Link [0-9]+:.*([0-9.]+ ?GB/s|(^|[^[:alpha:]])Active)' || true)
   ok "GPU$i NVLink: $LINKS active links"
 done
 
@@ -341,7 +349,7 @@ ok "NVLink validation script at /opt/scripts/validate-nvlink.py"
 step "Step 8/8 — Storage layout"
 
 for dir in \
-  /data/models/ollama \
+\
   /data/models/vllm \
   /data/models/comfyui/checkpoints \
   /data/models/comfyui/loras \
@@ -367,7 +375,7 @@ echo "║           Phase 02 complete                      ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 echo "  Validation checklist:"
-echo "    nvidia-smi                          → 4x RTX A5500, driver 560+"
+echo "    nvidia-smi                          → 4x RTX A5500, driver 580+"
 echo "    nvidia-smi topo -m                  → NV4 on GPU0↔GPU3, GPU1↔GPU2"
 echo "    python3 /opt/scripts/validate-nvlink.py  → all NVLink pairs > 35 GB/s (bridge = 56.25 GB/s per direction)"
 echo "    docker run --gpus all nvidia/cuda:... nvidia-smi"

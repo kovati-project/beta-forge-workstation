@@ -1,0 +1,90 @@
+name: minio-image
+
+# Builds docker/minio (MinIO + mc from source, issue #92) and smoke-tests it:
+# server health, the compose healthcheck's curl, pinned versions, and an mc
+# round trip (bucket create, upload, download, compare).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker/minio/**
+      - docker/compose.storage.yml
+      - .github/workflows/minio-image.yml
+  pull_request:
+    paths:
+      - docker/minio/**
+      - docker/compose.storage.yml
+      - .github/workflows/minio-image.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: build + smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MINIO_RELEASE: RELEASE.2025-10-15T17-29-55Z
+      MC_RELEASE: RELEASE.2025-08-13T08-35-41Z
+      ROOT_USER: admin
+      ROOT_PASSWORD: ci-dummy-password-123
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: compose tag matches the Dockerfile's pinned release
+        run: |
+          set -eu
+          grep -q "image: kovati/minio:${MINIO_RELEASE}$" docker/compose.storage.yml
+          grep -q "ARG MINIO_RELEASE=${MINIO_RELEASE}$" docker/minio/Dockerfile
+          grep -q "ARG MC_RELEASE=${MC_RELEASE}$" docker/minio/Dockerfile
+
+      - name: build image (via compose, as the host does)
+        run: |
+          docker network create ai-workstation
+          docker compose -f docker/compose.storage.yml build minio
+          docker image inspect "kovati/minio:${MINIO_RELEASE}" --format '{{.Size}} bytes, user="{{.Config.User}}", entrypoint={{.Config.Entrypoint}}'
+
+      - name: start minio (same command as compose)
+        run: |
+          docker run -d --name minio \
+            -e MINIO_ROOT_USER="$ROOT_USER" -e MINIO_ROOT_PASSWORD="$ROOT_PASSWORD" \
+            -p 9000:9000 -p 9001:9001 \
+            "kovati/minio:${MINIO_RELEASE}" server /data --console-address ":9001"
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:9000/minio/health/live; then
+              echo "healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          docker logs minio
+          exit 1
+
+      - name: tools and pinned versions
+        run: |
+          set -eux
+          docker exec minio id -u | grep -qx 0
+          docker exec minio sh -c 'command -v curl'
+          docker exec minio curl -f http://localhost:9000/minio/health/live
+          docker exec minio minio --version | tee minio-version.txt
+          docker exec minio mc --version | tee mc-version.txt
+          grep -q "minio version ${MINIO_RELEASE}" minio-version.txt
+          grep -q "mc version ${MC_RELEASE}" mc-version.txt
+          curl -sf -o /dev/null http://localhost:9001/
+
+      - name: mc round trip
+        run: |
+          set -eux
+          docker exec minio mc alias set local http://localhost:9000 "$ROOT_USER" "$ROOT_PASSWORD"
+          docker exec minio mc mb local/test
+          docker exec minio sh -c 'head -c 1048576 /dev/urandom > /tmp/in.bin'
+          docker exec minio mc cp /tmp/in.bin local/test/in.bin
+          docker exec minio mc ls local/test
+          docker exec minio mc cp local/test/in.bin /tmp/out.bin
+          docker exec minio cmp /tmp/in.bin /tmp/out.bin
+          docker exec minio sh -c 'sha256sum /tmp/in.bin /tmp/out.bin'
+
+      - name: logs on failure
+        if: failure()
+        run: docker logs minio || true

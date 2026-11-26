@@ -3,6 +3,7 @@
 # Validate Phase 04: Image Inference Stack
 # Run on the workstation after deploy-phase04.sh and at least one model download.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/workstation-host.sh"  # WORKSTATION_HOST (#51)
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 PASS=0; FAIL=0; WARN=0
@@ -31,7 +32,7 @@ check "ComfyUI container running"      "docker ps --filter name=comfyui --filter
 check "ComfyUI API responding"         "curl -sf http://localhost:8188/system_stats"
 check "Rembg container running"        "docker ps --filter name=rembg --filter status=running | grep -q rembg"
 check "Rembg API responding"           "curl -sf http://localhost:8190/ 2>/dev/null || true"
-check "Real-ESRGAN container running"  "docker ps --filter name=realesrgan --filter status=running | grep -q realesrgan"
+check "Upscale model present (ComfyUI)" "ls /data/models/comfyui/upscale_models/ 2>/dev/null | grep -q '.'"
 
 # Models
 echo ""
@@ -48,7 +49,7 @@ check "InvokeAI NOT running (correct — profiled)" "! docker ps --filter name=i
 
 # Manual checks
 echo ""
-warn "ComfyUI web UI loads at http://10.10.10.2:8188"
+warn "ComfyUI web UI loads at http://${WORKSTATION_HOST}:8188"
 warn "Checkpoint visible in ComfyUI model list (refresh browser)"
 warn "Test generation completes — queue a simple txt2img and check /data/outputs/comfyui/"
 warn "GPU0 VRAM shows 8–12GB during SDXL generation — check: nvidia-smi"

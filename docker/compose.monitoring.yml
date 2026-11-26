@@ -7,12 +7,15 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "9091:9090"
-    # loadout-manager is on its own ai-loadout network (not shared with
-    # Prometheus), so it is scraped via the host's published port 8800.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # Every scrape target, loadout-manager included, is reached by container
+    # name on ai-workstation (configs/prometheus/prometheus.yml), so prometheus
+    # needs no host.docker.internal mapping.
     volumes:
       - ../configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ../configs/prometheus/alerts.yml:/etc/prometheus/alerts.yml
@@ -33,6 +36,10 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "3001:3000"
     volumes:
@@ -41,7 +48,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD}
-      - GF_SERVER_ROOT_URL=http://10.10.10.2:3001/
+      - GF_SERVER_ROOT_URL=http://${WORKSTATION_HOST:-10.10.10.2}:3001/
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
     depends_on:
@@ -57,6 +64,8 @@ services:
     image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.6-3.4.2-ubuntu22.04
     container_name: dcgm-exporter
     restart: unless-stopped
+    # no no-new-privileges/cap_drop (#68): DCGM needs CAP_SYS_ADMIN and the
+    # NVIDIA runtime hooks; accepted root exception (#43).
     ports:
       - "9400:9400"
     cap_add:
@@ -83,6 +92,10 @@ services:
     image: prom/node-exporter:latest
     container_name: node-exporter
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "9100:9100"
     volumes:
@@ -105,6 +118,8 @@ services:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor
     restart: unless-stopped
+    # no no-new-privileges/cap_drop (#68): runs privileged to read host and
+    # container metrics; accepted root exception (#43).
     ports:
       - "8989:8080"
     volumes:
@@ -125,6 +140,10 @@ services:
     image: prom/alertmanager:latest
     container_name: alertmanager
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     ports:
       - "9093:9093"
     volumes:
