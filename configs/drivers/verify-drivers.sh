@@ -3,7 +3,7 @@
 # Brief ID: P02S2-001
 #
 # Run after reboot to confirm:
-#   - Driver 560+ loaded
+#   - Driver 580+ loaded
 #   - All 4x RTX A5500 visible
 #   - NVLink shows 4 active links per GPU
 #   - Topology matrix shows NVLink connections

@@ -19,6 +19,12 @@ set -euo pipefail
 DRIVER_VERSION="${DRIVER_VERSION:-595}"
 MIN_DRIVER_VERSION=580
 
+# A plain branch number such as 595: the package is nvidia-driver-<n>, and
+# "580.95.05" or "595-open" would break (or slip past) the arithmetic below.
+if [[ ! "$DRIVER_VERSION" =~ ^[0-9]+$ ]]; then
+    echo "DRIVER_VERSION must be a driver branch number such as 595 (got '${DRIVER_VERSION}')." >&2
+    exit 1
+fi
 if (( DRIVER_VERSION < MIN_DRIVER_VERSION )); then
     echo "DRIVER_VERSION=${DRIVER_VERSION} is below ${MIN_DRIVER_VERSION}; the vLLM and Unsloth images need CUDA 12.8+/13.0." >&2
     exit 1
