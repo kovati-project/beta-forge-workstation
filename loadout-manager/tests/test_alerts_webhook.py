@@ -10,6 +10,7 @@ Not proven here: that a real Alertmanager container reaches loadout-manager over
 the ai-workstation network (host check; see the PR).
 """
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,8 +19,11 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 
-STARTS = "2026-11-14T10:00:00.123456789Z"
-ENDS = "2026-11-14T10:05:30.5Z"
+# Yesterday, not a fixed date: the history drops resolved alerts older than
+# HISTORY_DAYS, so a hard-coded date makes these tests fail a week later.
+DAY = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+STARTS = f"{DAY}T10:00:00.123456789Z"
+ENDS = f"{DAY}T10:05:30.5Z"
 
 
 def _payload(status, alerts, receiver="critical-gpu"):
@@ -85,7 +89,7 @@ def test_firing_alert_is_recorded(alerts):
     assert rec["severity"] == "critical"
     assert rec["component"] == "gpu"
     assert rec["receiver"] == "critical-gpu"
-    assert rec["fired_at"] == "2026-11-14T10:00:00.123456Z"
+    assert rec["fired_at"] == f"{DAY}T10:00:00.123456Z"
     assert rec["description"] == "GPU 0 above 85C"
     assert rec["resolved_at"] is None and rec["duration"] is None
 
@@ -107,7 +111,7 @@ def test_resolved_alert_updates_the_same_record(alerts):
 
     [rec] = _history(alerts)
     assert rec["status"] == "resolved"
-    assert rec["resolved_at"] == "2026-11-14T10:05:30.500000Z"
+    assert rec["resolved_at"] == f"{DAY}T10:05:30.500000Z"
     assert rec["duration"] == 330
     assert alerts.client.get("/api/alerts").json() == []
 
