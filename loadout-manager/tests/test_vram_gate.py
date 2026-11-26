@@ -195,7 +195,8 @@ def test_vram_held_by_the_outgoing_profile_does_not_block_the_switch(lm, active,
     set_free_after_down(lm, 24)
     r = lm.activate(target)
     assert r.status_code == 200, "teardown would have freed this VRAM"
-    assert len(lm.docker.starts) == 1
+    # One `up` per compose file of the target (image-studio has two).
+    assert len(lm.docker.starts) == len(lm.profiles[target]["compose_files"])
     assert lm.state["active_profile"] == target
     assert lm.state["last_error"] is None
 
@@ -316,3 +317,25 @@ async def test_scheduled_switch_that_passes_the_gates_still_runs(lm, monkeypatch
     await _run_one_scheduler_pass(lm, monkeypatch, "training-lora-text")
     assert len(lm.docker.starts) == 1
     assert lm.state["active_profile"] == "training-lora-text"
+
+
+# ── Per-GPU check ────────────────────────────────────────────────────────────
+
+def test_free_memory_is_checked_per_gpu_not_summed(lm):
+    """vllm-pair-a is TP=2 over GPU0+GPU3 and needs its share on each card.
+    GPU0 fully free plus GPU3 at 20 sums to 44 (+1 reserve) but GPU3 cannot
+    hold 22."""
+    lm.set_free([24, 24, 24, 20])
+    r = lm.activate("inference-pair-a")
+    assert r.status_code == 409
+    assert lm.docker.calls == []
+
+
+def test_capacity_is_checked_per_gpu_while_a_profile_is_running(lm):
+    """With a profile running the gate only checks capacity; a 16 GB card cannot
+    take a 22 GB share even if the pair's total looks big enough."""
+    lm.make_active("inference-pair-b")
+    lm.set_free(1, total_gb=16.0)
+    r = lm.activate("inference-pair-a")
+    assert r.status_code == 409
+    assert lm.docker.calls == []

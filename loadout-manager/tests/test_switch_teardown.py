@@ -3,8 +3,10 @@ TASK-027 / issue #17 — a switch tears down the previous profile's services.
 TASK-013 / issue #8  — backend side of the `switching` flag and transitions.
 
 Mechanics under test (main.py): POST /activate/{name} -> background do_switch():
-  switching=True -> stop_all_services() (docker compose down x3) -> sleep(3)
-  -> docker compose up -d --remove-orphans <services> -> state update
+  switching=True -> pull (one per compose file, best effort)
+  -> stop_all_services() (docker compose --profile '*' down --remove-orphans x3)
+  -> sleep(3) -> docker compose up -d <services> (one per compose file)
+  -> state update
   -> switching=False (finally).
 
 TestClient runs the background task to completion before the POST returns, so
@@ -93,7 +95,7 @@ def test_switching_true_for_every_docker_call_and_false_afterwards(lm):
     lm.make_active("inference-small")
     assert lm.state["switching"] is False
     lm.activate("training-lora-image")
-    assert len(lm.docker.calls) == 4  # 3 x down + 1 x up
+    assert len(lm.docker.calls) == 5  # 1 x pull + 3 x down + 1 x up
     assert all(c.switching is True for c in lm.docker.calls)
     assert lm.state["switching"] is False
 
