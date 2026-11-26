@@ -1,0 +1,72 @@
+name: mcp-code-exec sandbox
+
+# Builds docker/mcp/code-exec, starts it with the compose security settings
+# (read-only rootfs, cap_drop ALL + SETUID/SETGID, no-new-privileges, tmpfs,
+# limits) and runs the #99 attack tests against run_python.
+
+on:
+  pull_request:
+    paths:
+      - docker/mcp/code-exec/**
+      - docker/compose.agentic.yml
+      - .github/workflows/mcp-code-exec.yml
+  push:
+    branches: [main]
+    paths:
+      - docker/mcp/code-exec/**
+      - docker/compose.agentic.yml
+      - .github/workflows/mcp-code-exec.yml
+
+permissions:
+  contents: read
+
+jobs:
+  attacks:
+    name: build + attack tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE: docker compose -f docker/compose.agentic.yml --profile code-exec
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "mcp==1.30.0" pytest
+
+      - name: default publish address is the docker0 gateway, not all interfaces
+        run: |
+          $COMPOSE config mcp-code-exec mcp-fetch 2>/dev/null > rendered.yml
+          cat rendered.yml | grep -A6 'ports:'
+          test "$(grep -c 'host_ip: 172.17.0.1' rendered.yml)" = 2
+
+      - name: start mcp-code-exec (published on loopback for the test client)
+        run: |
+          docker network create ai-workstation
+          MCP_BIND=127.0.0.1 $COMPOSE up -d --build mcp-code-exec
+          for i in $(seq 60); do
+            if curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3102/mcp \
+                 -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+                 -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+                 | grep -q 200; then echo "up after ${i}s"; exit 0; fi
+            sleep 1
+          done
+          docker logs mcp-code-exec; exit 1
+
+      - name: container settings
+        run: |
+          docker inspect mcp-code-exec --format \
+            'user={{.Config.User}} ro={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}} capadd={{.HostConfig.CapAdd}} secopt={{.HostConfig.SecurityOpt}} ports={{json .HostConfig.PortBindings}}'
+          docker port mcp-code-exec
+
+      - name: attack tests
+        run: python -m pytest -v docker/mcp/code-exec/tests
+
+      - name: container still healthy after the attacks
+        run: |
+          docker inspect mcp-code-exec --format 'status={{.State.Status}} restarts={{.RestartCount}}'
+          test "$(docker inspect mcp-code-exec --format '{{.RestartCount}}')" = 0
+
+      - name: logs
+        if: always()
+        run: docker logs mcp-code-exec 2>&1 | tail -100

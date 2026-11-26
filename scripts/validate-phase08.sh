@@ -24,8 +24,11 @@ warn() {
 }
 
 # MCP streamable-HTTP handshake: POST initialize to /mcp, expect a serverInfo.
+# mcp_init PORT [ADDR]. fetch and code-exec are published on the docker0
+# address only (MCP_BIND), and accept the host.docker.internal Host header.
 mcp_init() {
-    curl -sf -m 10 -X POST "http://localhost:$1/mcp" \
+    local addr="${2:-localhost}"
+    curl -sf -m 10 -X POST "http://$addr:$1/mcp"         -H "Host: $([ "$addr" = localhost ] && echo localhost || echo host.docker.internal):$1" \
         -H 'Content-Type: application/json' \
         -H 'Accept: application/json, text/event-stream' \
         -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"validate-phase08","version":"1"}}}' \
@@ -39,10 +42,10 @@ echo ""
 check "n8n container running" "docker ps --filter name=n8n --filter status=running | grep -q n8n"
 check "n8n HTTP responding" "curl -sf http://localhost:5678/"
 check "MCP filesystem answers initialize on :3100/mcp" "mcp_init 3100"
-check "MCP fetch answers initialize on :3103/mcp" "mcp_init 3103"
+check "MCP fetch answers initialize on :3103/mcp" "mcp_init 3103 ${MCP_BIND:-172.17.0.1}"
 check "MCP browser answers initialize on :3101/mcp" "mcp_init 3101"
 if docker ps --format '{{.Names}}' | grep -qx mcp-code-exec; then
-    check "MCP code-exec answers initialize on :3102/mcp" "mcp_init 3102"
+    check "MCP code-exec answers initialize on :3102/mcp" "mcp_init 3102 ${MCP_BIND:-172.17.0.1}"
 else
     echo "  - MCP code-exec disabled (compose profile code-exec), not checked"
 fi

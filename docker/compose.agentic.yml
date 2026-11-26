@@ -161,8 +161,11 @@ services:
     image: kovati/mcp-fetch:2026.10.28
     container_name: mcp-fetch
     restart: unless-stopped
+    # Not on the LAN: fetch makes requests from inside the Docker network, so
+    # a LAN caller could use it to reach internal services. Same binding as
+    # mcp-code-exec (see there).
     ports:
-      - "3103:3103"
+      - "${MCP_BIND:-172.17.0.1}:3103:3103"
     read_only: true
     tmpfs:
       - /tmp:size=64m
@@ -172,7 +175,6 @@ services:
       - --port=3103
       - --allowed-host=mcp-fetch:3103
       - --allowed-host=host.docker.internal:3103
-      - --allowed-host=${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3103
       - --
       - /opt/fetch/bin/mcp-server-fetch
     security_opt: ["no-new-privileges:true"]
@@ -207,27 +209,34 @@ services:
     pids_limit: 512
 
   mcp-code-exec:
-    # Off by default (compose profile "code-exec"). The security review on
-    # PR #93 found that a snippet can wedge the server (an orphaned child
-    # holding stdout open) and, running as the server's own uid, can signal
-    # it. Enable only after those are fixed: ENABLE_MCP_CODE_EXEC=1 for
-    # deploy-phase08.sh, or `docker compose --profile code-exec up -d`.
+    # Off by default (compose profile "code-exec") until the #99 sandbox
+    # fixes have been reviewed; the gate can go once they land.
+    # ENABLE_MCP_CODE_EXEC=1 for deploy-phase08.sh, or
+    # `docker compose --profile code-exec up -d`.
     profiles: ["code-exec"]
     build: ./mcp/code-exec
-    image: kovati/mcp-code-exec:1
+    image: kovati/mcp-code-exec:2
     container_name: mcp-code-exec
     restart: unless-stopped
+    # Published on the docker0 gateway address only, not on the LAN: that is
+    # what host.docker.internal (host-gateway) resolves to for loadout-manager
+    # and Open WebUI. Open WebUI can also use http://mcp-code-exec:3102/mcp on
+    # the ai-workstation network. 127.0.0.1 would break host.docker.internal.
     ports:
-      - "3102:3102"
-    # Snippets run with no network (seccomp blocks non-AF_UNIX sockets), stdlib
-    # only, and per-run rlimits; see docker/mcp/code-exec/server.py.
+      - "${MCP_BIND:-172.17.0.1}:3102:3102"
+    # Process layout and isolation: docker/mcp/code-exec/server.py.
+    # PID 1 (launcher.py) starts as uid 0 with only SETUID/SETGID, runs the
+    # server as 10001 and snippets as 10002; no-new-privileges stops anything
+    # from regaining capabilities.
     environment:
-      - MCP_ALLOWED_HOSTS=mcp-code-exec:3102,host.docker.internal:3102,${MCP_LAN_HOST:-${WORKSTATION_HOST:-10.10.10.2}}:3102
+      - MCP_ALLOWED_HOSTS=mcp-code-exec:3102,host.docker.internal:3102
     read_only: true
     tmpfs:
-      - /tmp:size=64m,uid=10001,gid=10001,mode=0700
+      - /tmp:size=16m,uid=10001,gid=10001,mode=0700
+      - /scratch:size=64m,uid=10002,gid=10002,mode=0700
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
     mem_limit: 1g
     cpus: 2
     pids_limit: 128
