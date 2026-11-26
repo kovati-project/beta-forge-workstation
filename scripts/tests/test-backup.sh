@@ -33,6 +33,8 @@ mkdir -p "$STUB"
 #   STUB_FAIL_SOURCES="x y"   `docker run` for these sources writes half an
 #                             archive, prints to stderr and exits 1
 #   STUB_PG_RUNNING="c d"     containers `docker inspect` reports running
+#   STUB_DOCKER_LOG=file      `docker run` appends its arguments
+#   STUB_CHOWN_LOG=file       the container-side chown appends its arguments
 cat > "$STUB/docker" <<'EOF'
 #!/usr/bin/env bash
 in_list() { local x; for x in $2; do [ "$x" = "$1" ] && return 0; done; return 1; }
@@ -57,7 +59,8 @@ case "$1" in
     echo "-- stub dump of $2" ;;
   run)
     shift
-    src="" dst=""
+    src="" dst="" script="" file=""
+    echo "docker run $*" >> "${STUB_DOCKER_LOG:-/dev/null}"
     while [ $# -gt 0 ]; do
       case "$1" in
         -v) case "$2" in
@@ -65,21 +68,44 @@ case "$1" in
               *:/backup) dst=${2%:/backup} ;;
             esac
             shift 2 ;;
+        -e) export "${2?}"; shift 2 ;;
         --rm) shift ;;
         alpine) shift; break ;;
         *) shift ;;
       esac
     done
-    # remaining: tar czf /backup/<name>.tar.gz -C /source .
-    out="$dst/${3#/backup/}"
+    # remaining: sh -c '<script>' sh <name>.tar.gz   (script uses /source, /backup)
+    script=$3 file=$5
+    out="$dst/$file"
     if in_list "$src" "${STUB_FAIL_SOURCES:-}"; then
       printf 'partial' > "$out"
       echo "tar: /source/big.db: Read error at byte 0: Input/output error" >&2
       exit 1
     fi
-    echo "stub archive of $src" | gzip > "$out" ;;
+    # Run the script for real against a throwaway source tree. The container's
+    # chown is replaced by a recorder (the test user cannot chown to others, and
+    # an unprivileged chown to oneself proves nothing). umask 022 stands in for
+    # root's default inside the container, which the host's umask 077 never reaches.
+    tree=$(mktemp -d)
+    echo "stub archive of $src" > "$tree/data.txt"
+    script=${script//\/source/$tree}
+    script=${script//\/backup\//$dst/}
+    umask 022
+    PATH="$STUB_CONTAINER_BIN:$PATH" sh -c "$script" sh "$file"
+    rc=$?
+    rm -rf "$tree"
+    exit $rc ;;
   *) echo "stub docker: unhandled: $*" >&2; exit 99 ;;
 esac
+EOF
+
+# `chown` as seen inside the stub container: record, do not act
+mkdir -p "$WORK/container-bin"
+STUB_CONTAINER_BIN="$WORK/container-bin"
+export STUB_CONTAINER_BIN
+cat > "$STUB_CONTAINER_BIN/chown" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "${STUB_CHOWN_LOG:-/dev/null}"
 EOF
 
 # mc stub: never configured, so the MinIO step is a deterministic warning
@@ -95,7 +121,7 @@ cat > "$STUB/du" <<EOF
 if [ -n "\${STUB_DU_FAIL:-}" ]; then echo "du: stub failure" >&2; exit 1; fi
 exec "$REAL_DU" "\$@"
 EOF
-chmod +x "$STUB"/*
+chmod +x "$STUB"/* "$STUB_CONTAINER_BIN"/*
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 ALL_VOLUMES="ai-webui_open-webui-data ai-training_label-studio-data ai-storage_postgres-data ai-monitoring_prometheus-data ai-monitoring_grafana-data ai-storage_qdrant-data"
@@ -164,6 +190,23 @@ check "says Backup Complete" grep -q "Backup Complete" <<<"$OUT"
 check "has a manifest without FAILED" bash -c '[ -f "$1" ] && ! grep -q "## FAILED" "$1"' _ "$RUN/MANIFEST.txt"
 check "archived all 10 sources" [ "$(find "$RUN" -name '*.gz' | wc -l)" -eq 10 ]
 check "manifest does not list itself" bash -c '! grep -q "  MANIFEST.txt" "$1"' _ "$RUN/MANIFEST.txt"
+
+echo "backup.sh: container-written archives belong to the invoking user"
+new_env
+stamp
+STUB_DOCKER_LOG="$WORK/docker-run$N.log" STUB_CHOWN_LOG="$WORK/chown$N.log" \
+STUB_VOLUMES="$ALL_VOLUMES" run_backup volumes
+check "exits 0" [ "$RC" -eq 0 ]
+check "passes the invoker's uid and gid" \
+    grep -q -- "-e HOST_UID=$(id -u) -e HOST_GID=$(id -g)" "$WORK/docker-run$N.log"
+check "still reads sources as root (no --user)" \
+    bash -c '! grep -qE -- "(--user|-u )" "$1"' _ "$WORK/docker-run$N.log"
+check "chowns every container archive to uid:gid" \
+    bash -c '[ "$(grep -c "^$1:$2 /" "$3")" -eq 8 ]' _ "$(id -u)" "$(id -g)" "$WORK/chown$N.log"
+check "chown targets the run directory" grep -q " $RUN/qdrant.tar.gz\$" "$WORK/chown$N.log"
+check "archives are mode 600 despite the container umask" \
+    bash -c '[ -z "$(find "$1" -name "*.tar.gz" ! -perm 600)" ]' _ "$RUN"
+check "archives are valid gzip tar" bash -c 'tar tzf "$1" >/dev/null' _ "$RUN/n8n.tar.gz"
 
 echo "backup.sh: one volume fails in the middle"
 new_env

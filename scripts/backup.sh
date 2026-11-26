@@ -238,7 +238,13 @@ resolve_volume() {
 
 # Tar a Docker volume or an absolute host path from inside a root container
 # (bind-mounted service data such as /data/authentik/postgres is not readable
-# by the invoking user).
+# by the invoking user). The container reads the source as root but must not
+# leave a root-owned archive behind: the invoking user could not delete it when
+# retention prunes the run directory. So it writes the archive with mode 600
+# (the host's umask 077 does not reach inside the container) and chowns it to
+# HOST_UID:HOST_GID, which are this script's invoker.
+TAR_IN_CONTAINER_SH='umask 077 && tar czf "/backup/$1" -C /source . && chown "$HOST_UID:$HOST_GID" "/backup/$1"'
+
 tar_in_container() {
     local source=$1
     local name=$2
@@ -247,9 +253,10 @@ tar_in_container() {
     log_step "Backing up: $name..."
     IN_PROGRESS=$file
     if ! docker run --rm \
+        -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
         -v "$source":/source:ro \
         -v "$BACKUP_DIR":/backup \
-        alpine tar czf "/backup/${name}.tar.gz" -C /source .; then
+        alpine sh -c "$TAR_IN_CONTAINER_SH" sh "${name}.tar.gz"; then
         log_error "Failed to backup: $name"
         rm -f "$file"
         FAILED+=("$name")
