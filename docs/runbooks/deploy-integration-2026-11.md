@@ -25,6 +25,15 @@
 Expect short interruptions while containers are recreated: about a minute for SSO (Authentik), Open WebUI, n8n,
 Dify, Grafana/Prometheus and the dashboard. MinIO and Postgres restart once each.
 
+**Scripted:** `bash scripts/deploy-integration-2026-11.sh` runs steps 1 and 4-9 with the
+guards below (as kasemo; it asks for sudo for steps 1 and 9). `--dry-run` prints the
+commands, and `--from <step>` resumes after a failure.
+
+**Grafana on a pre-e50b012 volume:** step 6c used to crash-loop with `Datasource
+provisioning error: data source not found`, because the volume held a "Prometheus"
+datasource with a generated uid. The provisioning file now deletes and recreates it with
+`uid: prometheus`. Fixed 2026-11-27.
+
 ## 0. Session setup
 
 ```bash
@@ -145,14 +154,19 @@ bash scripts/deploy-ui.sh                 # npm ci, vite build, image build, res
 curl -s localhost:8800/status | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["active_profile"], d["running_services"])'
 ```
 
-Expect `inference-4gpu ['vllm-4gpu', 'vllm-embed']`. The new startup reconcile adopts the
-running stack. It only reads `docker ps`, and nothing is started or stopped.
+Expect `inference-4gpu ['vllm-4gpu', 'vllm-embed']` only if no other profile-managed
+service is running. The startup reconcile adopts a profile only on an exact match, so with
+comfyui, rembg and label-studio up next to vLLM (as on Adapress, 2026-11-27) it logs
+`match no profile; not adopting` and reports `None []`. That is harmless: it only reads
+`docker ps`, and nothing is started or stopped.
 
 ## 8. Verify
 
 ```bash
 bash scripts/predeploy-check.sh                           # exit 0; no MISMATCH; RECREATE only for
-                                                          # the stopped ones (langfuse, mcp-*)
+                                                          # the stopped ones (langfuse, mcp-*) and
+                                                          # loadout-manager (deploy-ui.sh does not
+                                                          # pass the share --project-directory)
 curl -s localhost:8002/v1/models | grep -o '"id":"[^"]*"' # "id":"qwen3.8-27b"
 curl -s localhost:8003/v1/models | grep -o '"id":"[^"]*"' # "id":"nomic-embed-text"
 docker inspect vllm-4gpu --format '{{.State.StartedAt}}'  # unchanged: 2026-11-17T02:12:47Z

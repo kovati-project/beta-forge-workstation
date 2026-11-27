@@ -233,10 +233,11 @@ else
     echo -e "  ${YELLOW}◇${NC} OpenHands (not running)"
 fi
 
-if curl -sf http://localhost:3010 &>/dev/null; then
-    check_service "Dify" "http://localhost:3010" "200|307"
+# dify-web (3010) is not deployed; dify-api is what n8n and clients use
+if curl -sf http://localhost:5001/health &>/dev/null; then
+    check_service "Dify API" "http://localhost:5001/health" "200"
 else
-    echo -e "  ${YELLOW}◇${NC} Dify (not running)"
+    echo -e "  ${YELLOW}◇${NC} Dify API (not running)"
 fi
 
 check_command "MCP Filesystem Server" "docker ps | grep -q 'mcp-filesystem'"
@@ -251,8 +252,9 @@ else
     echo -e "  ${YELLOW}◇${NC} Whisper (not running)"
 fi
 
-if curl -sf http://localhost:5000 &>/dev/null; then
-    check_service "Piper (Text-to-Speech)" "http://localhost:5000/api/synthesize" "200" "POST"
+# Port 5000 is piper-openai, the OpenAI TTS adapter in front of Piper
+if curl -sf http://localhost:5000/health &>/dev/null; then
+    check_command "Piper (Text-to-Speech)" "curl -sf -o /dev/null -X POST http://localhost:5000/v1/audio/speech -H 'Content-Type: application/json' -d '{\"model\":\"tts-1\",\"input\":\"ok\",\"voice\":\"alloy\"}'"
 else
     echo -e "  ${YELLOW}◇${NC} Piper (not running)"
 fi
