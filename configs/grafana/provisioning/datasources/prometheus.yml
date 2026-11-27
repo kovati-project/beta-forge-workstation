@@ -1,5 +1,11 @@
 apiVersion: 1
 
+# The pre-e50b012 volume holds a "Prometheus" datasource with a generated uid;
+# drop it so the one below is recreated with the fixed uid. No-op on a fresh volume.
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
 datasources:
   - name: Prometheus
     # Fixed uid so the provisioned dashboards can reference it.
